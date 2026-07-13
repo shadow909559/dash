@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://dash:dash@localhost:5432/dash"
     redis_url: str = "redis://localhost:6379/0"
 
+    jwt_secret_key: str | None = None
+    jwt_algorithm: Literal["HS256"] = "HS256"
+    access_token_expire_minutes: int = Field(default=15, gt=0)
+    refresh_token_expire_days: int = Field(default=30, gt=0)
+    password_hash_iterations: int = Field(default=390_000, gt=0)
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: str | list[str]) -> list[str]:

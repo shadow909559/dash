@@ -1,10 +1,14 @@
+import 'package:dash_mobile/app.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dash_mobile/main.dart';
 
 void main() {
-  testWidgets('renders app title', (tester) async {
-    await tester.pumpWidget(const DashApp());
+  testWidgets('renders splash scaffold', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: DashApp()));
+    await tester.pumpAndSettle();
+
     expect(find.text('DASH'), findsOneWidget);
-    expect(find.text('Foundation milestone — v0.1.0'), findsOneWidget);
+    expect(find.text('Mobile assistant'), findsOneWidget);
+    expect(find.text('Continue'), findsOneWidget);
   });
 }

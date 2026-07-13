@@ -1,0 +1,14 @@
+# Runtime dependencies for the DASH backend foundation.
+# Kept in sync with the [project.dependencies] table in pyproject.toml.
+# For local development, prefer `pip install -e ".[dev]"`.
+
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.7,<3.0
+pydantic-settings>=2.3,<3.0
+sqlalchemy>=2.0,<3.0
+alembic>=1.13,<2.0
+psycopg[binary]>=3.1,<4.0
+redis>=5.0,<6.0
+python-dotenv>=1.0,<2.0
+websockets>=12.0,<13.0
