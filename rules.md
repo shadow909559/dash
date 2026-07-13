@@ -1,0 +1,6 @@
+- Never break existing code.
+- Keep modules independent.
+- Generate tests.
+- No hardcoded secrets.
+- Use environment variables.
+- Follow existing architecture.

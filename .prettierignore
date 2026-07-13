@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+coverage
+.venv
+*.egg-info
+apps/mobile/.dart_tool
+apps/mobile/build
+apps/desktop/dist
+apps/desktop/dist-electron
+apps/desktop/release
