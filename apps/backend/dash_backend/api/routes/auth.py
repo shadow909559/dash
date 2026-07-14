@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dash_backend.auth.dependencies import get_current_user
-from dash_backend.auth.models import User
+from dash_backend.db.models.user import User
 from dash_backend.auth.schemas import LoginRequest, RegisterRequest, TokenResponse, UserRead
 from dash_backend.auth.service import (
     InvalidCredentialsError,

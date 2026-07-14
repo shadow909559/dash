@@ -6,8 +6,11 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dash_backend.auth.models import User
-from dash_backend.auth.security import InvalidTokenError, decode_access_token
+from dash_backend.db.models.user import User
+from dash_backend.auth.security import (
+    InvalidTokenError,
+    decode_access_token,
+)
 from dash_backend.auth.service import get_user_by_id
 from dash_backend.db.session import get_db_session
 

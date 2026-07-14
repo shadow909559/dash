@@ -6,7 +6,9 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dash_backend.auth.models import RefreshToken, User
+from dash_backend.db.models.user import User
+from dash_backend.auth.models import RefreshToken
+from dash_backend.db.models.user import User
 from dash_backend.auth.schemas import LoginRequest, RegisterRequest, TokenResponse, UserRead
 from dash_backend.auth.security import (
     create_access_token,

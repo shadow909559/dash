@@ -54,36 +54,31 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final theme = Theme.of(context);
 
     // Auto-scroll when new messages arrive
-    ref.listen<ChatState>(chatProvider, (_, next) {
-      if (next.messages.isNotEmpty) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (chatState.messages.isNotEmpty) {
         _scrollToBottom();
       }
     });
 
     return Column(
       children: [
-        // Connection status bar
         _ConnectionStatusBar(
           status: socketState.status,
           errorMessage: socketState.errorMessage,
-          onReconnect: () => ref.read(chatProvider.notifier).reconnect(),
+          onReconnect: socketState.status == WebSocketStatus.error
+              ? () => ref.read(chatProvider.notifier).reconnect()
+              : null,
         ),
-
-        // Message list
         Expanded(
           child: chatState.messages.isEmpty
-              ? _buildEmptyState(theme)
+              ? _buildEmptyState(theme) 
               : _buildMessageList(chatState.messages, theme),
         ),
-
-        // Typing indicator
         if (chatState.isTyping)
           _TypingIndicator(
             isReconnecting: socketState.status == WebSocketStatus.connecting,
           ),
-
-        // Input bar
-        _buildInputBar(chatState.connectionStatus, theme),
+        _buildInputBar(socketState.status, theme),
       ],
     );
   }
@@ -223,23 +218,26 @@ class _ConnectionStatusBar extends StatelessWidget {
 
     final theme = Theme.of(context);
 
-    String text;
-    Color color;
-    IconData icon;
+    late String text;
+    late Color color;
+    late IconData icon;
 
     switch (status) {
       case WebSocketStatus.connecting:
         text = 'Connecting...';
         color = Colors.orange;
         icon = Icons.sync;
+        break;
       case WebSocketStatus.disconnected:
         text = 'Disconnected';
         color = Colors.red;
         icon = Icons.cloud_off;
+        break;
       case WebSocketStatus.error:
         text = errorMessage ?? 'Connection error';
         color = Colors.red;
         icon = Icons.error_outline;
+        break;
       case WebSocketStatus.connected:
         return const SizedBox.shrink();
     }
@@ -328,8 +326,7 @@ class _Dot extends StatefulWidget {
   State<_Dot> createState() => _DotState();
 }
 
-class _DotState extends State<_Dot>
-    with SingleTickerProviderStateMixin {
+class _DotState extends State<_Dot> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
 
@@ -344,7 +341,10 @@ class _DotState extends State<_Dot>
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
 
-    Future.delayed(widget.delay, () => _controller.repeat(reverse: true));
+    Future.delayed(widget.delay, () {
+  if (!mounted) return;
+  _controller.repeat(reverse: true);
+});
   }
 
   @override
@@ -402,7 +402,6 @@ class _MessageBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: alignment,
         children: [
-          // Role label
           Padding(
             padding: EdgeInsets.only(
               left: isUser ? 0 : 4,
@@ -416,8 +415,6 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
           ),
-
-          // Bubble
           Container(
             constraints: BoxConstraints(
               maxWidth: MediaQuery.of(context).size.width * 0.75,
@@ -489,3 +486,4 @@ class _MessageBubble extends StatelessWidget {
     return '$hour:$minute';
   }
 }
+

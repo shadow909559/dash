@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../constants.dart';
+
+import '../../features/auth/services/auth_service.dart';
 
 enum WebSocketStatus {
   disconnected,
@@ -45,17 +48,20 @@ class WebSocketState {
 
 final webSocketServiceProvider =
     StateNotifierProvider<WebSocketService, WebSocketState>(
-  (ref) => WebSocketService(),
+  (ref) => WebSocketService(ref),
 );
 
 class WebSocketService extends StateNotifier<WebSocketState> {
-  WebSocketService()
+  WebSocketService(this._ref)
       : super(const WebSocketState(status: WebSocketStatus.disconnected));
+
+  final Ref _ref;
 
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   final StreamController<String> _messageController =
       StreamController<String>.broadcast();
+
   int _reconnectAttempts = 0;
   static const int _maxReconnectAttempts = 5;
   Timer? _reconnectTimer;
@@ -81,17 +87,21 @@ class WebSocketService extends StateNotifier<WebSocketState> {
     try {
       final channel = WebSocketChannel.connect(Uri.parse(url));
       _channel = channel;
+      state = state.copyWith(status: WebSocketStatus.connected);
+
       _subscription = channel.stream.listen(
         (message) {
+          
+          print("WS RAW: $message");
+          
           final msg = message?.toString() ?? '';
-          // Publish to the broadcast stream for listeners
           _messageController.add(msg);
+
           state = state.copyWith(
             status: WebSocketStatus.connected,
             lastMessage: msg,
             clearError: true,
           );
-          // Reset reconnect counter on successful message
           _reconnectAttempts = 0;
         },
         onError: (Object error) {
@@ -107,7 +117,30 @@ class WebSocketService extends StateNotifier<WebSocketState> {
         },
       );
 
-      state = state.copyWith(status: WebSocketStatus.connected);
+      // Backend protocol:
+      // 1) hello
+      // 2) auth (if we have JWT)
+      _channel!.sink.add(jsonEncode({
+  'type': 'hello',
+}));
+
+final auth = _ref.read(authServiceProvider);
+
+await auth.tryRestoreSession();
+
+final jwt = await auth.getValidAccessToken();
+
+if (jwt != null && jwt.isNotEmpty) {
+  _channel!.sink.add(
+    jsonEncode({
+      'type': 'auth',
+      'access_token': jwt,
+    }),
+  );
+} else {
+  // ignore: avoid_print
+  print('[WebSocketService] No JWT found; skipping auth.');
+}
     } catch (error) {
       state = state.copyWith(
         status: WebSocketStatus.error,
@@ -117,28 +150,26 @@ class WebSocketService extends StateNotifier<WebSocketState> {
     }
   }
 
-  void send(String payload) {
-    if (!state.canSend) {
-      return;
-    }
 
+  void send(String payload) {
+    if (!state.canSend) return;
     _channel?.sink.add(payload);
   }
 
   Future<void> disconnect() async {
     _cancelReconnect();
     _reconnectAttempts = 0;
+
     await _subscription?.cancel();
     await _channel?.sink.close();
+
     _subscription = null;
     _channel = null;
     state = const WebSocketState(status: WebSocketStatus.disconnected);
   }
 
   void _scheduleReconnect() {
-    if (_reconnectAttempts >= _maxReconnectAttempts) {
-      return;
-    }
+    if (_reconnectAttempts >= _maxReconnectAttempts) return;
 
     _cancelReconnect();
 
@@ -167,3 +198,4 @@ class WebSocketService extends StateNotifier<WebSocketState> {
     super.dispose();
   }
 }
+
