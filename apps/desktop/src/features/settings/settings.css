@@ -1,0 +1,341 @@
+:root {
+  --settingsBg: #0f1117;
+  --settingsPanel: #161a23;
+  --settingsPanel2: #1a1f2e;
+  --settingsBorder: #2a3242;
+  --settingsText: #e8eaed;
+  --settingsMuted: #9aa0a6;
+  --settingsAccent: var(--accent);
+}
+
+.settings {
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  background: var(--settingsBg);
+  color: var(--settingsText);
+}
+
+.settings__nav {
+  border-right: 1px solid var(--settingsBorder);
+  background: var(--settingsPanel);
+  padding: 16px;
+}
+
+.settings__main {
+  padding: 18px;
+  overflow: auto;
+}
+
+.settingsNav__title {
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  margin-bottom: 12px;
+}
+
+.settingsNav__items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settingsNav__item {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--settingsText);
+  font-weight: 650;
+}
+
+.settingsNav__item:hover {
+  border-color: rgba(110, 168, 254, 0.3);
+  background: rgba(110, 168, 254, 0.08);
+}
+
+.settingsNav__item--active {
+  background: rgba(110, 168, 254, 0.14);
+  border-color: rgba(110, 168, 254, 0.45);
+}
+
+.settingsCard {
+  border: 1px solid var(--settingsBorder);
+  border-radius: 16px;
+  background: var(--settingsPanel);
+  padding: 16px;
+}
+
+.settingsCard__header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 14px;
+}
+
+.settingsCard__title {
+  font-weight: 900;
+  font-size: 16px;
+}
+
+.settingsCard__desc {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--settingsMuted);
+}
+
+.settingsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settingsSaved {
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: var(--settingsMuted);
+}
+
+.settingsToggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settingsToggle__input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.settingsToggle__box {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid rgba(110, 168, 254, 0.6);
+  background: rgba(110, 168, 254, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.2);
+  margin-top: 3px;
+}
+
+.settingsToggle__input:checked + .settingsToggle__box {
+  background: rgba(110, 168, 254, 0.35);
+}
+
+.settingsToggle__box::after {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+
+.settingsToggle__input:checked + .settingsToggle__box::after {
+  opacity: 1;
+}
+
+.settingsToggle__input:checked + .settingsToggle__box::after {
+  background: linear-gradient(180deg, rgba(110, 168, 254, 0.95), rgba(110, 168, 254, 0.65));
+  clip-path: polygon(14% 52%, 0 66%, 31% 100%, 100% 18%, 84% 4%, 30% 74%);
+}
+
+.settingsToggle__content {
+  display: flex;
+  flex-direction: column;
+}
+
+.settingsToggle__label {
+  font-weight: 800;
+}
+
+.settingsToggle__desc {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--settingsMuted);
+}
+
+.settingsField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settingsField__labelRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settingsField__label {
+  font-weight: 800;
+}
+
+.settingsField__desc {
+  font-size: 12.5px;
+  color: var(--settingsMuted);
+}
+
+.settingsField__input {
+  width: 100%;
+  background: rgba(0,0,0,0.18);
+  border: 1px solid var(--settingsBorder);
+  color: var(--settingsText);
+  border-radius: 12px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.settingsField__input:focus {
+  border-color: rgba(110, 168, 254, 0.65);
+}
+
+.settingsSliderRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settingsSlider {
+  flex: 1;
+}
+
+.settingsSliderValue {
+  min-width: 64px;
+  text-align: right;
+  color: var(--settingsMuted);
+  font-size: 12.5px;
+}
+
+.settingsAbout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settingsAbout__row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+}
+
+.settingsAbout__label {
+  color: var(--settingsMuted);
+  font-size: 12.5px;
+}
+
+.settingsAbout__value {
+  font-weight: 750;
+}
+
+/* ── Error messages ─────────────────────────────────────────────────── */
+.settingsFieldError {
+  font-size: 12px;
+  color: #f87171;
+  padding: 4px 0 0 4px;
+}
+
+/* ── Actions row ────────────────────────────────────────────────────── */
+.settingsActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--settingsBorder);
+}
+
+.settingsButton {
+  background: rgba(110, 168, 254, 0.18);
+  border: 1px solid rgba(110, 168, 254, 0.4);
+  color: var(--settingsText);
+  border-radius: 12px;
+  padding: 8px 20px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.settingsButton:hover:not(:disabled) {
+  background: rgba(110, 168, 254, 0.3);
+  border-color: rgba(110, 168, 254, 0.7);
+}
+
+.settingsButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Status indicator ───────────────────────────────────────────────── */
+.settingsStatus {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--settingsMuted);
+  text-transform: capitalize;
+}
+
+.settingsStatus__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.settingsStatus__dot--disconnected {
+  background: #6b7280;
+}
+
+.settingsStatus__dot--connecting {
+  background: #fbbf24;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.settingsStatus__dot--connected {
+  background: #34d399;
+}
+
+.settingsStatus__dot--error {
+  background: #f87171;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Color picker row ───────────────────────────────────────────────── */
+.settingsColorRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settingsColorInput {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--settingsBorder);
+  border-radius: 8px;
+  cursor: pointer;
+  background: none;
+}
+
+.settingsColorInput::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.settingsColorInput::-webkit-color-swatch {
+  border: none;
+  border-radius: 6px;
+}
+
+.settingsField__input--compact {
+  flex: 1;
+}
+

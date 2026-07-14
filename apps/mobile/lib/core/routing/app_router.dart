@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/login_page.dart';
+import '../../features/auth/providers/auth_provider.dart';
 import '../../features/chat/chat_page.dart';
 import '../../features/dashboard/dashboard_page.dart';
 import '../../features/settings/settings_page.dart';
@@ -16,6 +17,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.splash,
+    redirect: (context, state) {
+      final authState = ref.read(authProvider);
+
+      // Allow splash and login to proceed without redirect.
+      final path = state.uri.path;
+      final isAuthRoute = path == AppRoutes.splash || path == AppRoutes.login;
+
+      if (authState.status == AuthStatus.authenticated) {
+        // Authenticated users should not see login or splash.
+        if (isAuthRoute) return AppRoutes.dashboard;
+        return null;
+      }
+
+      // Auth status is still unknown — let the splash page handle it.
+      if (authState.status == AuthStatus.unknown) return null;
+
+      // Unauthenticated: protect all shell routes.
+      if (!isAuthRoute) return AppRoutes.login;
+
+      return null;
+    },
     routes: [
       GoRoute(
         path: AppRoutes.splash,

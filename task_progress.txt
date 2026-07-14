@@ -1,0 +1,16 @@
+- [x] Analyze existing codebase architecture
+- [ ] Desktop: Create API service layer for backend REST calls
+- [ ] Desktop: Rewrite chatStore.ts - replace mock data with real WebSocket/REST backend
+- [ ] Desktop: Update ChatPage.tsx - proper loading/error/connection states
+- [ ] Desktop: Update Sidebar.tsx - conversation management via backend
+- [ ] Desktop: Wire settingsStore.ts changes to trigger agent reconnect
+- [ ] Desktop: Add proper error boundaries and loading fallbacks
+- [ ] Desktop: Update General.tsx to apply URL settings to agent
+- [ ] Desktop: Add auth page and protected routes to AppRouter.tsx
+- [ ] Desktop: Add connection status indicator component
+- [ ] Mobile: Improve WebSocket service - exponential backoff + auth integration
+- [ ] Mobile: Improve chat provider - streaming, error handling, reconnect
+- [ ] Mobile: Make settings page dynamic with configurable URLs
+- [ ] Mobile: Improve splash screen auto-login flow
+- [ ] Mobile: Add connect/disconnect controls
+- [ ] Verify all integrations work together

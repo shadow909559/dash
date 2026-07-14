@@ -14,41 +14,10 @@
 body {
   margin: 0;
   min-height: 100vh;
+  background: #0f1117;
 }
 
-.app {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 3rem 1.5rem;
+#root {
+  height: 100vh;
 }
 
-.app__header h1 {
-  margin: 0;
-  font-size: 2.5rem;
-  letter-spacing: 0.04em;
-}
-
-.app__subtitle {
-  margin: 0.5rem 0 2rem;
-  color: #9aa0a6;
-}
-
-.app__card {
-  background: #1a1d27;
-  border: 1px solid #2d3140;
-  border-radius: 12px;
-  padding: 1.5rem;
-}
-
-.app__card h2 {
-  margin-top: 0;
-}
-
-.app__card ul {
-  margin: 0;
-  padding-left: 1.25rem;
-}
-
-.app__card li {
-  margin-bottom: 0.5rem;
-}

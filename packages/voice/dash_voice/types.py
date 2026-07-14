@@ -8,3 +8,5 @@ class VoiceMode(str, Enum):
 
     STT = "speech_to_text"
     TTS = "text_to_speech"
+
+

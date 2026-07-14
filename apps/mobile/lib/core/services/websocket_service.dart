@@ -54,6 +54,17 @@ class WebSocketService extends StateNotifier<WebSocketState> {
 
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
+  final StreamController<String> _messageController =
+      StreamController<String>.broadcast();
+  int _reconnectAttempts = 0;
+  static const int _maxReconnectAttempts = 5;
+  Timer? _reconnectTimer;
+
+  /// Stream of raw message strings received from the WebSocket.
+  Stream<String> get messageStream => _messageController.stream;
+
+  /// Whether auto-reconnect is currently active.
+  bool get isReconnecting => _reconnectTimer != null;
 
   Future<void> connect({String url = defaultWebSocketUrl}) async {
     if (state.status == WebSocketStatus.connecting ||
@@ -72,20 +83,27 @@ class WebSocketService extends StateNotifier<WebSocketState> {
       _channel = channel;
       _subscription = channel.stream.listen(
         (message) {
+          final msg = message?.toString() ?? '';
+          // Publish to the broadcast stream for listeners
+          _messageController.add(msg);
           state = state.copyWith(
             status: WebSocketStatus.connected,
-            lastMessage: message?.toString(),
+            lastMessage: msg,
             clearError: true,
           );
+          // Reset reconnect counter on successful message
+          _reconnectAttempts = 0;
         },
         onError: (Object error) {
           state = state.copyWith(
             status: WebSocketStatus.error,
             errorMessage: error.toString(),
           );
+          _scheduleReconnect();
         },
         onDone: () {
           state = state.copyWith(status: WebSocketStatus.disconnected);
+          _scheduleReconnect();
         },
       );
 
@@ -95,6 +113,7 @@ class WebSocketService extends StateNotifier<WebSocketState> {
         status: WebSocketStatus.error,
         errorMessage: error.toString(),
       );
+      _scheduleReconnect();
     }
   }
 
@@ -107,6 +126,8 @@ class WebSocketService extends StateNotifier<WebSocketState> {
   }
 
   Future<void> disconnect() async {
+    _cancelReconnect();
+    _reconnectAttempts = 0;
     await _subscription?.cancel();
     await _channel?.sink.close();
     _subscription = null;
@@ -114,10 +135,35 @@ class WebSocketService extends StateNotifier<WebSocketState> {
     state = const WebSocketState(status: WebSocketStatus.disconnected);
   }
 
+  void _scheduleReconnect() {
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      return;
+    }
+
+    _cancelReconnect();
+
+    _reconnectAttempts++;
+    final delay = Duration(seconds: _reconnectAttempts * 2);
+
+    _reconnectTimer = Timer(delay, () {
+      _reconnectTimer = null;
+      if (state.status != WebSocketStatus.connected) {
+        connect(url: state.url);
+      }
+    });
+  }
+
+  void _cancelReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+  }
+
   @override
   void dispose() {
-    unawaited(_subscription?.cancel());
-    unawaited(_channel?.sink.close());
+    _cancelReconnect();
+    _subscription?.cancel();
+    _channel?.sink.close();
+    _messageController.close();
     super.dispose();
   }
 }

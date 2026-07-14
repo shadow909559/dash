@@ -1,0 +1,2 @@
+# Architecture
+Mobile->Backend->Desktop.
