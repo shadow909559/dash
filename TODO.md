@@ -1,13 +1,10 @@
 # TODO
 
-- [x] Read project context and inspect `apps/desktop` structure
-- [x] Install required UI libraries in `apps/desktop`
-- [x] Add React Router route structure (`/chat`)
-- [x] Create Chat module (layout: sidebar + conversation list + message panel)
-- [x] Implement Zustand chat store (local in-memory, no backend)
-- [x] Implement message bubbles + attachments + markdown + code blocks
-- [x] Implement voice button (UI-only simulation)
-- [x] Implement auto-scroll and typing indicator
-- [ ] Run `apps/desktop` dev server and visually verify chat module
-- [ ] Run TypeScript typecheck and fix any remaining lint/type issues
+- [ ] Step 1: Implement rich backend websocket chat/voice/agent protocol (replace echo scaffold, unify routes, add protocol models + streaming)
+- [ ] Step 2: Update backend websocket tests to validate authentication handshake and chat streaming/done
+- [ ] Step 3: Run backend tests (pytest) and fix any failures
+- [ ] Step 4: Wire mobile WebSocketService + ChatProvider to the new protocol (auth + structured events)
+- [ ] Step 5: Implement provider/Ollama integration in backend and wire to websocket handlers
+- [ ] Step 6: Cleanup/remove unused websocket scaffolds and ensure protocol naming consistency
+- [ ] Step 7: Compile/test verification (backend pytest + mobile flutter analyze/build if available)
 
