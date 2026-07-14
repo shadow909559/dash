@@ -17,7 +17,7 @@ from dash_backend.auth.service import (
 )
 from dash_backend.db.session import get_db_session
 
-router = APIRouter(prefix="/auth")
+router = APIRouter()
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
