@@ -178,8 +178,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const agentState = useAgentStore.getState();
     if (agentState.status === 'connected' && agentState._ws?.readyState === WebSocket.OPEN) {
       agentState.sendMessage({
-        type: 'message',
+        type: 'chat.send',
         conversation_id: conversationId,
+        message_id: message.id,
         content,
       });
     } else {
@@ -375,21 +376,27 @@ export function initChatWebSocketListener(): () => void {
     switch (type) {
       case 'token':
       case 'text_chunk':
+      case 'chat.token': {
         const token = (data.content as string) ?? (data.text as string) ?? '';
         if (token) {
           useChatStore.getState().appendAssistantToken(conversationId, token);
         }
         break;
+      }
       case 'done':
       case 'stream_end':
+      case 'chat.done': {
         useChatStore.getState().finalizeAssistantMessage(conversationId);
         break;
+      }
       case 'error':
+      case 'chat.error': {
         const errMsg = (data.message as string) ?? (data.error as string) ?? 'Unknown error';
         useChatStore.getState().setAssistantError(conversationId, errMsg);
         break;
-      case 'echo':
-        // Backend echo response — treat as final assistant reply
+      }
+      case 'echo': {
+        // Legacy echo support — treat as final assistant reply
         const echoContent = data.received
           ? (data.received as Record<string, unknown>)?.content ?? JSON.stringify(data.received)
           : null;
@@ -398,6 +405,7 @@ export function initChatWebSocketListener(): () => void {
           useChatStore.getState().finalizeAssistantMessage(conversationId);
         }
         break;
+      }
     }
   });
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from typing import AsyncIterator
 
 from dash_backend.api.websocket.protocol import (
@@ -19,22 +18,46 @@ from dash_backend.api.websocket.protocol import (
     VoiceTTSErrorMessage,
     VoiceTTSMessage,
 )
+from dash_backend.llm.service import build_chat_messages, stream_chat_response
+from dash_backend.logging_config import get_logger
 
-
-async def token_stream_for_text(text: str) -> AsyncIterator[str]:
-    # MVP: emit word-by-word tokens to mimic streaming.
-    words = text.split()
-    if not words:
-        return
-    for w in words:
-        yield w + " "
-        await asyncio.sleep(0.01)
+logger = get_logger(__name__)
 
 
 async def handle_chat_send(msg: ChatSendMessage) -> AsyncIterator[object]:
-    # MVP: streaming "assistant" response is just the input uppercased.
-    async for token in token_stream_for_text(msg.content.upper()):
-        yield ChatTokenMessage(message_id=msg.message_id, content=token)
+    """Stream a real AI response from the configured LLM provider."""
+    DASH_SYSTEM_PROMPT = (
+        "You are DASH, a helpful, capable personal AI assistant. "
+        "You are concise but friendly. Answer questions directly and accurately. "
+        "When you don't know something, say so. "
+        "You can help with coding, writing, analysis, and general knowledge."
+    )
+
+    messages = build_chat_messages(
+        system_prompt=DASH_SYSTEM_PROMPT,
+        user_message=msg.content,
+    )
+
+    has_yielded = False
+    try:
+        async for token in stream_chat_response(messages):
+            yield ChatTokenMessage(message_id=msg.message_id, content=token)
+            has_yielded = True
+    except Exception as exc:
+        logger.exception("LLM streaming failed for message %s", msg.message_id)
+        yield ChatTokenMessage(
+            message_id=msg.message_id,
+            content=f"*Sorry, an error occurred while generating a response: {exc}*",
+        )
+        yield ChatDoneMessage(message_id=msg.message_id)
+        return
+
+    if not has_yielded:
+        yield ChatTokenMessage(
+            message_id=msg.message_id,
+            content="I'm not sure how to respond to that yet. Please check your AI provider configuration.",
+        )
+
     yield ChatDoneMessage(message_id=msg.message_id)
 
 

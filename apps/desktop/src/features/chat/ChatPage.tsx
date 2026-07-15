@@ -4,7 +4,7 @@ import { Sidebar } from './components/Sidebar';
 import { MessageBubble } from './components/MessageBubble';
 import { ChatComposer } from './components/ChatComposer';
 import { TypingIndicator } from './components/TypingIndicator';
-import { useChatStore } from './chatStore';
+import { useChatStore, initChatWebSocketListener } from './chatStore';
 import { useAgentStore } from '../agent/agentStore';
 import { AgentStatus } from '../agent/agentTypes';
 import { useVoiceStore } from './voiceStore';
@@ -40,6 +40,14 @@ export function ChatPage() {
       connect();
     }
   }, [status, connect]);
+
+  // Initialize WebSocket listener for chat tokens
+  useEffect(() => {
+    const unsub = initChatWebSocketListener();
+    return () => {
+      unsub();
+    };
+  }, []);
 
   useEffect(() => {
     const el = scrollerRef.current;

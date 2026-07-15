@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     # --- Redis (connection info only, not wired up yet) ---------------
     REDIS_URL: str = Field(default="redis://localhost:6379/0")
 
+    # --- AI Providers -------------------------------------------------
+    OPENAI_API_KEY: str | None = Field(default=None)
+    OPENAI_BASE_URL: str = Field(default="https://api.openai.com/v1")
+    OPENAI_MODEL: str = Field(default="gpt-4o-mini")
+    OLLAMA_BASE_URL: str = Field(default="http://localhost:11434")
+    OLLAMA_MODEL: str = Field(default="llama3.2")
+    AI_PROVIDER: str = Field(default="openai")  # "openai" or "ollama"
+
 
 @lru_cache
 def get_settings() -> Settings:
