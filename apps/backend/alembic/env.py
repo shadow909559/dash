@@ -8,9 +8,10 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from dash_backend.auth import models as auth_models
 from dash_backend.config import get_settings
 from dash_backend.db.base import Base
+
+import dash_backend.db.models  # noqa: F401 – register all models on Base.metadata
 
 config = context.config
 
@@ -22,7 +23,6 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 
 target_metadata = Base.metadata
 
-_ = auth_models
 
 
 def run_migrations_offline() -> None:

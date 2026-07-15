@@ -11,6 +11,13 @@ class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def coerce_id(cls, value: object) -> str:
+        if isinstance(value, str):
+            return value
+        return str(value)
     email: str
     username: str
     is_active: bool

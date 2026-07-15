@@ -16,6 +16,8 @@ from dash_backend.db.models.plugin import Plugin
 from dash_backend.db.models.session import Session
 from dash_backend.db.models.task import Task, TaskStatus
 from dash_backend.db.models.user import User
+from dash_backend.db.models.refresh_tokens import RefreshToken
+
 
 __all__ = [
     "APIKey",
@@ -32,4 +34,5 @@ __all__ = [
     "Task",
     "TaskStatus",
     "User",
+    "RefreshToken",
 ]

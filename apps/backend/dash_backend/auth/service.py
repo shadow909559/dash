@@ -6,8 +6,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dash_backend.db.models.user import User
-from dash_backend.db.models.session import Session
+from dash_backend.db.models.refresh_tokens import RefreshToken
 from dash_backend.db.models.user import User
 from dash_backend.auth.schemas import LoginRequest, RegisterRequest, TokenResponse, UserRead
 from dash_backend.auth.security import (
@@ -75,9 +74,9 @@ async def get_user_by_id(session: AsyncSession, user_id: str) -> User | None:
 async def issue_token_response(session: AsyncSession, user: User) -> TokenResponse:
     """Issue access and refresh tokens for a user."""
     settings = get_settings()
-    access_token, expires_in = create_access_token(user.id)
+    access_token, expires_in = create_access_token(str(user.id))
     refresh_token = create_refresh_token()
-    refresh_token_record = Session(
+    refresh_token_record = RefreshToken(
         user_id=user.id,
         token_hash=hash_refresh_token(refresh_token),
         expires_at=datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days),
