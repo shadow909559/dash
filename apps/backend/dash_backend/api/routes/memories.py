@@ -34,7 +34,9 @@ async def list_memories(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     min_importance: float = Query(default=0.0, ge=0.0, le=1.0),
+    category: str | None = Query(default=None, max_length=64),
 ) -> MemoryListResponse:
+
     """List all memories for the current user, ordered by importance."""
     memories, total = await memory_service.get_user_memories(
         session,
@@ -42,9 +44,11 @@ async def list_memories(
         limit=limit,
         offset=offset,
         min_importance=min_importance,
+        category=category,
     )
 
     items = [MemoryRead.model_validate(m) for m in memories]
+
 
     return MemoryListResponse(items=items, total=total)
 
@@ -66,8 +70,10 @@ async def create_memory(
         user.id,
         content=payload.content,
         source=payload.source,
+        category=payload.category,
         importance=payload.importance,
     )
+
     return MemoryRead.model_validate(memory)
 
 
@@ -114,8 +120,11 @@ async def update_memory(
         session,
         memory_id,
         content=payload.content,
+        source=payload.source,
+        category=payload.category,
         importance=payload.importance,
     )
+
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Memory not found")
     return MemoryRead.model_validate(updated)

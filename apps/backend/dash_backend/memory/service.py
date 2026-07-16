@@ -30,8 +30,10 @@ async def save_memory(
     content: str,
     *,
     source: str | None = None,
+    category: str | None = None,
     importance: float = 0.5,
 ) -> Memory:
+
     """Store a new memory for the user.
 
     Args:
@@ -49,8 +51,10 @@ async def save_memory(
         user_id=uid,
         content=content,
         source=source,
+        category=category,
         importance=importance,
     )
+
     session.add(memory)
     await session.commit()
     await session.refresh(memory)
@@ -74,10 +78,17 @@ async def get_user_memories(
     limit: int = 100,
     offset: int = 0,
     min_importance: float = 0.0,
+    category: str | None = None,
 ) -> tuple[list[Memory], int]:
+
     """List all memories for a user, ordered by importance (desc)."""
     uid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
     filters = [Memory.user_id == uid, Memory.importance >= min_importance]
+    if category is not None:
+        filters.append(Memory.category == category)
+
+
+
 
     count_q = select(func.count(Memory.id)).where(*filters)
     total = await session.scalar(count_q) or 0
@@ -93,6 +104,7 @@ async def get_user_memories(
     return list(result.scalars().all()), total
 
 
+
 async def update_memory(
     session: AsyncSession,
     memory_id: str | uuid.UUID,
@@ -100,10 +112,12 @@ async def update_memory(
 ) -> Memory | None:
     """Update an existing memory.
 
-    Allowed fields: content, importance, source.
+    Allowed fields: content, source, category, importance.
     """
+
     mid = uuid.UUID(memory_id) if isinstance(memory_id, str) else memory_id
-    allowed = {"content", "importance", "source"}
+    allowed = {"content", "importance", "source", "category"}
+
     update_data = {k: v for k, v in kwargs.items() if k in allowed and v is not None}
 
     if not update_data:

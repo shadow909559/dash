@@ -174,11 +174,70 @@ async def chat_completion_with_tool_parsing(
     return parse_tool_call_from_text(full_text)
 
 
+class NativeAssistantResponse:
+    """Native OpenAI tool_calls response container."""
+
+    def __init__(self, *, assistant_text: str, tool_calls: list[dict[str, Any]]):
+        self.assistant_text = assistant_text
+        self.tool_calls = tool_calls
+
+
+async def chat_completion_with_native_tool_calls(
+    messages: list[dict[str, str]],
+    *,
+    tools: list[dict[str, Any]],
+    tool_choice: str | dict[str, Any] | None = None,
+    model: str | None = None,
+) -> NativeAssistantResponse:
+    """Call OpenAI-compatible /chat/completions and return native tool_calls.
+
+    This path intentionally does NOT use custom JSON parsing.
+    """
+
+    settings = get_settings()
+
+    api_key = settings.openai_api_key
+    if not api_key:
+        raise RuntimeError("No OPENAI_API_KEY configured")
+
+    base_url = settings.openai_base_url.rstrip("/")
+    url = f"{base_url}/chat/completions"
+    model_name = model or settings.ai_model or settings.openai_model
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    payload: dict[str, Any] = {
+        "model": model_name,
+        "messages": messages,
+        "stream": False,
+        "tools": tools,
+    }
+    if tool_choice is not None:
+        payload["tool_choice"] = tool_choice
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(url, json=payload, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+
+    choice0 = (data.get("choices") or [{}])[0]
+    message = choice0.get("message") or {}
+
+    assistant_text = message.get("content") or ""
+    tool_calls = message.get("tool_calls") or []
+
+    return NativeAssistantResponse(assistant_text=assistant_text, tool_calls=tool_calls)
+
+
 async def _stream_openai(
     messages: list[dict[str, str]],
     model: str | None = None,
 ) -> AsyncIterator[str]:
     """Stream from an OpenAI-compatible API."""
+
     settings = get_settings()
 
     api_key = settings.openai_api_key

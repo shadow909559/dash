@@ -13,6 +13,7 @@ class MemoryCreate(BaseModel):
 
     content: str = Field(..., min_length=1, max_length=2000)
     source: str | None = Field(default=None, max_length=64)
+    category: str | None = Field(default=None, max_length=64)
     importance: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
@@ -20,6 +21,8 @@ class MemoryUpdate(BaseModel):
     """Payload for updating an existing memory."""
 
     content: str | None = Field(default=None, min_length=1, max_length=2000)
+    source: str | None = Field(default=None, max_length=64)
+    category: str | None = Field(default=None, max_length=64)
     importance: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
@@ -30,6 +33,7 @@ class MemoryRead(BaseModel):
     user_id: uuid.UUID
     content: str
     source: str | None
+    category: str | None
     importance: float
     created_at: datetime
     updated_at: datetime
@@ -49,3 +53,4 @@ class MemorySearchResponse(BaseModel):
 
     items: list[MemoryRead]
     query: str
+

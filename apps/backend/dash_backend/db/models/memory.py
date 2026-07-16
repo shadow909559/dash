@@ -18,13 +18,7 @@ from dash_backend.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 
 class Memory(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """A durable memory item belonging to a user.
-
-    `embedding` stores a vector representation (e.g. from an
-    embedding model) as a plain float array. A future milestone may
-    switch this to the `pgvector` extension's `VECTOR` type once that
-    extension is provisioned; the column is deliberately generic here.
-    """
+    """A durable memory item belonging to a user."""
 
     __tablename__ = "memories"
     __table_args__ = (
@@ -39,10 +33,15 @@ class Memory(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # User-defined category for filtering memories.
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     importance: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+
+    # Stored embedding vector (future RAG retrieval milestone).
     embedding: Mapped[list[float] | None] = mapped_column(ARRAY(Float), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="memories")
 
-    def __repr__(self) -> str:  # pragma: no cover - debugging aid only
+    def __repr__(self) -> str:  # pragma: no cover
         return f"<Memory id={self.id} user_id={self.user_id}>"
+

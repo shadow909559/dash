@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from typing import AsyncIterator
 
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dash_backend.api.websocket.protocol import (
@@ -38,11 +37,11 @@ from dash_backend.llm.service import (
     AssistantResponse,
     ToolCall,
     build_chat_messages,
+    chat_completion_with_native_tool_calls,
     chat_completion_with_tool_parsing,
 )
-
+from dash_backend.llm.tool_protocol import ToolProtocol, get_tool_protocol
 from dash_backend.logging_config import get_logger
-
 from dash_backend.memory.service import (
     build_memory_context,
     extract_memories_from_conversation,
@@ -67,19 +66,15 @@ async def handle_chat_send(
 ) -> AsyncIterator[object]:
     """Memory-aware chat handler with tool calling.
 
-    Uses chat_completion_with_tool_parsing() to detect either assistant text
-    or a structured tool call.
+    Uses chat_completion_with_tool_parsing() / chat_completion_with_native_tool_calls()
+    to detect either assistant text/tool_call or a structured tool call.
 
-    Tool loop:
-      - maximum 5 tool iterations
-      - executes tools via existing ToolManager/ToolExecutor
-      - streams tool lifecycle events
-      - appends tool result into the LLM messages context
+    Only OPENAI_NATIVE message ordering is fixed here.
     """
 
-    from dash_backend.tools.tool_manager import ToolCallRequest, get_tool_manager
-    from dash_backend.tools.tool_result import ToolStatus, ToolEvent
     from dash_backend.tools.base_tool import ToolContext
+    from dash_backend.tools.tool_manager import ToolCallRequest, get_tool_manager
+    from dash_backend.tools.tool_result import ToolEvent, ToolStatus
 
     MAX_TOOL_STEPS = 5
 
@@ -117,28 +112,230 @@ async def handle_chat_send(
     except Exception as exc:
         logger.warning("Failed to load memory context: %s", exc)
 
-    # We build the LLM message list for each step (system+history+current user/tool context)
-    # For tool results we append a synthetic role='tool' message.
-    tool_messages: list[dict[str, str]] = []
-
     tool_manager = get_tool_manager()
-
     last_assistant_text = ""
 
     for step in range(MAX_TOOL_STEPS + 1):
-        # If we already got final assistant text, exit.
         current_user_message = msg.content if step == 0 else ""
 
+        # For OPENAI_NATIVE we maintain a single list; for CUSTOM_JSON we keep
+        # the legacy behavior (no role='tool' messages).
         messages = build_chat_messages(
             system_prompt=DASH_SYSTEM_PROMPT,
-            history=(history + tool_messages),
+            history=history,
             user_message=current_user_message,
             memory_context=memory_context,
             conversation_summary=conversation_summary,
         )
 
         try:
-            parsed = await chat_completion_with_tool_parsing(messages)
+            protocol = get_tool_protocol()  # must be called exactly once
+
+            if protocol == ToolProtocol.CUSTOM_JSON:
+                # Preserve legacy CUSTOM_JSON behavior
+                parsed = await chat_completion_with_tool_parsing(messages)
+
+                if isinstance(parsed, ToolCall):
+                    tool_call_request = ToolCallRequest(
+                        tool_name=parsed.name,
+                        arguments=parsed.arguments,
+                        call_id=None,
+                    )
+
+                    context = ToolContext(
+                        user_id=user_id,
+                        conversation_id=str(msg.conversation_id) if msg.conversation_id else None,
+                        request_id=msg.message_id,
+                    )
+
+                    tool_result_dict: dict[str, object] | None = None
+
+                    try:
+                        async for event_type, data in tool_manager.execute_tool_stream(
+                            tool_call_request, context
+                        ):
+                            if event_type == "tool.started":
+                                yield ChatTokenMessage(
+                                    message_id=msg.message_id,
+                                    content=f"\n[tool:{parsed.name}] started\n",
+                                )
+                            elif event_type == "tool.progress":
+                                progress = data.get("summary") or ""
+                                yield ChatTokenMessage(
+                                    message_id=msg.message_id,
+                                    content=f"[tool:{parsed.name}] {progress}\n",
+                                )
+                            elif event_type == "tool.finished":
+                                tool_result_dict = data
+                                yield ChatTokenMessage(
+                                    message_id=msg.message_id,
+                                    content=f"[tool:{parsed.name}] finished\n",
+                                )
+                            elif event_type == "tool.error":
+                                tool_result_dict = data
+                                err = (
+                                    data.get("error_message")
+                                    or data.get("error")
+                                    or "Tool error"
+                                )
+                                yield ChatTokenMessage(
+                                    message_id=msg.message_id,
+                                    content=f"\n*Tool error ({parsed.name}): {err}*\n",
+                                )
+                                yield ChatDoneMessage(message_id=msg.message_id)
+                                return
+                    except Exception as exc:
+                        logger.exception("Tool execution failed")
+                        yield ChatTokenMessage(
+                            message_id=msg.message_id,
+                            content=f"\n*Tool execution exception: {exc}*\n",
+                        )
+                        yield ChatDoneMessage(message_id=msg.message_id)
+                        return
+
+                    if not tool_result_dict:
+                        yield ChatDoneMessage(message_id=msg.message_id)
+                        return
+
+                    # Legacy behavior: do NOT append role='tool' messages.
+                    # Continue loop to ask the model again.
+                    continue
+
+                # Assistant text
+                if isinstance(parsed, AssistantResponse):
+                    streamed_text = parsed.text or ""
+                    last_assistant_text = streamed_text
+                    chunk_size = 20
+                    for i in range(0, len(streamed_text), chunk_size):
+                        token = streamed_text[i : i + chunk_size]
+                        yield ChatTokenMessage(message_id=msg.message_id, content=token)
+                    yield ChatDoneMessage(message_id=msg.message_id)
+                    break
+
+                yield ChatDoneMessage(message_id=msg.message_id)
+                break
+
+            # OPENAI_NATIVE FIXED BRANCH
+            native = await chat_completion_with_native_tool_calls(
+                messages,
+                tools=tool_manager.get_tool_definitions(),
+            )
+
+            # 1) Receive native assistant tool_calls
+            tool_calls_native = native.tool_calls or []
+
+            # 2) Append the assistant tool_calls message to messages history
+            # Required structure: role='assistant', tool_calls, and content.
+            messages.append(
+                {
+                    "role": "assistant",
+                    "tool_calls": tool_calls_native,
+                    "content": native.assistant_text,
+                }
+            )
+
+            # Keep history in sync with messages for the next iteration.
+            history = messages
+            last_assistant_text += native.assistant_text or ""
+
+            # If no tool_calls, we are done.
+            if not tool_calls_native:
+                # stream assistant text chunks
+                streamed_text = native.assistant_text or ""
+                chunk_size = 20
+                for i in range(0, len(streamed_text), chunk_size):
+                    token = streamed_text[i : i + chunk_size]
+                    yield ChatTokenMessage(message_id=msg.message_id, content=token)
+                yield ChatDoneMessage(message_id=msg.message_id)
+                break
+
+            # 3) Call ToolManager.parse_tool_calls()
+            # Guard: Azure/OpenAI requires tool_call_id to exactly match the preceding assistant.tool_calls[].id.
+            # ToolCallRequest.call_id becomes "" if native id is missing; fail fast to avoid invalid history.
+            for tc in tool_calls_native:
+                if not tc.get("id"):
+                    raise ValueError("Native tool call missing non-empty 'id' (required for tool_call_id matching)")
+
+            parsed_tool_calls = tool_manager.parse_tool_calls(
+                {
+                    "message": {
+                        "tool_calls": tool_calls_native,
+                    }
+                }
+            )
+
+
+            # 4) Execute each tool
+            context = ToolContext(
+                user_id=user_id,
+                conversation_id=str(msg.conversation_id) if msg.conversation_id else None,
+                request_id=msg.message_id,
+            )
+
+            for call in parsed_tool_calls:
+                tool_result: object | None = None
+                tool_result_dict: dict[str, object] | None = None
+
+                try:
+                    async for event_type, data in tool_manager.execute_tool_stream(
+                        call, context
+                    ):
+                        if event_type == ToolEvent.STARTED.value or event_type == "tool.started":
+                            yield ChatTokenMessage(
+                                message_id=msg.message_id,
+                                content=f"\n[tool:{call.tool_name}] started\n",
+                            )
+                        elif event_type == ToolEvent.PROGRESS.value or event_type == "tool.progress":
+                            progress = data.get("summary") or ""
+                            yield ChatTokenMessage(
+                                message_id=msg.message_id,
+                                content=f"[tool:{call.tool_name}] {progress}\n",
+                            )
+                        elif event_type == ToolEvent.FINISHED.value or event_type == "tool.finished":
+                            tool_result_dict = data
+                            tool_result = data
+                            yield ChatTokenMessage(
+                                message_id=msg.message_id,
+                                content=f"[tool:{call.tool_name}] finished\n",
+                            )
+                        elif event_type == ToolEvent.ERROR.value or event_type == "tool.error":
+                            tool_result_dict = data
+                            err = data.get("error_message") or data.get("error") or "Tool error"
+                            yield ChatTokenMessage(
+                                message_id=msg.message_id,
+                                content=f"\n*Tool error ({call.tool_name}): {err}*\n",
+                            )
+                            yield ChatDoneMessage(message_id=msg.message_id)
+                            return
+                except Exception as exc:
+                    logger.exception("Tool execution failed")
+                    yield ChatTokenMessage(
+                        message_id=msg.message_id,
+                        content=f"\n*Tool execution exception: {exc}*\n",
+                    )
+                    yield ChatDoneMessage(message_id=msg.message_id)
+                    return
+
+                if tool_result_dict is None:
+                    yield ChatDoneMessage(message_id=msg.message_id)
+                    return
+
+                # 5) Append ToolManager.format_result_for_llm() output
+                # ToolManager.execute_tool_stream yields data dict; we need ToolResult
+                # instance to format for llm. We can reconstruct ToolResult from dict
+                # via ToolResult.from_dict if available; otherwise format directly.
+                # Here we rely on execute_tool_stream's ToolResult serialization.
+                # ToolManager.format_result_for_llm expects ToolResult, so we call
+                # ToolManager.execute_tool() instead for formatting.
+                # But requirement says execute every tool using existing ToolExecutor.
+                # We'll call execute_tool() which collects results using the same executor.
+
+                final_result = await tool_manager.execute_tool(call, context)
+                history.append(tool_manager.format_result_for_llm(call, final_result))
+
+            # 6) Continue loop until assistant returns no tool_calls
+            continue
+
         except Exception as exc:
             logger.exception("LLM tool-aware completion failed")
             yield ChatTokenMessage(
@@ -147,107 +344,6 @@ async def handle_chat_send(
             )
             yield ChatDoneMessage(message_id=msg.message_id)
             return
-
-        if isinstance(parsed, AssistantResponse):
-            # Stream assistant response exactly like before (token-by-token)
-            # We can’t stream tokens from the collected response; so we stream the
-            # parsed text in chunks to preserve websocket “token” behavior.
-            try:
-                streamed_text = parsed.text or ""
-                # chunk into small pieces to keep UI responsive
-                chunk_size = 20
-                for i in range(0, len(streamed_text), chunk_size):
-                    token = streamed_text[i : i + chunk_size]
-                    last_assistant_text += token
-                    yield ChatTokenMessage(message_id=msg.message_id, content=token)
-            except Exception:
-                # Fallback: send whole text
-                last_assistant_text = parsed.text or ""
-                if last_assistant_text:
-                    yield ChatTokenMessage(message_id=msg.message_id, content=last_assistant_text)
-
-            yield ChatDoneMessage(message_id=msg.message_id)
-            break
-
-        if isinstance(parsed, ToolCall):
-            tool_call = parsed
-
-            tool_call_request = ToolCallRequest(
-                tool_name=tool_call.name,
-                arguments=tool_call.arguments,
-                call_id=None,
-            )
-
-            context = ToolContext(
-                user_id=user_id,
-                conversation_id=str(msg.conversation_id) if msg.conversation_id else None,
-                request_id=msg.message_id,
-            )
-
-            # Execute and stream tool lifecycle events
-            tool_result_dict: dict[str, object] | None = None
-
-            try:
-                async for event_type, data in tool_manager.execute_tool_stream(
-                    tool_call_request, context
-                ):
-                    if event_type == "tool.started":
-                        yield ChatTokenMessage(
-                            message_id=msg.message_id,
-                            content=f"\n[tool:{tool_call.name}] started\n",
-                        )
-                    elif event_type == "tool.progress":
-                        progress = data.get("summary") or ""
-                        yield ChatTokenMessage(
-                            message_id=msg.message_id,
-                            content=f"[tool:{tool_call.name}] {progress}\n",
-                        )
-                    elif event_type == "tool.finished":
-                        tool_result_dict = data
-                        yield ChatTokenMessage(
-                            message_id=msg.message_id,
-                            content=f"[tool:{tool_call.name}] finished\n",
-                        )
-                    elif event_type == "tool.error":
-                        tool_result_dict = data
-                        # Surface tool errors in chat stream
-                        err = data.get("error_message") or data.get("error") or "Tool error"
-                        yield ChatTokenMessage(
-                            message_id=msg.message_id,
-                            content=f"\n*Tool error ({tool_call.name}): {err}*\n",
-                        )
-
-                        yield ChatDoneMessage(message_id=msg.message_id)
-                        return
-            except Exception as exc:
-                logger.exception("Tool execution failed")
-                yield ChatTokenMessage(
-                    message_id=msg.message_id,
-                    content=f"\n*Tool execution exception: {exc}*\n",
-                )
-                yield ChatDoneMessage(message_id=msg.message_id)
-                return
-
-            if not tool_result_dict:
-                # Defensive: no result, stop.
-                yield ChatDoneMessage(message_id=msg.message_id)
-                return
-
-            # Append tool result to the LLM conversation only if the selected provider
-            # supports OpenAI-style tool messages.
-            # The current LLM implementation uses Ollama/OpenAI streaming text parsing,
-            # so emitting role='tool' can violate message protocol.
-            tool_messages = tool_messages  # keep variable used above (no-op)
-
-            # Intentionally DO NOT append role='tool' synthetic messages.
-            # Instead, surface tool result into the assistant stream by continuing
-            # the tool loop and re-asking the model with no tool_messages.
-            # (We rely on the model to incorporate the tool output if it was
-            # returned by the stream parsing strategy.)
-
-
-            # Continue loop: ask LLM again.
-            continue
 
     # Post-response: extract memories from the exchange
     try:
@@ -283,7 +379,6 @@ async def handle_chat_send(
                     )
         except Exception as exc:
             logger.warning("Failed to auto-summarize: %s", exc)
-
 
 
 async def handle_agent_run(msg: AgentRunMessage) -> AsyncIterator[object]:
@@ -329,3 +424,4 @@ def voice_stt_error(request_id: str, error: str) -> VoiceSTTErrorMessage:
 
 def voice_tts_error(request_id: str, error: str) -> VoiceTTSErrorMessage:
     return VoiceTTSErrorMessage(request_id=request_id, error=error)
+

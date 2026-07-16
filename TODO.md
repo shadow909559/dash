@@ -1,12 +1,15 @@
-# TODO - Dash AI Assistant Tool Calling Integration
+# TODO
 
-- [ ] Inspect current LLM streaming/token pipeline and identify how to add tool-calling loop without breaking existing streaming.
-- [ ] Update WebSocket protocol with missing inbound tool confirmation/rejection message types (client -> server).
-- [ ] Update WebSocket route handler to route these confirmation/rejection messages to ToolManager.
-- [ ] Integrate ToolManager into `handle_chat_send` tool-aware execution loop.
-- [ ] Implement tool-aware LLM call in `llm/service.py` for Ollama (parse tool calls / function-call outputs).
-- [ ] Emit required WS lifecycle events: tool.started/tool.progress/tool.finished/tool.error (+ confirmation_required/confirmed/rejected).
-- [ ] Finish Flutter: render tool running/progress/output/error + confirmation prompt UX.
-- [ ] Add/adjust tests for tool calling and websocket message flow.
-- [ ] Run backend tests + smoke test calculator/current_time.
+## OpenAI native tool message ordering fix (handlers.py)
+- [ ] Inspect current tool loop in apps/backend/dash_backend/api/websocket/handlers.py
+- [ ] Implement required OpenAI_NATIVE ordering:
+  1) capture native assistant tool_calls
+  2) append assistant tool_calls message to history
+  3) parse tool calls via ToolManager.parse_tool_calls()
+  4) execute tools using existing ToolExecutor via ToolManager.execute_tool_stream()
+  5) append ToolManager.format_result_for_llm() output to history
+  6) loop until assistant returns no tool_calls
+- [ ] Ensure CUSTOM_JSON behavior unchanged
+- [ ] Run `python -m py_compile apps/backend/dash_backend/api/websocket/handlers.py`
+- [ ] Sanity-check code paths so no role="tool" is appended without preceding assistant tool_calls message
 

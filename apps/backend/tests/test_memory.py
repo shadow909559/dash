@@ -1,4 +1,8 @@
-"""Tests for memory service operations."""
+"""Tests for memory service operations.
+
+These tests verify persistent user memory CRUD, including the
+Milestone 1 `category` field.
+"""
 
 from __future__ import annotations
 
@@ -18,18 +22,23 @@ from dash_backend.memory.service import (
     update_memory,
 )
 
-
 pytestmark = pytest.mark.asyncio
 
 
 async def test_save_memory(db_session: AsyncSession, test_user_id: str) -> None:
     """Test saving a new memory."""
     memory = await save_memory(
-        db_session, test_user_id, "User likes Python", source="conversation", importance=0.8
+        db_session,
+        test_user_id,
+        "User likes Python",
+        source="conversation",
+        category="preference",
+        importance=0.8,
     )
     assert memory is not None
     assert memory.content == "User likes Python"
     assert memory.source == "conversation"
+    assert memory.category == "preference"
     assert memory.importance == 0.8
     assert memory.user_id == uuid.UUID(test_user_id)
 
@@ -45,13 +54,12 @@ async def test_retrieve_memory(db_session: AsyncSession, test_user_id: str) -> N
 
 async def test_get_user_memories(db_session: AsyncSession, test_user_id: str) -> None:
     """Test listing memories for a user."""
-    await save_memory(db_session, test_user_id, "Memory 1", importance=0.5)
-    await save_memory(db_session, test_user_id, "Memory 2", importance=0.9)
+    await save_memory(db_session, test_user_id, "Memory 1", importance=0.5, category="a")
+    await save_memory(db_session, test_user_id, "Memory 2", importance=0.9, category="a")
 
     memories, total = await get_user_memories(db_session, test_user_id)
     assert total >= 2
     assert len(memories) >= 2
-    # Should be ordered by importance descending
     assert memories[0].importance >= memories[-1].importance
 
 
@@ -59,8 +67,8 @@ async def test_get_user_memories_min_importance(
     db_session: AsyncSession, test_user_id: str
 ) -> None:
     """Test filtering memories by minimum importance."""
-    await save_memory(db_session, test_user_id, "Low importance", importance=0.1)
-    await save_memory(db_session, test_user_id, "High importance", importance=0.9)
+    await save_memory(db_session, test_user_id, "Low importance", importance=0.1, category="a")
+    await save_memory(db_session, test_user_id, "High importance", importance=0.9, category="a")
 
     memories, total = await get_user_memories(
         db_session, test_user_id, min_importance=0.5
@@ -70,15 +78,38 @@ async def test_get_user_memories_min_importance(
         assert m.importance >= 0.5
 
 
+async def test_get_user_memories_category(
+    db_session: AsyncSession, test_user_id: str
+) -> None:
+    """Test filtering memories by category."""
+    await save_memory(db_session, test_user_id, "Cat A 1", category="cat_a", importance=0.5)
+    await save_memory(db_session, test_user_id, "Cat A 2", category="cat_a", importance=0.9)
+    await save_memory(db_session, test_user_id, "Cat B 1", category="cat_b", importance=0.8)
+
+    memories, total = await get_user_memories(
+        db_session, test_user_id, category="cat_a"
+    )
+
+    assert total == len(memories)
+    assert len(memories) == 2
+    for m in memories:
+        assert m.category == "cat_a"
+
+
 async def test_update_memory(db_session: AsyncSession, test_user_id: str) -> None:
     """Test updating a memory."""
-    memory = await save_memory(db_session, test_user_id, "Original content")
+    memory = await save_memory(db_session, test_user_id, "Original content", category="c1")
     updated = await update_memory(
-        db_session, memory.id, content="Updated content", importance=0.7
+        db_session,
+        memory.id,
+        content="Updated content",
+        importance=0.7,
+        category="c2",
     )
     assert updated is not None
     assert updated.content == "Updated content"
     assert updated.importance == 0.7
+    assert updated.category == "c2"
 
 
 async def test_delete_memory(db_session: AsyncSession, test_user_id: str) -> None:
@@ -101,15 +132,24 @@ async def test_clear_user_memories(db_session: AsyncSession, test_user_id: str) 
 
     memories, total = await get_user_memories(db_session, test_user_id)
     assert total == 0
+    assert len(memories) == 0
 
 
 async def test_build_memory_context(db_session: AsyncSession, test_user_id: str) -> None:
     """Test building memory context string."""
     await save_memory(
-        db_session, test_user_id, "User is a Python developer", importance=0.9
+        db_session,
+        test_user_id,
+        "User is a Python developer",
+        importance=0.9,
+        category="profile",
     )
     await save_memory(
-        db_session, test_user_id, "User prefers VS Code", importance=0.7
+        db_session,
+        test_user_id,
+        "User prefers VS Code",
+        importance=0.7,
+        category="preference",
     )
 
     context = await build_memory_context(db_session, test_user_id)
@@ -129,9 +169,7 @@ async def test_summarize_conversation_short(db_session: AsyncSession, test_user_
         {"role": "user", "content": "Hi"},
         {"role": "assistant", "content": "Hello!"},
     ]
-    summary = await summarize_conversation(
-        db_session, uuid.uuid4(), messages
-    )
+    summary = await summarize_conversation(db_session, uuid.uuid4(), messages)
     assert summary is None
 
 
@@ -143,8 +181,7 @@ async def test_summarize_conversation_long(db_session: AsyncSession, test_user_i
         {"role": "user", "content": "Can you show me an example?"},
         {"role": "assistant", "content": "Sure! print('Hello World')"},
     ]
-    summary = await summarize_conversation(
-        db_session, uuid.uuid4(), messages
-    )
+    summary = await summarize_conversation(db_session, uuid.uuid4(), messages)
     assert summary is not None
     assert "Python" in summary or "python" in summary.lower()
+
