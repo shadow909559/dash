@@ -13,6 +13,48 @@ from dash_backend.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+async def _detect_ollama_model() -> str | None:
+    """Query Ollama /api/tags and return the first available llama-compatible model."""
+    settings = get_settings()
+    base_url = settings.ollama_base_url.rstrip("/")
+    tags_url = f"{base_url}/api/tags"
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(tags_url)
+            if response.status_code != 200:
+                logger.warning("Ollama /api/tags returned %s", response.status_code)
+                return None
+
+            data = response.json()
+            models = data.get("models", [])
+            if not models:
+                logger.warning("No models found in Ollama")
+                return None
+
+            # Prefer llama-compatible models
+            preferred_keywords = ["llama", "mistral", "qwen", "mixtral", "gemma"]
+            for model_entry in models:
+                name = model_entry.get("name", "")
+                name_lower = name.lower()
+                for keyword in preferred_keywords:
+                    if keyword in name_lower:
+                        logger.info("Auto-selected Ollama model: %s", name)
+                        return name
+
+            # Fall back to first available model
+            first_model = models[0].get("name", "")
+            logger.info("Auto-selected Ollama model (fallback): %s", first_model)
+            return first_model
+
+    except httpx.RequestError as exc:
+        logger.warning("Could not reach Ollama at %s: %s", base_url, exc)
+        return None
+    except (json.JSONDecodeError, KeyError, IndexError) as exc:
+        logger.warning("Failed to parse Ollama /api/tags response: %s", exc)
+        return None
+
+
 async def stream_chat_response(
     messages: list[dict[str, str]],
     model: str | None = None,
@@ -25,6 +67,7 @@ async def stream_chat_response(
     settings = get_settings()
 
     provider = settings.ai_provider.lower()
+    logger.info("Using AI provider: %s", provider)
 
     if provider == "ollama":
         async for token in _stream_ollama(messages, model):
@@ -50,6 +93,7 @@ async def _stream_openai(
     base_url = settings.openai_base_url.rstrip("/")
     url = f"{base_url}/chat/completions"
     model_name = model or settings.ai_model or settings.openai_model
+    logger.info("Sending prompt to OpenAI model: %s", model_name)
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -105,12 +149,26 @@ async def _stream_ollama(
     messages: list[dict[str, str]],
     model: str | None = None,
 ) -> AsyncIterator[str]:
-    """Stream from an Ollama instance."""
+    """Stream from an Ollama instance with auto-detection of available models."""
     settings = get_settings()
 
     base_url = settings.ollama_base_url.rstrip("/")
     url = f"{base_url}/api/chat"
-    model_name = model or settings.ai_model or settings.ollama_model
+
+    # Auto-detect model if not explicitly provided
+    if model:
+        model_name = model
+    elif settings.ai_model:
+        model_name = settings.ai_model
+    else:
+        detected = await _detect_ollama_model()
+        if detected:
+            model_name = detected
+        else:
+            model_name = settings.ollama_model
+            logger.warning("Ollama model detection failed, using default: %s", model_name)
+
+    logger.info("Sending prompt to Ollama model: %s", model_name)
 
     payload = {
         "model": model_name,
@@ -128,7 +186,7 @@ async def _stream_ollama(
                         response.status_code,
                         error_text,
                     )
-                    yield f"*Error: Ollama returned status {response.status_code}*"
+                    yield f"*Error: Ollama returned status {response.status_code}: {error_text.decode(errors='replace')[:200]}*"
                     return
 
                 async for line in response.aiter_lines():

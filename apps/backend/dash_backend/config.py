@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
-    ai_provider: str = "openai"  # "openai" or "ollama"
+    ai_provider: str = "ollama"  # "openai" or "ollama"
     ai_model: str | None = None  # explicit model override; falls back to provider default
 
     jwt_secret_key: str | None = None

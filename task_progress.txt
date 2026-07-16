@@ -1,16 +1,25 @@
-- [x] Analyze existing codebase architecture
-- [ ] Desktop: Create API service layer for backend REST calls
-- [ ] Desktop: Rewrite chatStore.ts - replace mock data with real WebSocket/REST backend
-- [ ] Desktop: Update ChatPage.tsx - proper loading/error/connection states
-- [ ] Desktop: Update Sidebar.tsx - conversation management via backend
-- [ ] Desktop: Wire settingsStore.ts changes to trigger agent reconnect
-- [ ] Desktop: Add proper error boundaries and loading fallbacks
-- [ ] Desktop: Update General.tsx to apply URL settings to agent
-- [ ] Desktop: Add auth page and protected routes to AppRouter.tsx
-- [ ] Desktop: Add connection status indicator component
-- [ ] Mobile: Improve WebSocket service - exponential backoff + auth integration
-- [ ] Mobile: Improve chat provider - streaming, error handling, reconnect
-- [ ] Mobile: Make settings page dynamic with configurable URLs
-- [ ] Mobile: Improve splash screen auto-login flow
-- [ ] Mobile: Add connect/disconnect controls
-- [ ] Verify all integrations work together
+# Task Progress - Fix WebSocket Disconnect & AI Not Found
+
+## Analysis Complete - Root Causes Identified
+
+### Bug 1 - WebSocket Disconnect
+**Root Cause:** The frontend sends `{"type": "heartbeat"}` but the backend only handles `{"type": "ping"}`. The heartbeat falls through to the `else` block which sends back an error. Additionally:
+- The Flutter app has NO heartbeat/ping mechanism at all
+- The backend has no server-side keepalive
+- The desktop app's `_scheduleReconnect` gives up after 5 attempts with no exponential backoff
+- The backend's `except Exception` block closes the WebSocket with code 1011 on any error
+
+### Bug 2 - "AI Not Found"
+**Root Cause:** The backend's `ai_provider` defaults to `"openai"` (not `"ollama"`). The `.env` file doesn't set `DASH_AI_PROVIDER=ollama`. So the backend tries OpenAI, which fails because no API key is configured. Additionally:
+- The model name is hardcoded as `"llama3.2"` instead of auto-detecting from Ollama
+- No auto-detection of installed models via `GET /api/tags`
+
+## Fix Plan
+- [x] Analyze root causes
+- [ ] Fix 1: Backend websocket - Add heartbeat/ping support and server-side keepalive
+- [ ] Fix 2: Backend - Auto-detect Ollama models via /api/tags
+- [ ] Fix 3: Backend - Set default ai_provider to ollama
+- [ ] Fix 4: Backend - Add proper logging throughout the pipeline
+- [ ] Fix 5: Desktop - Fix heartbeat type to match backend
+- [ ] Fix 6: Flutter - Add heartbeat mechanism
+- [ ] Fix 7: Verify everything works

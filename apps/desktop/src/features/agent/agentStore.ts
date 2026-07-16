@@ -114,9 +114,9 @@ function isCommandSafe(command: string): boolean {
 }
 
 // ── Agent Store ─────────────────────────────────────────────────────────
-const MAX_RECONNECT_ATTEMPTS = 5;
-const HEARTBEAT_INTERVAL_MS = 15000;
-const RECONNECT_BASE_DELAY_MS = 2000;
+const MAX_RECONNECT_ATTEMPTS = 50;  // effectively infinite, will keep trying
+const HEARTBEAT_INTERVAL_MS = 20000;
+const RECONNECT_BASE_DELAY_MS = 1000;
 
 type MessageListener = (data: Record<string, unknown>) => void;
 

@@ -179,13 +179,13 @@ def parse_client_message(raw: Any) -> WSBaseMessage:
     if not isinstance(msg_type, str):
         raise ValueError("Missing message type")
 
-    # Auth / hello / ping
+    # Auth / hello / ping / heartbeat
     if msg_type == "hello":
         return HelloMessage.model_validate(raw)
     if msg_type == "auth":
         return AuthMessage.model_validate(raw)
-    if msg_type == "ping":
-        return PingMessage.model_validate(raw)
+    if msg_type in ("ping", "heartbeat"):
+        return PingMessage()
 
     # Chat
     if msg_type == "chat.send":

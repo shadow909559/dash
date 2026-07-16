@@ -8,12 +8,14 @@ import '../models/chat_message.dart';
 
 class ChatState {
   final List<ChatMessage> messages;
+  final bool isStreaming;
   final bool isTyping;
   final WebSocketStatus connectionStatus;
   final String? errorMessage;
 
   const ChatState({
     required this.messages,
+    this.isStreaming = false,
     this.isTyping = false,
     this.connectionStatus = WebSocketStatus.disconnected,
     this.errorMessage,
@@ -21,6 +23,7 @@ class ChatState {
 
   ChatState copyWith({
     List<ChatMessage>? messages,
+    bool? isStreaming,
     bool? isTyping,
     WebSocketStatus? connectionStatus,
     String? errorMessage,
@@ -28,6 +31,7 @@ class ChatState {
   }) {
     return ChatState(
       messages: messages ?? this.messages,
+      isStreaming: isStreaming ?? this.isStreaming,
       isTyping: isTyping ?? this.isTyping,
       connectionStatus: connectionStatus ?? this.connectionStatus,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
@@ -42,30 +46,38 @@ class ChatService extends StateNotifier<ChatState> {
   ChatService(this._ref) : super(const ChatState(messages: [])) {
     _ws = _ref.read(webSocketServiceProvider.notifier);
 
-    _wsSubscription = _ws.messageStream.listen(
-      _handleIncomingMessage,
+    // Listen to filtered chat messages only
+    _wsSubscription = _ws.chatMessageStream.listen(
+      _handleChatMessage,
       onError: (e, st) {
         state = state.copyWith(
           errorMessage: e.toString(),
-          isTyping: false,
+          isStreaming: false,
         );
       },
     );
+
+    // Listen to typing indicators
+    _typingSub = _ws.typingStream.listen((isTyping) {
+      state = state.copyWith(isTyping: isTyping);
+    });
+
+    // Listen to status changes
+    _statusSub = _ws.statusStream.listen((status) {
+      state = state.copyWith(connectionStatus: status);
+    });
 
     _ws.connect();
   }
 
   final Ref _ref;
   late final WebSocketService _ws;
-  StreamSubscription<String>? _wsSubscription;
+  StreamSubscription<Map<String, dynamic>>? _wsSubscription;
+  StreamSubscription<bool>? _typingSub;
+  StreamSubscription<WebSocketStatus>? _statusSub;
 
   int _messageCounter = 0;
   int _streamingAssistantCounter = 0;
-
-  void _syncConnectionStatus() {
-    final wsStatus = _ref.read(webSocketServiceProvider).status;
-    state = state.copyWith(connectionStatus: wsStatus);
-  }
 
   String _nextMessageId() {
     _messageCounter++;
@@ -77,83 +89,74 @@ class ChatService extends StateNotifier<ChatState> {
     return 'a_stream_${DateTime.now().microsecondsSinceEpoch}_$_streamingAssistantCounter';
   }
 
-  void _handleIncomingMessage(String raw) {
-    _syncConnectionStatus();
+  /// Handle incoming chat messages from the filtered stream.
+  /// Only receives: chat.token, chat.done, chat.error, chat.message, assistant, user
+  void _handleChatMessage(Map<String, dynamic> json) {
+    final type = json['type']?.toString() ?? '';
 
-    Map<String, dynamic> json;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, dynamic>) {
-        _addUnknownAssistantMessage(raw);
-        return;
-      }
-      json = decoded;
-    } catch (_) {
-      _addUnknownAssistantMessage(raw);
-      return;
-    }
-
-    final type = json['type']?.toString();
     switch (type) {
       case 'chat.token':
         _handleToken(json);
-        return;
+        break;
       case 'chat.done':
         _handleDone(json);
-        return;
+        break;
       case 'chat.error':
         _handleError(json);
-        return;
+        break;
+      case 'chat.message':
+      case 'assistant':
+        _handleCompleteMessage(json);
+        break;
+      case 'user':
+        // Server echoed user message — mark as sent
+        _syncUserMessage(json);
+        break;
       default:
-        _addUnknownAssistantMessage(raw);
-        return;
+        // Unknown chat type — log but don't create bubbles
+        print('[ChatService] Unknown chat message type: $type');
     }
   }
-void _handleToken(Map<String, dynamic> json) {
-  print("TOKEN RECEIVED: ${json['content']}");
 
-  final messageId = json['message_id']?.toString();
-  final content = json['content']?.toString() ?? '';
+  void _handleToken(Map<String, dynamic> json) {
+    final messageId = json['message_id']?.toString();
+    final content = json['content']?.toString() ?? '';
 
-  state = state.copyWith(
-    isTyping: true,
-    errorMessage: null,
-    clearError: true,
-  );
-
-  final updated = List<ChatMessage>.from(state.messages);
-
-  final idx = messageId == null
-      ? -1
-      : updated.lastIndexWhere(
-          (m) => m.role == MessageRole.assistant && m.id == messageId,
-        );
-
-  if (idx != -1) {
-    final current = updated[idx];
-    updated[idx] = current.copyWith(
-      content: current.content + content,
-      status: MessageStatus.streaming,
+    state = state.copyWith(
+      isStreaming: true,
+      isTyping: true,
+      errorMessage: null,
+      clearError: true,
     );
-  } else {
-    updated.add(
-      ChatMessage(
-        id: messageId ?? _nextAssistantStreamingId(),
-        role: MessageRole.assistant,
-        content: content,
-        timestamp: DateTime.now(),
+
+    final updated = List<ChatMessage>.from(state.messages);
+
+    final idx = messageId == null
+        ? -1
+        : updated.lastIndexWhere(
+            (m) => m.role == MessageRole.assistant && m.id == messageId,
+          );
+
+    if (idx != -1) {
+      final current = updated[idx];
+      updated[idx] = current.copyWith(
+        content: current.content + content,
         status: MessageStatus.streaming,
-      ),
-    );
-  }
+      );
+    } else {
+      updated.add(
+        ChatMessage(
+          id: messageId ?? _nextAssistantStreamingId(),
+          role: MessageRole.assistant,
+          content: content,
+          timestamp: DateTime.now(),
+          status: MessageStatus.streaming,
+        ),
+      );
+    }
 
-  print("STATE AFTER TOKEN:");
-  for (final m in updated) {
-    print("${m.role}: ${m.content}");
+    state = state.copyWith(messages: updated);
   }
-
-  state = state.copyWith(messages: updated);
-}
 
   void _handleDone(Map<String, dynamic> json) {
     final messageId = json['message_id']?.toString();
@@ -179,7 +182,11 @@ void _handleToken(Map<String, dynamic> json) {
       }
     }
 
-    state = state.copyWith(messages: updated, isTyping: false);
+    state = state.copyWith(
+      messages: updated,
+      isStreaming: false,
+      isTyping: false,
+    );
   }
 
   void _handleError(Map<String, dynamic> json) {
@@ -196,34 +203,49 @@ void _handleToken(Map<String, dynamic> json) {
 
     state = state.copyWith(
       messages: updated,
+      isStreaming: false,
       isTyping: false,
       errorMessage: err,
     );
   }
 
-  void _addUnknownAssistantMessage(String raw) {
-    final updated = List<ChatMessage>.from(state.messages);
+  /// Handle a complete non-streamed assistant message.
+  void _handleCompleteMessage(Map<String, dynamic> json) {
+    final messageId = json['message_id']?.toString() ?? _nextAssistantStreamingId();
+    final content = json['content']?.toString() ?? json['text']?.toString() ?? '';
 
-    final lastIdx = updated.lastIndexWhere(
-      (m) => m.role == MessageRole.assistant && m.isStreaming,
+    final updated = List<ChatMessage>.from(state.messages);
+    updated.add(
+      ChatMessage(
+        id: messageId,
+        role: MessageRole.assistant,
+        content: content,
+        timestamp: DateTime.now(),
+        status: MessageStatus.complete,
+      ),
     );
 
-    if (lastIdx != -1) {
-      final last = updated[lastIdx];
-      updated[lastIdx] = last.copyWith(content: last.content + raw);
-    } else {
-      updated.add(
-        ChatMessage(
-          id: _nextAssistantStreamingId(),
-          role: MessageRole.assistant,
-          content: raw,
-          timestamp: DateTime.now(),
-          status: MessageStatus.complete,
-        ),
-      );
-    }
+    state = state.copyWith(
+      messages: updated,
+      isStreaming: false,
+      isTyping: false,
+    );
+  }
 
-    state = state.copyWith(messages: updated, isTyping: false);
+  /// Sync a user message that was echoed back by the server.
+  void _syncUserMessage(Map<String, dynamic> json) {
+    final messageId = json['message_id']?.toString();
+    if (messageId == null) return;
+
+    final updated = List<ChatMessage>.from(state.messages);
+    for (int i = updated.length - 1; i >= 0; i--) {
+      final m = updated[i];
+      if (m.isUser && m.id == messageId && m.status == MessageStatus.sent) {
+        updated[i] = m.copyWith(status: MessageStatus.sent);
+        break;
+      }
+    }
+    state = state.copyWith(messages: updated);
   }
 
   void _markLastUserMessageSent() {
@@ -237,50 +259,59 @@ void _handleToken(Map<String, dynamic> json) {
     }
     state = state.copyWith(messages: updated);
   }
-void sendMessage(String content) {
-  final text = content.trim();
-  if (text.isEmpty) return;
 
-  final wsStatus = _ref.read(webSocketServiceProvider).status;
-  if (wsStatus != WebSocketStatus.connected) return;
+  void sendMessage(String content) {
+    final text = content.trim();
+    if (text.isEmpty) return;
 
-  final id = _nextMessageId();
+    final wsStatus = _ref.read(webSocketServiceProvider).status;
+    if (wsStatus != WebSocketStatus.connected) return;
 
-  print("STATE BEFORE SEND:");
-  for (final m in state.messages) {
-    print("${m.role}: ${m.content}");
+    final id = _nextMessageId();
+
+    final userMessage = ChatMessage(
+      id: id,
+      role: MessageRole.user,
+      content: text,
+      timestamp: DateTime.now(),
+      status: MessageStatus.sending,
+    );
+
+    state = state.copyWith(
+      messages: [...state.messages, userMessage],
+      isStreaming: false,
+      isTyping: false,
+      errorMessage: null,
+      clearError: true,
+    );
+
+    _ws.send(
+      jsonEncode({
+        'type': 'chat.send',
+        'message_id': id,
+        'content': text,
+      }),
+    );
+
+    _markLastUserMessageSent();
   }
 
-  final userMessage = ChatMessage(
-    id: id,
-    role: MessageRole.user,
-    content: text,
-    timestamp: DateTime.now(),
-    status: MessageStatus.sending,
-  );
-
-  state = state.copyWith(
-    messages: [...state.messages, userMessage],
-    isTyping: false,
-    errorMessage: null,
-    clearError: true,
-  );
-
-  print("STATE AFTER ADDING USER:");
-  for (final m in state.messages) {
-    print("${m.role}: ${m.content}");
+  void cancelStreaming() {
+    final updated = List<ChatMessage>.from(state.messages);
+    for (int i = updated.length - 1; i >= 0; i--) {
+      final m = updated[i];
+      if (m.role == MessageRole.assistant && m.isStreaming) {
+        updated[i] = m.copyWith(status: MessageStatus.complete);
+        break;
+      }
+    }
+    state = state.copyWith(
+      messages: updated,
+      isStreaming: false,
+      isTyping: false,
+    );
   }
 
-  _ws.send(
-    jsonEncode({
-      'type': 'chat.send',
-      'message_id': id,
-      'content': text,
-    }),
-  );
-
-  _markLastUserMessageSent();
-}
   Future<void> reconnect() async {
     await _ws.disconnect();
     await _ws.connect();
@@ -293,7 +324,8 @@ void sendMessage(String content) {
   @override
   void dispose() {
     _wsSubscription?.cancel();
+    _typingSub?.cancel();
+    _statusSub?.cancel();
     super.dispose();
   }
 }
-

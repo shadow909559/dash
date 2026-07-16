@@ -1,5 +1,6 @@
 """WebSocket endpoints for real-time communication."""
 
+import asyncio
 import json
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -12,7 +13,7 @@ logger = get_logger(__name__)
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
-    """Real-time DASH websocket."""
+    """Real-time DASH websocket with keepalive and streaming support."""
 
     from dash_backend.api.websocket.handlers import (
         handle_agent_run,
@@ -31,11 +32,45 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     from dash_backend.auth.security import decode_access_token
 
     await websocket.accept()
+    logger.info("WebSocket connected")
 
     user_id: str | None = None
+    disconnected = False
 
     async def send_json(data: object):
-        await websocket.send_json(data)
+        """Safely send JSON, ignoring errors if disconnected."""
+        if disconnected:
+            return
+        try:
+            await websocket.send_json(data)
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            pass
+
+    async def keepalive_loop():
+        """Send periodic pongs? No, server just waits for client pings.
+        
+        Actually, the server doesn't need to send pings - FastAPI/uvicorn
+        handles the WebSocket. We just need to be responsive to client
+        heartbeats. If the client doesn't send anything for a long time,
+        the OS TCP stack keeps the connection alive.
+        
+        But to prevent proxies from closing idle connections,
+        we send a small "keepalive" message occasionally.
+        """
+        nonlocal disconnected
+        while not disconnected:
+            await asyncio.sleep(30)
+            if disconnected:
+                break
+            try:
+                # Send a simple pong-like keepalive
+                await websocket.send_json({"type": "pong"})
+            except (WebSocketDisconnect, Exception):
+                break
+
+    keepalive_task = asyncio.create_task(keepalive_loop())
 
     try:
         while True:
@@ -84,9 +119,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     )
 
                     user_id = payload["sub"]
+                    logger.info("Authenticated user: %s", user_id)
 
                 except Exception as exc:
 
+                    logger.warning("Auth failed: %s", exc)
                     await send_json(
                         ChatErrorMessage(
                             type="chat.error",
@@ -99,10 +136,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 
             # -------------------------
-            # PING
+            # PING / HEARTBEAT
             # -------------------------
 
-            if msg.type == "ping":
+            if msg.type in ("ping", "heartbeat"):
 
                 await websocket.send_json(
                     {
@@ -114,6 +151,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 
             if msg.type == "hello":
+                logger.info("Client hello received")
                 continue
 
 
@@ -141,6 +179,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 chat_msg = ChatSendMessage.model_validate(raw)
 
                 assistant_text = ""
+                logger.info("Received chat.send from user %s", user_id)
 
                 from dash_backend.db.session import AsyncSessionLocal
 
@@ -183,6 +222,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         session=session,
                         conversation_id=str(conversation.id),
                         content=assistant_text,
+                    )
+
+                    logger.info(
+                        "Completed response for user %s (%d chars)",
+                        user_id,
+                        len(assistant_text),
                     )
 
 
@@ -231,6 +276,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             else:
 
+                logger.debug("Unsupported message type: %s", msg.type)
                 await send_json(
                     ChatErrorMessage(
                         type="chat.error",
@@ -242,17 +288,16 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     except WebSocketDisconnect:
 
-        logger.info(
-            "WebSocket disconnected"
-        )
+        logger.info("WebSocket disconnected (user: %s)", user_id or "unauthenticated")
 
+    except Exception as exc:
 
-    except Exception:
+        logger.exception("WebSocket error: %s", exc)
 
-        logger.exception(
-            "WebSocket error"
-        )
-
-        await websocket.close(
-            code=1011
-        )
+    finally:
+        disconnected = True
+        keepalive_task.cancel()
+        try:
+            await keepalive_task
+        except asyncio.CancelledError:
+            pass
