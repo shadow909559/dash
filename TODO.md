@@ -1,10 +1,12 @@
-# TODO
+# TODO - Dash AI Assistant Tool Calling Integration
 
-- [ ] Step 1: Implement rich backend websocket chat/voice/agent protocol (replace echo scaffold, unify routes, add protocol models + streaming)
-- [ ] Step 2: Update backend websocket tests to validate authentication handshake and chat streaming/done
-- [ ] Step 3: Run backend tests (pytest) and fix any failures
-- [ ] Step 4: Wire mobile WebSocketService + ChatProvider to the new protocol (auth + structured events)
-- [ ] Step 5: Implement provider/Ollama integration in backend and wire to websocket handlers
-- [ ] Step 6: Cleanup/remove unused websocket scaffolds and ensure protocol naming consistency
-- [ ] Step 7: Compile/test verification (backend pytest + mobile flutter analyze/build if available)
+- [ ] Inspect current LLM streaming/token pipeline and identify how to add tool-calling loop without breaking existing streaming.
+- [ ] Update WebSocket protocol with missing inbound tool confirmation/rejection message types (client -> server).
+- [ ] Update WebSocket route handler to route these confirmation/rejection messages to ToolManager.
+- [ ] Integrate ToolManager into `handle_chat_send` tool-aware execution loop.
+- [ ] Implement tool-aware LLM call in `llm/service.py` for Ollama (parse tool calls / function-call outputs).
+- [ ] Emit required WS lifecycle events: tool.started/tool.progress/tool.finished/tool.error (+ confirmation_required/confirmed/rejected).
+- [ ] Finish Flutter: render tool running/progress/output/error + confirmation prompt UX.
+- [ ] Add/adjust tests for tool calling and websocket message flow.
+- [ ] Run backend tests + smoke test calculator/current_time.
 

@@ -6,7 +6,7 @@ import enum
 import uuid
 from typing import Any
 
-from sqlalchemy import Enum, ForeignKey, Index, Text
+from sqlalchemy import Enum, Float, ForeignKey, Index, Integer, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,7 +24,12 @@ class MessageRole(str, enum.Enum):
 
 
 class Message(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """A single message within a `Conversation`."""
+    """A single message within a `Conversation`.
+
+    Contains the full message content along with metadata about
+    token usage, model, and any additional data attached to the
+    message.
+    """
 
     __tablename__ = "messages"
     __table_args__ = (
@@ -42,6 +47,8 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    model: Mapped[str | None] = mapped_column(Text, nullable=True)
     meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")

@@ -1,0 +1,1 @@
+"""Memory package for long-term user information storage."""

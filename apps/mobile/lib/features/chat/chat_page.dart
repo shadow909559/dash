@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/websocket_service.dart';
 import 'models/chat_message.dart';
 import 'providers/chat_provider.dart';
+import 'providers/conversation_provider.dart';
+import 'widgets/conversation_sidebar.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
@@ -19,6 +21,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
+  bool _isSidebarOpen = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen for active conversation changes to load messages
+    ref.listen<String?>(activeConversationIdProvider, (prev, next) {
+      if (next != null) {
+        ref.read(chatProvider.notifier).loadConversationMessages(next);
+      } else {
+        ref.read(chatProvider.notifier).clearMessages();
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -44,7 +60,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final message = _controller.text.trim();
     if (message.isEmpty) return;
 
-    ref.read(chatProvider.notifier).sendMessage(message);
+    final activeId = ref.read(activeConversationIdProvider);
+    ref.read(chatProvider.notifier).sendMessage(message,
+        conversationId: activeId);
     _controller.clear();
     _focusNode.requestFocus();
     _scrollToBottom();
@@ -59,7 +77,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final state = ref.read(chatProvider);
     if (state.messages.isEmpty) return;
 
-    // Find last user message to resend
     String? lastUserContent;
     for (int i = state.messages.length - 1; i >= 0; i--) {
       if (state.messages[i].isUser) {
@@ -68,7 +85,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     }
     if (lastUserContent != null) {
-      chatService.sendMessage(lastUserContent);
+      final activeId = ref.read(activeConversationIdProvider);
+      chatService.sendMessage(lastUserContent, conversationId: activeId);
     }
   }
 
@@ -86,22 +104,101 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatProvider);
     final socketState = ref.watch(webSocketServiceProvider);
+    final activeId = ref.watch(activeConversationIdProvider);
     final theme = Theme.of(context);
 
-    // Auto-scroll when new messages arrive
     _scrollToBottom();
 
-    return Column(
+    return Row(
       children: [
-        _buildConnectionBar(chatState, socketState.status),
+        // Sidebar
+        if (_isSidebarOpen)
+          const ConversationSidebar(),
+
+        // Main chat area
         Expanded(
-          child: chatState.messages.isEmpty
-              ? _buildEmptyState(theme)
-              : _buildMessageList(chatState, theme),
+          child: Column(
+            children: [
+              // Top bar with sidebar toggle and conversation title
+              _buildTopBar(theme, activeId),
+              // Connection bar
+              _buildConnectionBar(chatState, socketState.status),
+              // Messages
+              Expanded(
+                child: chatState.messages.isEmpty
+                    ? _buildEmptyState(theme)
+                    : _buildMessageList(chatState, theme),
+              ),
+              if (chatState.isTyping) _buildTypingIndicator(theme),
+              _buildInputBar(
+                  socketState.status, chatState.isStreaming, theme),
+            ],
+          ),
         ),
-        if (chatState.isTyping) _buildTypingIndicator(theme),
-        _buildInputBar(socketState.status, chatState.isStreaming, theme),
       ],
+    );
+  }
+
+  Widget _buildTopBar(ThemeData theme, String? activeConversationId) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outlineVariant,
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            icon: Icon(_isSidebarOpen
+                ? Icons.menu_open
+                : Icons.menu),
+            tooltip: 'Toggle sidebar',
+            onPressed: () => setState(() => _isSidebarOpen = !_isSidebarOpen),
+          ),
+          if (activeConversationId != null)
+            Expanded(
+              child: Consumer(
+                builder: (context, ref, child) {
+                  final state = ref.watch(conversationListProvider);
+                  final conversation = state.conversations
+                      .where((c) => c.id == activeConversationId)
+                      .firstOrNull;
+                  return Text(
+                    conversation?.displayTitle ?? 'Chat',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  );
+                },
+              ),
+            )
+          else
+            Expanded(
+              child: Text(
+                'New Chat',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          if (activeConversationId != null)
+            IconButton(
+              icon: const Icon(Icons.new_label_outlined, size: 20),
+              tooltip: 'New chat',
+              onPressed: () {
+                ref.read(activeConversationIdProvider.notifier).state = null;
+                ref.read(chatProvider.notifier).clearMessages();
+                ref.read(conversationListProvider.notifier).create();
+              },
+            ),
+        ],
+      ),
     );
   }
 
@@ -110,7 +207,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return const SizedBox.shrink();
     }
 
-    // Show a thin green bar when streaming
     if (status == WebSocketStatus.connected && chatState.isStreaming) {
       return Container(
         width: double.infinity,
@@ -349,7 +445,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 }
 
 // ──────────────────────────────────────────────────
-// Sub-widgets
+// Sub-widgets (unchanged from original)
 // ──────────────────────────────────────────────────
 
 class _AnimatedDots extends StatefulWidget {
@@ -390,7 +486,8 @@ class _AnimatedDotsState extends State<_AnimatedDots>
             builder: (context, child) {
               final delay = index * 0.2;
               final t = (_controller.value - delay).clamp(0.0, 1.0);
-              final opacity = 0.3 + (0.7 * (1 - (t * 4 - 2).abs()).clamp(0.0, 1.0));
+              final opacity =
+                  0.3 + (0.7 * (1 - (t * 4 - 2).abs()).clamp(0.0, 1.0));
               return Container(
                 width: 6,
                 height: 6,
@@ -499,7 +596,8 @@ class _MessageBubble extends StatelessWidget {
                 bottomRight: Radius.circular(isUser ? 4 : 18),
               ),
               border: isError
-                  ? Border.all(color: theme.colorScheme.error.withValues(alpha: 0.5))
+                  ? Border.all(
+                      color: theme.colorScheme.error.withValues(alpha: 0.5))
                   : null,
             ),
             child: Column(
@@ -507,7 +605,6 @@ class _MessageBubble extends StatelessWidget {
                   ? CrossAxisAlignment.end
                   : CrossAxisAlignment.start,
               children: [
-                // Message content with markdown rendering for assistant messages
                 if (isUser)
                   Text(
                     message.content,
@@ -518,11 +615,9 @@ class _MessageBubble extends StatelessWidget {
                 else
                   _buildMarkdownContent(context, message.content, isStreaming),
                 const SizedBox(height: 6),
-                // Footer with timestamp and actions
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Error indicator
                     if (isError)
                       Padding(
                         padding: const EdgeInsets.only(right: 6),
@@ -532,7 +627,6 @@ class _MessageBubble extends StatelessWidget {
                           color: theme.colorScheme.error,
                         ),
                       ),
-                    // Timestamp
                     Text(
                       _formatTime(message.timestamp),
                       style: theme.textTheme.labelSmall?.copyWith(
@@ -544,7 +638,6 @@ class _MessageBubble extends StatelessWidget {
                         fontSize: 10,
                       ),
                     ),
-                    // Sending indicator for user messages
                     if (isUser && message.status == MessageStatus.sending)
                       Padding(
                         padding: const EdgeInsets.only(left: 4),
@@ -558,7 +651,6 @@ class _MessageBubble extends StatelessWidget {
                           ),
                         ),
                       ),
-                    // Streaming indicator
                     if (isStreaming)
                       Padding(
                         padding: const EdgeInsets.only(left: 6),
@@ -577,8 +669,9 @@ class _MessageBubble extends StatelessWidget {
               ],
             ),
           ),
-          // Action buttons for assistant messages
-          if (!isUser && !isStreaming && message.status == MessageStatus.complete)
+          if (!isUser &&
+              !isStreaming &&
+              message.status == MessageStatus.complete)
             Padding(
               padding: const EdgeInsets.only(left: 8, top: 4),
               child: Row(
@@ -617,7 +710,6 @@ class _MessageBubble extends StatelessWidget {
       BuildContext context, String content, bool isStreaming) {
     final theme = Theme.of(context);
 
-    // For streaming content, use simple text to avoid markdown flickering
     if (isStreaming) {
       return Text(
         content,
@@ -667,9 +759,11 @@ class _MessageBubble extends StatelessWidget {
               width: 3,
             ),
           ),
-          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          color: theme.colorScheme.surfaceContainerHighest
+              .withValues(alpha: 0.3),
         ),
-        blockquotePadding: const EdgeInsets.only(left: 12, top: 4, bottom: 4),
+        blockquotePadding:
+            const EdgeInsets.only(left: 12, top: 4, bottom: 4),
         listBullet: TextStyle(
           color: theme.colorScheme.primary,
         ),
@@ -739,7 +833,8 @@ class _ActionButton extends StatelessWidget {
         tooltip: tooltip,
         onPressed: onPressed,
         style: IconButton.styleFrom(
-          foregroundColor: color ?? theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          foregroundColor:
+              color ?? theme.colorScheme.onSurface.withValues(alpha: 0.5),
           padding: EdgeInsets.zero,
           visualDensity: VisualDensity.compact,
           minimumSize: Size.zero,

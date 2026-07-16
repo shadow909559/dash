@@ -8,6 +8,7 @@ autogenerate to see the full schema.
 
 from dash_backend.db.models.api_key import APIKey
 from dash_backend.db.models.conversation import Conversation
+from dash_backend.db.models.conversation_summary import ConversationSummary
 from dash_backend.db.models.device import Device, DeviceType
 from dash_backend.db.models.memory import Memory
 from dash_backend.db.models.message import Message, MessageRole
@@ -22,6 +23,7 @@ from dash_backend.db.models.refresh_tokens import RefreshToken
 __all__ = [
     "APIKey",
     "Conversation",
+    "ConversationSummary",
     "Device",
     "DeviceType",
     "Memory",

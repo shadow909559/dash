@@ -1,9 +1,20 @@
-"""LLM service that calls OpenAI-compatible APIs or Ollama with streaming."""
+"""LLM service that calls OpenAI-compatible APIs or Ollama with streaming.
+
+Integrates conversation history, memory context, and conversation
+summaries to build rich prompts for the AI model.
+
+This module now also supports tool-call detection:
+- Collect a full streamed response
+- Detect whether the response is a JSON tool_call
+- Validate schema and parse into a structured result
+- Never crash on malformed JSON (falls back to assistant text)
+"""
 
 from __future__ import annotations
 
 import json
-from typing import AsyncIterator
+from dataclasses import dataclass
+from typing import Any, AsyncIterator
 
 import httpx
 
@@ -11,6 +22,20 @@ from dash_backend.config import get_settings
 from dash_backend.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class AssistantResponse:
+    text: str
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    name: str
+    arguments: dict[str, Any]
+
+
+ToolOrAssistant = AssistantResponse | ToolCall
 
 
 async def _detect_ollama_model() -> str | None:
@@ -75,6 +100,78 @@ async def stream_chat_response(
     else:
         async for token in _stream_openai(messages, model):
             yield token
+
+
+async def collect_streamed_response(
+    messages: list[dict[str, str]],
+    model: str | None = None,
+) -> str:
+    """Collect the full assistant output from the existing streaming API."""
+    parts: list[str] = []
+    async for token in stream_chat_response(messages, model=model):
+        parts.append(token)
+    return "".join(parts)
+
+
+def parse_tool_call_from_text(text: str) -> ToolOrAssistant:
+    """Parse a model output into either ToolCall or AssistantResponse.
+
+    Expected tool-call JSON:
+    {
+      "type": "tool_call",
+      "tool": "tool_name",
+      "arguments": { ... }
+    }
+
+    Rules:
+    - If JSON parsing fails, treat output as assistant text.
+    - Validate required fields.
+    - Reject malformed tool calls (return AssistantResponse).
+    - Never crash.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return AssistantResponse(text="")
+
+    # Fast-path: only attempt JSON parse if it looks like JSON.
+    # This is intentionally permissive to avoid false negatives.
+    if not (raw.startswith("{") and raw.endswith("}")):
+        return AssistantResponse(text=text)
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return AssistantResponse(text=text)
+
+    if not isinstance(payload, dict):
+        return AssistantResponse(text=text)
+
+    # Validate schema
+    p_type = payload.get("type")
+    p_tool = payload.get("tool")
+    p_args = payload.get("arguments")
+
+    if p_type != "tool_call":
+        return AssistantResponse(text=text)
+
+    if not isinstance(p_tool, str) or not p_tool.strip():
+        return AssistantResponse(text=text)
+
+    if not isinstance(p_args, dict):
+        return AssistantResponse(text=text)
+
+    # Ensure arguments values are JSON-compatible primitives/objects.
+    # We don't enforce deeper schemas here; tool execution will validate.
+    return ToolCall(name=p_tool.strip(), arguments=p_args)
+
+
+async def chat_completion_with_tool_parsing(
+    messages: list[dict[str, str]],
+    model: str | None = None,
+) -> ToolOrAssistant:
+    """Collect the assistant response, then parse as tool_call or plain text."""
+    full_text = await collect_streamed_response(messages, model=model)
+    return parse_tool_call_from_text(full_text)
 
 
 async def _stream_openai(
@@ -214,12 +311,44 @@ def build_chat_messages(
     system_prompt: str | None = None,
     history: list[dict[str, str]] | None = None,
     user_message: str = "",
+    memory_context: str | None = None,
+    conversation_summary: str | None = None,
 ) -> list[dict[str, str]]:
-    """Build the messages array for an LLM chat completion request."""
+    """Build the messages array for an LLM chat completion request.
+
+    Incorporates memory context and conversation summaries into
+    the system prompt for richer context-aware responses.
+
+    Args:
+        system_prompt: Base system prompt.
+        history: Previous conversation messages.
+        user_message: Current user message.
+        memory_context: Injected memory context string.
+        conversation_summary: Injected conversation summary.
+
+    Returns:
+        List of message dicts for the LLM API.
+    """
     messages: list[dict[str, str]] = []
 
+    # Build enriched system prompt
+    system_parts: list[str] = []
+
     if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
+        system_parts.append(system_prompt)
+
+    if memory_context:
+        system_parts.append("\n[USER MEMORY CONTEXT]")
+        system_parts.append(memory_context)
+        system_parts.append("[/USER MEMORY CONTEXT]\n")
+
+    if conversation_summary:
+        system_parts.append("\n[CONVERSATION SUMMARY]")
+        system_parts.append(conversation_summary)
+        system_parts.append("[/CONVERSATION SUMMARY]\n")
+
+    if system_parts:
+        messages.append({"role": "system", "content": "\n".join(system_parts)})
 
     if history:
         messages.extend(history)
@@ -228,3 +357,4 @@ def build_chat_messages(
         messages.append({"role": "user", "content": user_message})
 
     return messages
+

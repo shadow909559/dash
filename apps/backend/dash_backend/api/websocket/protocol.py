@@ -28,6 +28,16 @@ WSMessageType = Literal[
     "agent.step",
     "agent.done",
     "agent.error",
+    # Tool calling
+    "tool.started",
+    "tool.progress",
+    "tool.finished",
+    "tool.error",
+    "tool.confirmation_required",
+    "tool.confirmed",
+    "tool.rejected",
+    "tool.list",
+    "tool.list.response",
 ]
 
 
@@ -83,6 +93,16 @@ class AgentRunMessage(WSBaseMessage):
 
     request_id: str
     input: str
+
+
+class ToolConfirmedMessage(WSBaseMessage):
+    type: Literal["tool.confirmed"] = "tool.confirmed"
+    confirmation_token: str
+
+
+class ToolRejectedMessage(WSBaseMessage):
+    type: Literal["tool.rejected"] = "tool.rejected"
+    confirmation_token: str
 
 
 # -------------------------
@@ -165,6 +185,69 @@ class AgentErrorMessage(WSBaseMessage):
 
 
 # -------------------------
+# Tool Messages
+# -------------------------
+
+
+class ToolStartedMessage(WSBaseMessage):
+    type: Literal["tool.started"] = "tool.started"
+
+    tool_name: str
+    tool_call: dict[str, Any] = Field(default_factory=dict)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    started_at: str = ""
+
+
+class ToolProgressMessage(WSBaseMessage):
+    type: Literal["tool.progress"] = "tool.progress"
+
+    tool_name: str
+    progress: float = 0.0
+    message: str = ""
+
+
+class ToolFinishedMessage(WSBaseMessage):
+    type: Literal["tool.finished"] = "tool.finished"
+
+    tool_name: str
+    status: str = "success"
+    output: dict[str, Any] = Field(default_factory=dict)
+    summary: str = ""
+    duration_ms: float = 0.0
+
+
+class ToolErrorMessage(WSBaseMessage):
+    type: Literal["tool.error"] = "tool.error"
+
+    tool_name: str
+    error: str = ""
+    status: str = "error"
+
+
+class ToolConfirmationRequiredMessage(WSBaseMessage):
+    type: Literal["tool.confirmation_required"] = "tool.confirmation_required"
+
+    tool_name: str
+    confirmation_token: str
+    description: str = ""
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+# Note: ToolConfirmedMessage / ToolRejectedMessage are client->server models.
+# They are defined above.
+
+
+class ToolListMessage(WSBaseMessage):
+    type: Literal["tool.list"] = "tool.list"
+
+
+class ToolListResponseMessage(WSBaseMessage):
+    type: Literal["tool.list.response"] = "tool.list.response"
+
+    tools: list[dict[str, Any]] = Field(default_factory=list)
+
+
+# -------------------------
 # Helpers
 # -------------------------
 
@@ -200,6 +283,12 @@ def parse_client_message(raw: Any) -> WSBaseMessage:
     # Agent
     if msg_type == "agent.run":
         return AgentRunMessage.model_validate(raw)
+
+    # Tool confirmation
+    if msg_type == "tool.confirmed":
+        return ToolConfirmedMessage.model_validate(raw)
+    if msg_type == "tool.rejected":
+        return ToolRejectedMessage.model_validate(raw)
 
     raise ValueError(f"Unsupported message type: {msg_type}")
 

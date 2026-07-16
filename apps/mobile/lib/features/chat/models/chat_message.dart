@@ -44,14 +44,25 @@ class ChatMessage {
         'status': status.name,
       };
 
-  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
-        id: json['id'] as String,
-        role: MessageRole.values.byName(json['role'] as String),
-        content: json['content'] as String,
-        timestamp: DateTime.parse(json['timestamp'] as String),
-        status:
-            MessageStatus.values.byName(json['status'] as String? ?? 'sent'),
-      );
+  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    // Handle both REST API format and local storage format
+    final roleStr = json['role'] as String? ?? 'user';
+    final statusStr = json['status'] as String? ?? 'complete';
+    final timestampStr = json['timestamp'] as String?
+        ?? json['created_at'] as String?
+        ?? DateTime.now().toIso8601String();
+
+    return ChatMessage(
+      id: json['id'] as String,
+      role: MessageRole.values.byName(roleStr),
+      content: json['content'] as String? ?? '',
+      timestamp: DateTime.parse(timestampStr),
+      status: MessageStatus.values.firstWhere(
+        (s) => s.name == statusStr,
+        orElse: () => MessageStatus.complete,
+      ),
+    );
+  }
 
   // Utility getters
   bool get isUser => role == MessageRole.user;

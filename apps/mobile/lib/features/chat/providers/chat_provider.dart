@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/websocket_service.dart';
 import '../models/chat_message.dart';
+import '../services/conversation_repository.dart';
+
+
 
 class ChatState {
   final List<ChatMessage> messages;
@@ -260,7 +263,7 @@ class ChatService extends StateNotifier<ChatState> {
     state = state.copyWith(messages: updated);
   }
 
-  void sendMessage(String content) {
+  void sendMessage(String content, {String? conversationId}) {
     final text = content.trim();
     if (text.isEmpty) return;
 
@@ -285,15 +288,44 @@ class ChatService extends StateNotifier<ChatState> {
       clearError: true,
     );
 
-    _ws.send(
-      jsonEncode({
-        'type': 'chat.send',
-        'message_id': id,
-        'content': text,
-      }),
-    );
+    final payload = {
+      'type': 'chat.send',
+      'message_id': id,
+      'content': text,
+      if (conversationId != null) 'conversation_id': conversationId,
+    };
 
+    _ws.send(jsonEncode(payload));
     _markLastUserMessageSent();
+  }
+
+  /// Load messages for a specific conversation from the REST API.
+  Future<void> loadConversationMessages(String conversationId) async {
+    state = state.copyWith(isStreaming: false, isTyping: true);
+
+    try {
+      final repository = _ref.read(conversationRepositoryProvider);
+      final response = await repository.getMessages(
+        conversationId,
+        limit: 100,
+      );
+
+      if (response.items.isNotEmpty) {
+        state = state.copyWith(
+          messages: response.items,
+          isStreaming: false,
+          isTyping: false,
+        );
+      } else {
+        state = state.copyWith(messages: [], isTyping: false);
+      }
+    } catch (e) {
+      state = state.copyWith(
+        isStreaming: false,
+        isTyping: false,
+        errorMessage: e.toString(),
+      );
+    }
   }
 
   void cancelStreaming() {
