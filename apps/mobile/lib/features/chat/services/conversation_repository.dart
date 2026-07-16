@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 
 import '../../../core/constants.dart';
 import '../../../features/auth/services/auth_service.dart';
@@ -36,12 +38,45 @@ class ConversationRepository {
       'include_archived': includeArchived.toString(),
     });
 
-    final response = await http.get(uri, headers: headers);
-    if (response.statusCode == 200) {
-      return ConversationListResponse.fromJson(jsonDecode(response.body));
+    final method = 'GET';
+
+    // Mask Authorization token in logs.
+    final maskedHeaders = <String, String>{};
+    for (final e in headers.entries) {
+      if (e.key.toLowerCase() == 'authorization') {
+        final v = e.value;
+        maskedHeaders[e.key] = v.isNotEmpty ? 'Bearer ***' : '';
+      } else {
+        maskedHeaders[e.key] = e.value;
+      }
     }
-    throw Exception('Failed to load conversations: ${response.statusCode}');
+
+    debugPrint('========== Conversations API ==========');
+    debugPrint('$method ${uri.toString()}');
+    debugPrint('Headers: $maskedHeaders');
+
+    try {
+      final response = await http.get(uri, headers: headers);
+
+      debugPrint('Status: ${response.statusCode}');
+      debugPrint('Body: ${response.body}');
+      debugPrint('=======================================');
+
+      if (response.statusCode == 200) {
+        return ConversationListResponse.fromJson(jsonDecode(response.body));
+      }
+
+      throw Exception(
+        'Failed to load conversations: ${response.statusCode}',
+      );
+    } catch (e, st) {
+      debugPrint('Exception: $e');
+      debugPrint('StackTrace: $st');
+      debugPrint('=======================================');
+      rethrow;
+    }
   }
+
 
   /// Search conversations by title.
   Future<List<Conversation>> search(String query, {int limit = 20}) async {
@@ -233,6 +268,8 @@ class MessageListResponse {
 // Riverpod provider
 // ──────────────────────────────────────────────
 
+
 final conversationRepositoryProvider = Provider<ConversationRepository>((ref) {
   return ConversationRepository(ref);
 });
+

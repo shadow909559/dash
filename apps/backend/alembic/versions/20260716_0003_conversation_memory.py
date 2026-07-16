@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "20260716_0003"
-down_revision: str | None = "20260715_0002_add_server_defaults"
+down_revision: str | None = "20260715_0002"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

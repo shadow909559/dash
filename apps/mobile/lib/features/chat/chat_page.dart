@@ -26,15 +26,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   void initState() {
     super.initState();
-    // Listen for active conversation changes to load messages
-    ref.listen<String?>(activeConversationIdProvider, (prev, next) {
-      if (next != null) {
-        ref.read(chatProvider.notifier).loadConversationMessages(next);
-      } else {
-        ref.read(chatProvider.notifier).clearMessages();
-      }
-    });
   }
+
 
   @override
   void dispose() {

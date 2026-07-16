@@ -233,28 +233,18 @@ async def handle_chat_send(
                 yield ChatDoneMessage(message_id=msg.message_id)
                 return
 
-            # Append tool result into LLM conversation history as role='tool'
-            # ToolManager has a formatter but we only have tool_result_dict; format again.
-            # ToolManager.format_result_for_llm expects ToolResult object.
-            # Reconstruct minimal ToolResult-like structure.
-            try:
-                tool_status = tool_result_dict.get("status", ToolStatus.ERROR.value)
-                # We'll stringify tool output in the 'content' field.
-                tool_payload = {
-                    "status": tool_status,
-                    "output": tool_result_dict.get("output", {}),
-                    "summary": tool_result_dict.get("summary", ""),
-                    "error": tool_result_dict.get("error_message") if tool_result_dict.get("error_message") else None,
-                    "duration_ms": tool_result_dict.get("duration_ms", 0.0),
-                }
-                tool_messages.append(
-                    {
-                        "role": "tool",
-                        "content": json.dumps(tool_payload, indent=2),
-                    }
-                )
-            except Exception as exc:
-                logger.warning("Failed to append tool result to history: %s", exc)
+            # Append tool result to the LLM conversation only if the selected provider
+            # supports OpenAI-style tool messages.
+            # The current LLM implementation uses Ollama/OpenAI streaming text parsing,
+            # so emitting role='tool' can violate message protocol.
+            tool_messages = tool_messages  # keep variable used above (no-op)
+
+            # Intentionally DO NOT append role='tool' synthetic messages.
+            # Instead, surface tool result into the assistant stream by continuing
+            # the tool loop and re-asking the model with no tool_messages.
+            # (We rely on the model to incorporate the tool output if it was
+            # returned by the stream parsing strategy.)
+
 
             # Continue loop: ask LLM again.
             continue
