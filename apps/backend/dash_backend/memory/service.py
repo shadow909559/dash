@@ -285,7 +285,10 @@ async def extract_memories_from_conversation(
     for msg in messages:
         if msg.get("role") != "user":
             continue
-        content = msg.get("content", "").lower()
+        raw = msg.get("content", "").strip()
+        if not raw:
+            continue
+        content = raw.lower()
 
         for indicator in preference_indicators:
             if indicator in content:
@@ -293,11 +296,53 @@ async def extract_memories_from_conversation(
                 sentences = content.replace("?", ".").replace("!", ".").split(".")
                 for sentence in sentences:
                     if indicator in sentence.strip().lower():
+                        candidate_text = sentence.strip().capitalize()
+
+                        # Heuristic importance scoring: preference keywords get higher importance
+                        base_importance = 0.45
+                        if any(k in candidate_text.lower() for k in ("prefer", "like", "love", "favorite")):
+                            importance = min(0.95, base_importance + 0.25)
+                        elif any(k in candidate_text.lower() for k in ("use", "work", "code", "program")):
+                            importance = min(0.9, base_importance + 0.15)
+                        else:
+                            importance = base_importance
+
+                        # Skip low-importance one-off statements
+                        if importance < 0.4:
+                            break
+
+                        # Duplicate detection: look for existing similar memories
+                        dup_stmt = (
+                            select(Memory)
+                            .where(Memory.user_id == uid, Memory.content.ilike(f"%{candidate_text[:60]}%"))
+                            .limit(1)
+                        )
+                        try:
+                            dup_res = await session.execute(dup_stmt)
+                            existing = dup_res.scalar_one_or_none()
+                        except Exception:
+                            existing = None
+
+                        if existing:
+                            # Update importance and content if the new candidate is slightly longer
+                            new_importance = max(existing.importance or 0.0, importance)
+                            update_stmt = (
+                                update(Memory)
+                                .where(Memory.id == existing.id)
+                                .values(importance=new_importance, content=candidate_text if len(candidate_text) > len(existing.content or "") else existing.content)
+                            )
+                            await session.execute(update_stmt)
+                            await session.commit()
+                            await session.refresh(existing)
+                            new_memories.append(existing)
+                            break
+
+                        # Create new memory
                         memory = Memory(
                             user_id=uid,
-                            content=sentence.strip().capitalize(),
+                            content=candidate_text,
                             source="conversation",
-                            importance=0.5,
+                            importance=importance,
                         )
                         session.add(memory)
                         new_memories.append(memory)

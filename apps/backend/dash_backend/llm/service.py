@@ -366,6 +366,49 @@ async def _stream_ollama(
         yield f"*Error: Could not reach Ollama: {exc}*"
 
 
+def trim_history_for_tokens(history: list[dict[str, str]] | None, *, max_tokens: int = 2000) -> list[dict[str, str]]:
+    """Trim conversation history to fit within an approximate token budget.
+
+    This helper prefers to keep recent exchanges and attempts to preserve
+    assistant messages and any entries that carry a 'token_count' field
+    (which is trusted when present). When token counts are unavailable,
+    a conservative word-based heuristic is used.
+
+    Returns a trimmed history (oldest-first) suitable for LLM input.
+    """
+    if not history:
+        return []
+
+    # Compute token sums if token_count present, otherwise estimate by words
+    entries = []
+    for m in history:
+        token_count = None
+        if isinstance(m, dict) and isinstance(m.get("token_count"), int):
+            token_count = int(m.get("token_count"))
+        else:
+            # conservative heuristic: 1 token ~= 0.75 words -> use words/0.75
+            token_count = max(1, int(len(m.get("content", "").split()) * 1.4))
+        entries.append((m, token_count))
+
+    # Walk from newest to oldest, accumulating tokens until max_tokens reached
+    kept = []
+    total = 0
+    for m, t in reversed(entries):
+        # Always include assistant messages and any messages marked as important
+        is_assistant = m.get("role") == "assistant"
+        is_important = m.get("important", False)
+        if total + t <= max_tokens or is_assistant or is_important:
+            kept.append((m, t))
+            total += t
+        else:
+            # stop adding older messages unless they are assistant/important
+            continue
+
+    # kept currently is newest->oldest; return oldest->newest
+    kept.reverse()
+    return [m for m, _ in kept]
+
+
 def build_chat_messages(
     system_prompt: str | None = None,
     history: list[dict[str, str]] | None = None,

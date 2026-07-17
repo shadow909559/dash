@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import uuid
 from typing import Any
+from datetime import datetime
 
-from sqlalchemy import JSON, Index, String, Text, Boolean, ForeignKey
+from sqlalchemy import JSON, Index, String, Text, Boolean, ForeignKey, DateTime, Float
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -67,6 +68,11 @@ class AutomationExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     output: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Timestamps from tool execution (optional, may be None)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<AutomationExecution id={self.id} automation_id={self.automation_id} status={self.status}>" 

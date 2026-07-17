@@ -1,0 +1,16 @@
+[Unit]
+Description=Dash Executive Worker
+After=network.target
+
+[Service]
+Type=simple
+User=dash
+WorkingDirectory=/home/dash/dash
+ExecStart=/usr/bin/env python3 -u /home/dash/dash/apps/backend/dash_backend/executive/worker.py
+Restart=always
+RestartSec=5
+StandardOutput=file:/var/log/dash/worker_stdout.log
+StandardError=file:/var/log/dash/worker_stderr.log
+
+[Install]
+WantedBy=multi-user.target

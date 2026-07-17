@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    image: dash-backend:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./apps/backend:/usr/src/app:ro
+
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dash}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dash}
+      POSTGRES_DB: ${POSTGRES_DB:-dash}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dash}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+volumes:
+  db-data:
+  redis-data:
+
+# Notes:
+# - This compose file is a production template. Secrets should be provided via a secrets manager or environment injection.
+# - Run migrations before starting the backend in production:
+#   docker run --rm --env-file .env -v $(pwd)/apps/backend:/app -w /app python:3.11-slim bash -c "pip install -e . && alembic upgrade head"
+# - Use a process manager (e.g. gunicorn + uvicorn workers) if desired. The Dockerfile in apps/backend should expose the correct start command.

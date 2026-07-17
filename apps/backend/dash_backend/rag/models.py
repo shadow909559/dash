@@ -23,7 +23,7 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    metadata_: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
 
     chunks: Mapped[List["DocumentChunk"]] = relationship(
         back_populates="document", cascade="all, delete-orphan", order_by="DocumentChunk.chunk_index"

@@ -35,6 +35,20 @@ class AutomationRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AutomationExecutionRead(BaseModel):
+    id: uuid.UUID
+    automation_id: uuid.UUID
+    status: str
+    summary: str | None
+    output: dict[str, Any] | None
+    error: str | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    duration_ms: float | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
 class AutomationUpdate(BaseModel):
     name: str | None = None
     description: str | None = None

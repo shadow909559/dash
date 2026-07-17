@@ -16,6 +16,7 @@ from dash_backend.auth.service import (
     issue_token_response,
 )
 from dash_backend.db.session import get_db_session
+from dash_backend.security.rate_limiter import auth_rate_limit
 
 router = APIRouter()
 
@@ -24,6 +25,7 @@ router = APIRouter()
 async def register(
     payload: RegisterRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: None = Depends(auth_rate_limit),
 ) -> TokenResponse:
     """Register a new user and issue authentication tokens."""
     try:
@@ -41,6 +43,7 @@ async def register(
 async def login(
     payload: LoginRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: None = Depends(auth_rate_limit),
 ) -> TokenResponse:
     """Authenticate a user and issue authentication tokens."""
     try:

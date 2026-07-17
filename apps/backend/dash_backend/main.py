@@ -15,6 +15,13 @@ settings = get_settings()
 setup_logging(settings.log_level)  # type: ignore[arg-type]
 logger = get_logger(__name__)
 
+# Ensure runtime registration of skills and desktop tools occurs on startup
+try:
+    import dash_backend.skills.register  as _skills_register  # registers skills
+    import dash_backend.tools.register_desktop as _desktop_tools_register  # registers desktop tools
+except Exception:
+    logger.exception("Failed to import skill/tool registration modules")
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -67,6 +74,17 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(api_router, prefix=settings.api_prefix)
+
+    # Production sanity checks
+    try:
+        if settings.env == "production" and settings.debug:
+            logger.warning("Application running in production with debug=True — this is unsafe")
+        if not settings.jwt_secret_key and settings.env == "production":
+            logger.warning("JWT secret key not configured for production environment")
+        if "******" in (settings.database_url or ""):
+            logger.warning("Database URL appears to be a placeholder. Ensure DASH_DATABASE_URL is set in production.")
+    except Exception:
+        logger.exception("Failed to run startup configuration checks")
 
     return app
 

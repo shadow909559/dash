@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = Field(default=30, gt=0)
     password_hash_iterations: int = Field(default=390_000, gt=0)
 
+    # Tool execution timeout (seconds)
+    tool_execution_timeout_seconds: int = Field(default=60, gt=0)
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, value: str | list[str]) -> list[str]:

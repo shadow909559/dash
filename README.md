@@ -118,3 +118,72 @@ pytest
 ## License
 
 Proprietary — All rights reserved.
+
+## Production deployment (recommended starter steps)
+
+These are minimal, safe deployment steps and guidelines to get Dash running in a production environment. They are intentionally conservative and avoid embedding secrets in the repository.
+
+1) Prepare environment and secrets
+
+- Copy the example env and populate secrets from a secrets manager or environment injection system (do NOT commit secrets):
+
+  ```bash
+  cp .env.example .env
+  # Edit .env, set DATABASE_URL/JWT_SECRET/PROVIDER_* keys, POSTGRES_*, etc.
+  ```
+
+2) Run database migrations
+
+- From the backend directory run Alembic to apply schema changes:
+
+  ```bash
+  cd apps/backend
+  # activate your virtualenv first
+  alembic upgrade head
+  ```
+
+3) Start production stack (compose template)
+
+- A production compose template is provided at docker-compose.prod.yml (fill in env via env_file or a secrets manager). This is a starting point; adapt to your orchestration (Docker Swarm / Kubernetes / ECS):
+
+  ```bash
+  docker compose -f docker-compose.prod.yml up -d --build
+  ```
+
+4) Healthcheck
+
+- Verify health endpoint: http://<host>:8000/api/v1/health
+
+5) Backups (Postgres)
+
+- Create regular backups with pg_dump. Example daily dump:
+
+  ```bash
+  PGPASSWORD=$POSTGRES_PASSWORD pg_dump -h <db-host> -U $POSTGRES_USER -F c -b -v -f "dash_backup_$(date +%F).dump" $POSTGRES_DB
+  ```
+
+- Restore example:
+
+  ```bash
+  pg_restore -h <db-host> -U $POSTGRES_USER -d $POSTGRES_DB -v "dash_backup_2024-01-01.dump"
+  ```
+
+6) Notes & recommendations
+
+- Do NOT run with DEBUG=True in production. Ensure JWT secrets and provider keys are securely injected.
+- For rate limiting and distributed locking, use Redis or an API gateway- level rate limiter instead of process-local limits.
+- For embedding-heavy workloads, consider offloading embedding generation to a background worker and a job queue.
+- For multi-instance deployments, prefer a centralized database and Redis for shared state.
+
+7) Run the CI-style checks locally
+
+- Useful quick checks that CI should run (see .github/workflows if present):
+
+  ```bash
+  # from repo root
+  python -m py_compile $(git ls-files "**/*.py") || true
+  pytest -q
+  docker build -t dash-backend:local apps/backend
+  ```
+
+If you use a different deployment strategy (k8s, cloud services, or a managed Postgres), adapt the deployment steps accordingly. These instructions are intentionally brief to avoid enforcing a single deployment approach.

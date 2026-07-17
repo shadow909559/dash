@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 import math
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
 from sqlalchemy import select, func
@@ -113,13 +114,34 @@ async def search_documents(
         rows = result.all()
 
         scored: List[Tuple[models.DocumentChunk, float]] = []
+        now = datetime.now(timezone.utc)
+        seen_texts = set()
         for row in rows:
             chunk = row[0]
+            # Deduplicate by normalized text prefix
+            norm = (chunk.chunk_text or "").strip()[:200].lower()
+            if norm in seen_texts:
+                continue
+            seen_texts.add(norm)
+
             try:
-                score = _cosine_sim(query_emb, chunk.embedding or [])
+                sim = _cosine_sim(query_emb, chunk.embedding or [])
             except Exception:
-                score = -1.0
-            scored.append((chunk, score))
+                sim = -1.0
+
+            # recency factor: newer chunks get slight boost (decay over 30 days)
+            recency_score = 0.0
+            try:
+                if getattr(chunk, "created_at", None):
+                    age_seconds = (now - chunk.created_at).total_seconds()
+                    age_days = age_seconds / 86400.0
+                    recency_score = math.exp(-age_days / 30.0)  # 1.0 for very recent -> smaller for old
+            except Exception:
+                recency_score = 0.0
+
+            # combine scores: prefer cosine similarity but include recency
+            final_score = 0.75 * sim + 0.25 * recency_score
+            scored.append((chunk, final_score))
 
         # sort by descending score
         scored.sort(key=lambda x: x[1], reverse=True)

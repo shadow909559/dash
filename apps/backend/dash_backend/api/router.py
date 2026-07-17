@@ -9,6 +9,7 @@ from dash_backend.api.routes.memories import router as memories_router
 from dash_backend.api.routes.websocket import router as websocket_router
 from dash_backend.rag.router import router as rag_router
 from dash_backend.automation.router import router as automation_router
+from dash_backend.personal import router as personal_router
 
 
 api_router = APIRouter()
@@ -48,6 +49,12 @@ api_router.include_router(
     tags=["automation"],
 )
 
+# Personal assistant endpoints (single-user personal profile, tasks, reminders)
+api_router.include_router(
+    personal_router,
+    prefix="/personal",
+    tags=["personal"],
+)
 
 api_router.include_router(
     websocket_router,

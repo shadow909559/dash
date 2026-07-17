@@ -104,6 +104,9 @@ async def execute_automation(session: AsyncSession, automation: models.Automatio
                 summary=result.summary,
                 output=result.output,
                 error=result.error_message or None,
+                started_at=getattr(result, "started_at", None),
+                finished_at=getattr(result, "finished_at", None),
+                duration_ms=getattr(result, "duration_ms", None),
             )
             session.add(exec_record)
         except Exception:
@@ -120,6 +123,9 @@ async def execute_automation(session: AsyncSession, automation: models.Automatio
             "summary": result.summary,
             "output": result.output,
             "error": result.error_message,
+            "started_at": getattr(result, "started_at", None),
+            "finished_at": getattr(result, "finished_at", None),
+            "duration_ms": getattr(result, "duration_ms", None),
         }
     except Exception as exc:
         logger.exception("Automation %s execution failed: %s", automation.id, exc)
@@ -142,5 +148,12 @@ async def execute_automation(session: AsyncSession, automation: models.Automatio
 # Lightweight helper used by scheduler to fetch due automations (interval/cron)
 async def fetch_enabled_automations(session: AsyncSession) -> List[models.Automation]:
     stmt = select(models.Automation).where(models.Automation.enabled == True)
+    res = await session.execute(stmt)
+    return list(res.scalars().all())
+
+
+async def get_execution_history(session: AsyncSession, automation_id: str | uuid.UUID, *, limit: int = 50) -> List[models.AutomationExecution]:
+    aid = uuid.UUID(automation_id) if isinstance(automation_id, str) else automation_id
+    stmt = select(models.AutomationExecution).where(models.AutomationExecution.automation_id == aid).order_by(models.AutomationExecution.created_at.desc()).limit(limit)
     res = await session.execute(stmt)
     return list(res.scalars().all())

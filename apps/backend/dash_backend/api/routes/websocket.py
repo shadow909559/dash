@@ -26,6 +26,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         AuthMessage,
         ChatErrorMessage,
         ChatSendMessage,
+        VoiceSTTMessage,
+        VoiceTTSMessage,
         parse_client_message,
     )
 
@@ -170,13 +172,19 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             # VOICE STT
             elif msg.type == "voice.stt":
-                async for event in handle_voice_stt(msg):
-                    await send_json(event.model_dump())
+                stt_msg = VoiceSTTMessage.model_validate(raw)
+                from dash_backend.db.session import AsyncSessionLocal
+                async with AsyncSessionLocal() as session:
+                    async for event in handle_voice_stt(stt_msg, session=session, user_id=user_id):
+                        await send_json(event.model_dump())
 
             # VOICE TTS
             elif msg.type == "voice.tts":
-                async for event in handle_voice_tts(msg):
-                    await send_json(event.model_dump())
+                tts_msg = VoiceTTSMessage.model_validate(raw)
+                from dash_backend.db.session import AsyncSessionLocal
+                async with AsyncSessionLocal() as session:
+                    async for event in handle_voice_tts(tts_msg, session=session, user_id=user_id):
+                        await send_json(event.model_dump())
 
             # AGENT
             elif msg.type == "agent.run":

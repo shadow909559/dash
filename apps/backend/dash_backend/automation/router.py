@@ -72,3 +72,19 @@ async def delete_automation(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your automation")
     await automation_service.delete_automation(session, automation_id)
     return None
+
+
+@router.get("/automation/{automation_id}/history", response_model=List[schemas.AutomationExecutionRead])
+async def get_automation_history(
+    automation_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+    limit: int = 50,
+) -> List[schemas.AutomationExecutionRead]:
+    a = await automation_service.get_automation(session, automation_id)
+    if a is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Automation not found")
+    if a.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your automation")
+    execs = await automation_service.get_execution_history(session, automation_id, limit=limit)
+    return [schemas.AutomationExecutionRead.model_validate(e) for e in execs]
