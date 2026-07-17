@@ -30,10 +30,13 @@ api_router.include_router(
 
 api_router.include_router(
     memories_router,
-    tags=["memories"],
+    prefix="/memory",
+    tags=["memory"],
 )
+
 
 api_router.include_router(
     websocket_router,
     tags=["websocket"],
 )
+

@@ -14,13 +14,13 @@ from dash_backend.api.schemas.memory import (
     MemorySearchResponse,
     MemoryUpdate,
 )
+
 from dash_backend.auth.dependencies import get_current_user
 from dash_backend.db.models.user import User
 from dash_backend.db.session import get_db_session
 from dash_backend.memory import service as memory_service
 
-router = APIRouter(prefix="/memories", tags=["memories"])
-
+router = APIRouter(prefix="", tags=["memory"])
 
 # ──────────────────────────────────────────────
 # List memories

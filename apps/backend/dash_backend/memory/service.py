@@ -24,6 +24,41 @@ logger = get_logger(__name__)
 # ──────────────────────────────────────────────
 
 
+async def search_memories(
+    session: AsyncSession,
+    user_id: str | uuid.UUID,
+    q: str,
+    *,
+    limit: int = 10,
+    min_importance: float = 0.0,
+    category: str | None = None,
+) -> list[Memory]:
+    """Search memories for a user.
+
+    Minimal implementation (no embeddings): uses case-insensitive
+    substring match on Memory.content, ordered by importance.
+    """
+    uid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+    query_text = f"%{q}%"
+
+    filters = [
+        Memory.user_id == uid,
+        Memory.importance >= min_importance,
+        Memory.content.ilike(query_text),
+    ]
+    if category is not None:
+        filters.append(Memory.category == category)
+
+    stmt = (
+        select(Memory)
+        .where(*filters)
+        .order_by(Memory.importance.desc(), Memory.created_at.desc())
+        .limit(limit)
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
 async def save_memory(
     session: AsyncSession,
     user_id: str | uuid.UUID,
