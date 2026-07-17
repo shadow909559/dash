@@ -59,6 +59,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     api_keys: Mapped[List["APIKey"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    automations: Mapped[List["Automation"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid only

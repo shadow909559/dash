@@ -11,6 +11,8 @@ from dash_backend.db.models.conversation import Conversation
 from dash_backend.db.models.conversation_summary import ConversationSummary
 from dash_backend.db.models.device import Device, DeviceType
 from dash_backend.db.models.memory import Memory
+from dash_backend.automation.models import Automation, AutomationExecution  # register automation models with Base
+from dash_backend.agents.models import Agent  # register agent model with Base
 from dash_backend.db.models.message import Message, MessageRole
 from dash_backend.db.models.notification import Notification, NotificationType
 from dash_backend.db.models.plugin import Plugin

@@ -14,6 +14,12 @@ from dash_backend.tools.base_tool import (
     ToolParameter,
 )
 from dash_backend.tools.tool_result import ToolResult, ToolStatus
+from dash_backend.tools.filesystem.filesystem_service import (
+    read_file as fs_read_file,
+    write_file as fs_write_file,
+    list_directory as fs_list_directory,
+    search_files as fs_search_files,
+)
 
 
 class ReadFileTool(BaseTool):
@@ -55,65 +61,19 @@ class ReadFileTool(BaseTool):
                 error_message="No path provided.",
             )
 
-        # Resolve path
-        base = Path(context.working_directory or ".").resolve()
-        file_path = (base / path_str).resolve()
-
-        # Security: prevent path traversal
         try:
-            file_path.relative_to(base)
-        except ValueError:
+            res = fs_read_file(context.working_directory, path_str, start_line=start_line, end_line=end_line)
+        except FileNotFoundError:
             return ToolResult(
                 tool_name=self.name,
                 status=ToolStatus.ERROR,
-                error_message=f"Path traversal detected: '{path_str}' is outside the working directory.",
+                error_message=f"File not found: {path_str}",
             )
-
-        if not file_path.exists():
+        except IsADirectoryError:
             return ToolResult(
                 tool_name=self.name,
                 status=ToolStatus.ERROR,
-                error_message=f"File not found: {file_path}",
-            )
-
-        if not file_path.is_file():
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"Not a file: {file_path}",
-            )
-
-        # Check file size (limit to 100KB)
-        max_size = 100 * 1024
-        if file_path.stat().st_size > max_size:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"File too large ({file_path.stat().st_size / 1024:.1f}KB). Maximum is 100KB.",
-            )
-
-        try:
-            content = file_path.read_text(encoding="utf-8", errors="replace")
-            lines = content.splitlines()
-            total_lines = len(lines)
-
-            if start_line is not None or end_line is not None:
-                s = max(0, (start_line or 1) - 1)
-                e = min(total_lines, end_line or total_lines)
-                lines = lines[s:e]
-                content = "\n".join(lines)
-
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.SUCCESS,
-                output={
-                    "path": str(file_path),
-                    "size_bytes": file_path.stat().st_size,
-                    "total_lines": total_lines,
-                    "content": content,
-                    "lines_returned": len(lines),
-                },
-                summary=f"Read {len(lines)} lines from {file_path.name}",
+                error_message=f"Not a file: {path_str}",
             )
         except Exception as exc:
             return ToolResult(
@@ -121,6 +81,30 @@ class ReadFileTool(BaseTool):
                 status=ToolStatus.ERROR,
                 error_message=f"Failed to read file: {exc}",
             )
+
+        content = res.get("content", "")
+        total_lines = len(content.splitlines())
+
+        if start_line is not None or end_line is not None:
+            s = max(0, (start_line or 1) - 1)
+            e = min(total_lines, end_line or total_lines)
+            lines = content.splitlines()[s:e]
+            content = "\n".join(lines)
+        else:
+            lines = content.splitlines()
+
+        return ToolResult(
+            tool_name=self.name,
+            status=ToolStatus.SUCCESS,
+            output={
+                "path": res.get("path"),
+                "size_bytes": res.get("size_bytes"),
+                "total_lines": total_lines,
+                "content": content,
+                "lines_returned": len(lines),
+            },
+            summary=f"Read {len(lines)} lines from {path_str}",
+        )
 
 
 class WriteFileTool(BaseTool):
@@ -164,40 +148,13 @@ class WriteFileTool(BaseTool):
                 error_message="No path provided.",
             )
 
-        base = Path(context.working_directory or ".").resolve()
-        file_path = (base / path_str).resolve()
-
-        # Security: prevent path traversal
         try:
-            file_path.relative_to(base)
-        except ValueError:
+            res = fs_write_file(path_str, content, working_directory=context.working_directory, overwrite=overwrite)
+        except FileExistsError:
             return ToolResult(
                 tool_name=self.name,
                 status=ToolStatus.ERROR,
-                error_message=f"Path traversal detected: '{path_str}' is outside the working directory.",
-            )
-
-        if file_path.exists() and not overwrite:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"File already exists: {file_path}. Set overwrite=True to replace it.",
-            )
-
-        try:
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.write_text(content, encoding="utf-8")
-            size = file_path.stat().st_size
-
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.SUCCESS,
-                output={
-                    "path": str(file_path),
-                    "size_bytes": size,
-                    "overwrite": overwrite and file_path.exists(),
-                },
-                summary=f"Written {size} bytes to {file_path.name}",
+                error_message=f"File already exists: {path_str}. Set overwrite=True to replace it.",
             )
         except Exception as exc:
             return ToolResult(
@@ -205,6 +162,17 @@ class WriteFileTool(BaseTool):
                 status=ToolStatus.ERROR,
                 error_message=f"Failed to write file: {exc}",
             )
+
+        return ToolResult(
+            tool_name=self.name,
+            status=ToolStatus.SUCCESS,
+            output={
+                "path": res.get("path"),
+                "size_bytes": res.get("size_bytes"),
+                "overwrite": overwrite,
+            },
+            summary=f"Written {res.get('size_bytes', 0)} bytes to {path_str}",
+        )
 
 
 class ListDirectoryTool(BaseTool):
@@ -241,85 +209,27 @@ class ListDirectoryTool(BaseTool):
         recursive = kwargs.get("recursive", False)
         pattern = kwargs.get("pattern")
 
-        base = Path(context.working_directory or ".").resolve()
-        dir_path = (base / path_str).resolve()
-
         try:
-            dir_path.relative_to(base)
-        except ValueError:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"Path traversal detected: '{path_str}' is outside the working directory.",
-            )
-
-        if not dir_path.exists():
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"Directory not found: {dir_path}",
-            )
-
-        if not dir_path.is_dir():
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"Not a directory: {dir_path}",
-            )
-
-        try:
-            entries: list[dict[str, Any]] = []
-
-            if recursive:
-                for item in dir_path.rglob("*"):
-                    if pattern and not item.match(pattern):
-                        continue
-                    try:
-                        rel = item.relative_to(base)
-                    except ValueError:
-                        continue
-                    entries.append({
-                        "name": item.name,
-                        "path": str(rel),
-                        "type": "directory" if item.is_dir() else "file",
-                        "size_bytes": item.stat().st_size if item.is_file() else 0,
-                    })
-            else:
-                for item in dir_path.iterdir():
-                    if pattern and not item.match(pattern):
-                        continue
-                    try:
-                        rel = item.relative_to(base)
-                    except ValueError:
-                        continue
-                    entries.append({
-                        "name": item.name,
-                        "path": str(rel),
-                        "type": "directory" if item.is_dir() else "file",
-                        "size_bytes": item.stat().st_size if item.is_file() else 0,
-                    })
-
-            # Sort: directories first, then by name
-            entries.sort(key=lambda e: (0 if e["type"] == "directory" else 1, e["name"]))
-
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.SUCCESS,
-                output={
-                    "path": str(dir_path),
-                    "entries": entries,
-                    "total_entries": len(entries),
-                    "directories": sum(1 for e in entries if e["type"] == "directory"),
-                    "files": sum(1 for e in entries if e["type"] == "file"),
-                },
-                summary=f"Listed {len(entries)} entries in {dir_path.name}",
-            )
+            res = fs_list_directory(path_str, working_directory=context.working_directory, recursive=recursive, pattern=pattern)
         except Exception as exc:
             return ToolResult(
                 tool_name=self.name,
                 status=ToolStatus.ERROR,
-                error_message=f"Failed to list directory: {exc}",
+                error_message=str(exc),
             )
+
+        return ToolResult(
+            tool_name=self.name,
+            status=ToolStatus.SUCCESS,
+            output={
+                "path": res.get("path"),
+                "entries": res.get("entries"),
+                "total_entries": res.get("total_entries"),
+                "directories": sum(1 for e in res.get("entries", []) if e["type"] == "directory"),
+                "files": sum(1 for e in res.get("entries", []) if e["type"] == "file"),
+            },
+            summary=f"Listed {res.get('total_entries', 0)} entries in {path_str}",
+        )
 
 
 class SearchFilesTool(BaseTool):
@@ -370,79 +280,19 @@ class SearchFilesTool(BaseTool):
                 error_message="No search pattern provided.",
             )
 
-        base = Path(context.working_directory or ".").resolve()
-        search_dir = (base / path_str).resolve()
-
         try:
-            search_dir.relative_to(base)
-        except ValueError:
+            res = fs_search_files(pattern_str, path_str=path_str, working_directory=context.working_directory, file_pattern=file_pattern, max_results=max_results)
+        except FileNotFoundError:
             return ToolResult(
                 tool_name=self.name,
                 status=ToolStatus.ERROR,
-                error_message=f"Path traversal detected.",
+                error_message=f"Directory not found: {path_str}",
             )
-
-        if not search_dir.is_dir():
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"Directory not found: {search_dir}",
-            )
-
-        try:
-            regex = re.compile(pattern_str, re.IGNORECASE)
-        except re.error as exc:
+        except ValueError as exc:
             return ToolResult(
                 tool_name=self.name,
                 status=ToolStatus.ERROR,
                 error_message=f"Invalid regex pattern: {exc}",
-            )
-
-        results: list[dict[str, Any]] = []
-        max_size = 1024 * 1024  # Skip files larger than 1MB
-
-        try:
-            for item in search_dir.rglob("*"):
-                if not item.is_file():
-                    continue
-                if file_pattern and not item.match(file_pattern):
-                    continue
-                if item.stat().st_size > max_size:
-                    continue
-
-                if len(results) >= max_results:
-                    break
-
-                try:
-                    rel_path = str(item.relative_to(base))
-                    content = item.read_text(encoding="utf-8", errors="replace")
-                    for match in regex.finditer(content):
-                        if len(results) >= max_results:
-                            break
-                        line_num = content[: match.start()].count("\n") + 1
-                        start = max(0, match.start() - 40)
-                        end = min(len(content), match.end() + 40)
-                        context_str = content[start:end].replace("\n", " ").strip()
-
-                        results.append({
-                            "file": rel_path,
-                            "line": line_num,
-                            "match": match.group(),
-                            "context": context_str,
-                        })
-                except (OSError, UnicodeDecodeError):
-                    continue
-
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.SUCCESS,
-                output={
-                    "pattern": pattern_str,
-                    "search_path": str(search_dir),
-                    "results": results,
-                    "total_matches": len(results),
-                },
-                summary=f"Found {len(results)} matches for '{pattern_str}'",
             )
         except Exception as exc:
             return ToolResult(
@@ -450,3 +300,15 @@ class SearchFilesTool(BaseTool):
                 status=ToolStatus.ERROR,
                 error_message=f"Search failed: {exc}",
             )
+
+        return ToolResult(
+            tool_name=self.name,
+            status=ToolStatus.SUCCESS,
+            output={
+                "pattern": res.get("pattern"),
+                "search_path": res.get("search_path"),
+                "results": res.get("results"),
+                "total_matches": res.get("total_matches", 0),
+            },
+            summary=f"Found {res.get('total_matches', 0)} matches for '{pattern_str}'",
+        )

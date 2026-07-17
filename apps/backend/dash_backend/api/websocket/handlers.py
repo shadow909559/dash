@@ -112,6 +112,30 @@ async def handle_chat_send(
     except Exception as exc:
         logger.warning("Failed to load memory context: %s", exc)
 
+    # Attempt to load RAG context and merge into memory_context. Keep failures non-fatal.
+    try:
+        from dash_backend.rag.service import retrieve_context as _retrieve_rag_context
+
+        rag_ctx = await _retrieve_rag_context(session, user_id, query=msg.content if getattr(msg, "content", None) else None)
+        if rag_ctx:
+            if memory_context:
+                memory_context = memory_context + "\n\n" + rag_ctx
+            else:
+                memory_context = rag_ctx
+    except Exception as exc:
+        logger.warning("Failed to load RAG context: %s", exc)
+
+    # Agent selection: if the client supplied an agent_id, attempt to load
+    # the agent config (system_prompt, allowed_tools). Failures are non-fatal.
+    agent = None
+    try:
+        if getattr(msg, "agent_id", None):
+            from dash_backend.agents.service import get_agent as _get_agent
+
+            agent = await _get_agent(session, msg.agent_id)
+    except Exception:
+        logger.exception("Failed to load agent %s", getattr(msg, "agent_id", None))
+
     tool_manager = get_tool_manager()
     last_assistant_text = ""
 

@@ -71,6 +71,9 @@ class ChatSendMessage(WSBaseMessage):
     conversation_id: str | None = None
     message_id: str
     content: str
+    # Optional agent selection (agent id as UUID string). If provided, the agent's
+    # system_prompt will be injected into the LLM system prompt for this request.
+    agent_id: str | None = None
 
 
 class VoiceSTTMessage(WSBaseMessage):

@@ -18,10 +18,32 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan hooks."""
+    """Application lifespan hooks.
+
+    Start the automation scheduler here so it runs for the lifetime of the
+    application process. The scheduler is lightweight and in-process; for
+    production use a dedicated worker or external scheduler.
+    """
+    from dash_backend.automation.scheduler import get_scheduler
+
     logger.info("Starting %s backend (env=%s)", settings.app_name, settings.env)
-    yield
-    logger.info("Shutting down %s backend", settings.app_name)
+
+    # Start scheduler
+    scheduler = get_scheduler()
+    try:
+        scheduler.start()
+    except Exception:
+        logger.exception("Failed to start automation scheduler")
+
+    try:
+        yield
+    finally:
+        # Stop scheduler on shutdown
+        try:
+            await scheduler.stop()
+        except Exception:
+            logger.exception("Failed to stop automation scheduler")
+        logger.info("Shutting down %s backend", settings.app_name)
 
 
 def create_app() -> FastAPI:
