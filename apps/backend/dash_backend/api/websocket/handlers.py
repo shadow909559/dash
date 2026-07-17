@@ -144,8 +144,18 @@ async def handle_chat_send(
 
         # For OPENAI_NATIVE we maintain a single list; for CUSTOM_JSON we keep
         # the legacy behavior (no role='tool' messages).
+        # Build the system prompt. If an agent is selected and has a system_prompt,
+        # prepend it to the default DASH_SYSTEM_PROMPT so agent behavior is applied.
+        system_prompt = DASH_SYSTEM_PROMPT
+        try:
+            if agent and getattr(agent, "system_prompt", None):
+                system_prompt = f"{agent.system_prompt}\n\n{DASH_SYSTEM_PROMPT}"
+        except Exception:
+            # If agent is malformed, fallback to DASH_SYSTEM_PROMPT
+            system_prompt = DASH_SYSTEM_PROMPT
+
         messages = build_chat_messages(
-            system_prompt=DASH_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             history=history,
             user_message=current_user_message,
             memory_context=memory_context,
@@ -240,9 +250,23 @@ async def handle_chat_send(
                 break
 
             # OPENAI_NATIVE FIXED BRANCH
+            # If an agent restricts allowed_tools, filter the tool definitions accordingly
+            tool_defs = tool_manager.get_tool_definitions()
+            if agent and getattr(agent, "allowed_tools", None):
+                allowed = set(agent.allowed_tools or [])
+
+                def _tool_name(td: dict) -> str:
+                    # OpenAI-compatible format: td['function']['name']
+                    try:
+                        return td.get("function", {}).get("name") or td.get("name") or ""
+                    except Exception:
+                        return ""
+
+                tool_defs = [td for td in tool_defs if _tool_name(td) in allowed]
+
             native = await chat_completion_with_native_tool_calls(
                 messages,
-                tools=tool_manager.get_tool_definitions(),
+                tools=tool_defs,
             )
 
             # 1) Receive native assistant tool_calls
