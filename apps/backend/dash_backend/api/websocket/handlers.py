@@ -429,16 +429,28 @@ async def handle_chat_send(
                     logger.info("Tool executed: user=%s tool=%s duration_ms=%d", user_id, call.tool_name, elapsed_ms)
 
                     # Enforce result size limits (avoid giant payloads to the LLM)
+                    formatted: dict[str, object] | None = None
                     try:
                         formatted = tool_manager.format_result_for_llm(call, final_result)
                         # Truncate long content fields safely
-                        if isinstance(formatted, dict):
-                            if "content" in formatted and isinstance(formatted["content"], str) and len(formatted["content"]) > 2000:
-                                formatted["content"] = formatted["content"][:2000] + "..."
-                        history.append(formatted)
+                        content_val = formatted.get("content")
+                        if isinstance(content_val, str) and len(content_val) > 2000:
+                            formatted["content"] = content_val[:2000] + "..."
                     except Exception:
-                        # Fallback: append a minimal result description
-                        history.append({"role": "tool", "content": f"[tool:{call.tool_name}] completed (truncated)"})
+                        logger.exception("Failed to format tool result for OpenAI-native history")
+
+                    # Always append only well-formed tool messages.
+                    # OpenAI-compatible providers require tool_call_id.
+                    if isinstance(formatted, dict) and formatted.get("role") == "tool" and formatted.get("tool_call_id"):
+                        history.append(formatted)
+                    else:
+                        logger.warning(
+                            "Dropping malformed/orphan tool result message. tool=%s call_id=%s",
+                            call.tool_name,
+                            getattr(call, "call_id", None),
+                        )
+                        # Do not append fallback role=tool message; it can corrupt tool sequencing.
+                        continue
                 except Exception:
                     logger.exception("Tool execution failed during native tool execution")
                     yield ChatTokenMessage(

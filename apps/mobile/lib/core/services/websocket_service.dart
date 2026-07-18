@@ -12,8 +12,10 @@ enum WebSocketStatus {
   disconnected,
   connecting,
   connected,
+  reconnecting,
   error,
 }
+
 
 class WebSocketState {
   const WebSocketState({
@@ -103,7 +105,8 @@ class WebSocketService extends StateNotifier<WebSocketState> {
   Stream<bool> get typingStream => _typingController.stream;
 
   /// Whether auto-reconnect is currently active.
-  bool get isReconnecting => _reconnectTimer != null;
+  bool get isReconnecting => state.status == WebSocketStatus.reconnecting || _reconnectTimer != null;
+
 
   Future<void> connect({String url = defaultWebSocketUrl}) async {
     if (state.status == WebSocketStatus.connecting ||

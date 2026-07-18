@@ -50,18 +50,26 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     super.dispose();
   }
 
-  void _scrollToBottom() {
+  void _scrollToBottom({bool force = false}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 100),
-          curve: Curves.easeOut,
-        );
-      }
+      if (!_scrollController.hasClients) return;
+
+      final max = _scrollController.position.maxScrollExtent;
+      final current = _scrollController.position.pixels;
+
+      // Only auto-scroll when the user is already near the bottom.
+      final distanceToBottom = (max - current).abs();
+      if (!force && distanceToBottom > 120) return;
+
+      _scrollController.animateTo(
+        max,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+      );
     });
   }
+
 
   void _sendMessage() {
     final message = _controller.text.trim();
@@ -115,9 +123,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final activeId = ref.watch(activeConversationIdProvider);
     final theme = Theme.of(context);
 
-    _scrollToBottom();
-
     return Row(
+
       children: [
         // Sidebar
         if (_isSidebarOpen)
@@ -250,8 +257,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         icon = Icons.error_outline;
         break;
       case WebSocketStatus.connected:
+      case WebSocketStatus.reconnecting:
         return const SizedBox.shrink();
     }
+
 
     return Container(
       width: double.infinity,
