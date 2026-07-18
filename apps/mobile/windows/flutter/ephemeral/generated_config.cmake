@@ -15,10 +15,10 @@ list(APPEND FLUTTER_TOOL_ENVIRONMENT
   "FLUTTER_ROOT=C:\\src\\flutter"
   "FLUTTER_EPHEMERAL_DIR=C:\\Users\\Asus\\Desktop\\dash\\apps\\mobile\\windows\\flutter\\ephemeral"
   "PROJECT_DIR=C:\\Users\\Asus\\Desktop\\dash\\apps\\mobile"
-  "FLUTTER_TARGET=lib\\main.dart"
+  "FLUTTER_TARGET=C:\\Users\\Asus\\Desktop\\dash\\apps\\mobile\\lib\\main.dart"
   "DART_DEFINES=RkxVVFRFUl9WRVJTSU9OPTMuNDQuNg==,RkxVVFRFUl9DSEFOTkVMPXN0YWJsZQ==,RkxVVFRFUl9HSVRfVVJMPWh0dHBzOi8vZ2l0aHViLmNvbS9mbHV0dGVyL2ZsdXR0ZXIuZ2l0,RkxVVFRFUl9GUkFNRVdPUktfUkVWSVNJT049ZWU4MGYwOGJiZg==,RkxVVFRFUl9FTkdJTkVfUkVWSVNJT049ODM2NzVlZDI3Ng==,RkxVVFRFUl9EQVJUX1ZFUlNJT049My4xMi4y"
   "DART_OBFUSCATION=false"
   "TRACK_WIDGET_CREATION=true"
-  "TREE_SHAKE_ICONS=true"
+  "TREE_SHAKE_ICONS=false"
   "PACKAGE_CONFIG=C:\\Users\\Asus\\Desktop\\dash\\apps\\mobile\\.dart_tool\\package_config.json"
 )

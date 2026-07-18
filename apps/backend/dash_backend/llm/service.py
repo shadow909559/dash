@@ -256,11 +256,28 @@ async def _stream_openai(
         "Content-Type": "application/json",
     }
 
+    # Ollama low-memory optimization:
+    # - keep context small
+    # - avoid unnecessary GPU offload (let Ollama decide on CPU-only setups)
+    # - keep streaming enabled
+    # Note: Ollama ignores unknown fields; still safe across versions.
     payload = {
         "model": model_name,
         "messages": messages,
         "stream": True,
+        # keep generation short enough for limited VRAM/CPU
+        "options": {
+            "num_ctx": 1024,
+            "num_predict": 256,
+            # keep on CPU if possible (prevents GPU over-allocation on low VRAM)
+            "num_gpu": 0,
+        },
     }
+
+
+
+
+
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -305,6 +322,7 @@ async def _stream_ollama(
     messages: list[dict[str, str]],
     model: str | None = None,
 ) -> AsyncIterator[str]:
+
     """Stream from an Ollama instance with auto-detection of available models."""
     settings = get_settings()
 
@@ -330,9 +348,14 @@ async def _stream_ollama(
         "model": model_name,
         "messages": messages,
         "stream": True,
+        "options": {
+            # Smaller context to fit limited RAM/VRAM.
+            "num_ctx": 1024,
+        },
     }
 
     try:
+
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream("POST", url, json=payload) as response:
                 if response.status_code != 200:
@@ -355,8 +378,9 @@ async def _stream_ollama(
                         continue
 
                     content = chunk.get("message", {}).get("content", "")
-                    if content:
+                    if isinstance(content, str) and content:
                         yield content
+
 
     except httpx.TimeoutException:
         logger.error("Ollama request timed out")

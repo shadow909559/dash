@@ -75,7 +75,8 @@ def create_app() -> FastAPI:
     if settings.is_development:
         application.docs_url = f"{settings.api_prefix}/docs"
         application.redoc_url = f"{settings.api_prefix}/redoc"
-        application.openapi_url = f"{settings.api_prefix}/openapi.json"
+        # Keep openapi.json at root level so Swagger can fetch it
+        # Swagger UI will be at /api/v1/docs but will fetch schema from /openapi.json
     else:
         application.docs_url = None
         application.redoc_url = None

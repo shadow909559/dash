@@ -33,12 +33,15 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # --- AI Providers -------------------------------------------------
+
     openai_api_key: str | None = None
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o-mini"
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3.2"
+    ollama_model: str = "llama3.2:1b"
+
     ai_provider: str = "ollama"  # "openai" or "ollama"
+
     ai_model: str | None = None  # explicit model override; falls back to provider default
 
     jwt_secret_key: str | None = None
