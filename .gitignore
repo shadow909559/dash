@@ -26,3 +26,27 @@ replay_pid*
 # OS
 .DS_Store
 Thumbs.db
+# Flutter
+**/.dart_tool/
+**/build/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+
+# Flutter generated
+**/android/.gradle/
+**/ios/Flutter/ephemeral/
+**/linux/flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+**/windows/flutter/ephemeral/
+
+# Generated IDE files
+**/*.iml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+node_modules/
