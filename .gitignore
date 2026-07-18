@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Database
+*.db
+
+# Environment
+.env
+*.env
+
+# IDE
+.idea/
+.vscode/
+
+# Flutter
+build/
+.dart_tool/
+
+# Crash logs
+hs_err_pid*
+replay_pid*
+
+# OS
+.DS_Store
+Thumbs.db
