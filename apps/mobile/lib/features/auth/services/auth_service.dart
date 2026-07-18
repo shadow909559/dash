@@ -174,11 +174,21 @@ class AuthService {
   /// Returns `true` on success.
   Future<bool> _attemptTokenRefresh(String rt) async {
     try {
-      // The backend does not expose a dedicated refresh endpoint yet,
-      // so we re-login using credentials is not possible here.
-      // For now, if the token is expired, we treat the session as invalid.
-      // Once the backend adds POST /auth/refresh, this method will use it.
-      return false;
+      final uri = Uri.parse('$defaultBackendUrl$authRefreshPath');
+      final response = await _httpClient.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refresh_token': rt}),
+      );
+
+      if (response.statusCode != 200) {
+        return false;
+      }
+
+      final tokenResponse =
+          AuthTokenResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      await _persistSession(tokenResponse);
+      return true;
     } catch (_) {
       return false;
     }

@@ -57,7 +57,8 @@ async def start_goal(goal_id: uuid.UUID, user: User = Depends(get_current_user),
 @router.get("/admin/claimed-tasks")
 async def list_claimed_tasks(user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)):
     """List tasks currently claimed by workers (for operational visibility)."""
-    stmt = await session.execute("SELECT id, goal_id, claimed_by, claimed_at, last_heartbeat, metadata FROM tasks WHERE claimed_by IS NOT NULL ORDER BY last_heartbeat DESC")
+    from sqlalchemy import text
+    stmt = await session.execute(text("SELECT id, goal_id, claimed_by, claimed_at, last_heartbeat, metadata FROM executive_tasks WHERE claimed_by IS NOT NULL ORDER BY last_heartbeat DESC"))
     rows = stmt.fetchall()
     items = []
     for r in rows:

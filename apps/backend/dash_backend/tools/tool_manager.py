@@ -206,6 +206,21 @@ class ToolManager:
             error_message="Tool execution produced no result",
         )
 
+    async def execute(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        context: ToolContext | None = None,
+    ) -> dict[str, Any]:
+        """Execute a tool by name with the given arguments.
+
+        Compatibility wrapper that delegates to execute_tool.
+        """
+        tc = ToolCallRequest(tool_name=tool_name, arguments=arguments)
+        ctx = context or ToolContext()
+        result = await self.execute_tool(tc, ctx)
+        return result.to_dict()
+
     # ──────────────────────────────────────────────
     # Confirmation Handling
     # ──────────────────────────────────────────────

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Float, ForeignKey, Index, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy import Float, ForeignKey, Index, String, Text, JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from dash_backend.db.base import Base
@@ -38,7 +38,7 @@ class Memory(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     importance: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
     # Stored embedding vector (future RAG retrieval milestone).
-    embedding: Mapped[list[float] | None] = mapped_column(ARRAY(Float), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)  # store embedding as JSON for SQLite compatibility
 
     user: Mapped["User"] = relationship(back_populates="memories")
 

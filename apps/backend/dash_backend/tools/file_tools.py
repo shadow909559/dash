@@ -14,12 +14,16 @@ from dash_backend.tools.base_tool import (
     ToolParameter,
 )
 from dash_backend.tools.tool_result import ToolResult, ToolStatus
-from dash_backend.tools.filesystem.filesystem_service import (
-    read_file as fs_read_file,
-    write_file as fs_write_file,
-    list_directory as fs_list_directory,
-    search_files as fs_search_files,
-)
+# Lazy imports to avoid circular dependency during tool discovery.
+# These are resolved at call time rather than at module load time.
+def _get_fs_service():
+    from dash_backend.tools.filesystem.filesystem_service import (
+        read_file as _fs_read_file,
+        write_file as _fs_write_file,
+        list_directory as _fs_list_directory,
+        search_files as _fs_search_files,
+    )
+    return _fs_read_file, _fs_write_file, _fs_list_directory, _fs_search_files
 
 
 class ReadFileTool(BaseTool):
@@ -62,7 +66,8 @@ class ReadFileTool(BaseTool):
             )
 
         try:
-            res = fs_read_file(context.working_directory, path_str, start_line=start_line, end_line=end_line)
+            fs_read_file, _fs_write, _fs_list, _fs_search = _get_fs_service()
+            res = fs_read_file(path_str, working_directory=context.working_directory, start_line=start_line, end_line=end_line)
         except FileNotFoundError:
             return ToolResult(
                 tool_name=self.name,
@@ -149,6 +154,7 @@ class WriteFileTool(BaseTool):
             )
 
         try:
+            _fs_read, fs_write_file, _fs_list, _fs_search = _get_fs_service()
             res = fs_write_file(path_str, content, working_directory=context.working_directory, overwrite=overwrite)
         except FileExistsError:
             return ToolResult(
@@ -210,6 +216,7 @@ class ListDirectoryTool(BaseTool):
         pattern = kwargs.get("pattern")
 
         try:
+            _fs_read, _fs_write, fs_list_directory, _fs_search = _get_fs_service()
             res = fs_list_directory(path_str, working_directory=context.working_directory, recursive=recursive, pattern=pattern)
         except Exception as exc:
             return ToolResult(
@@ -281,6 +288,7 @@ class SearchFilesTool(BaseTool):
             )
 
         try:
+            _fs_read, _fs_write, _fs_list, fs_search_files = _get_fs_service()
             res = fs_search_files(pattern_str, path_str=path_str, working_directory=context.working_directory, file_pattern=file_pattern, max_results=max_results)
         except FileNotFoundError:
             return ToolResult(

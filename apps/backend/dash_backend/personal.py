@@ -79,7 +79,7 @@ async def upsert_profile(payload: ProfileIn, user=Depends(get_current_user), ses
     This deliberately reuses the memories table to avoid additional persistent
     schema. The content field stores JSON.
     """
-    data = {k: v for k, v in payload.dict().items() if v is not None}
+    data = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No profile data provided")
 

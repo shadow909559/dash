@@ -218,15 +218,26 @@ class ChatService extends StateNotifier<ChatState> {
     final content = json['content']?.toString() ?? json['text']?.toString() ?? '';
 
     final updated = List<ChatMessage>.from(state.messages);
-    updated.add(
-      ChatMessage(
-        id: messageId,
-        role: MessageRole.assistant,
-        content: content,
-        timestamp: DateTime.now(),
-        status: MessageStatus.complete,
-      ),
+    final existingIdx = updated.lastIndexWhere(
+      (m) => m.role == MessageRole.assistant && m.id == messageId,
     );
+
+    if (existingIdx != -1) {
+      updated[existingIdx] = updated[existingIdx].copyWith(
+        content: content,
+        status: MessageStatus.complete,
+      );
+    } else {
+      updated.add(
+        ChatMessage(
+          id: messageId,
+          role: MessageRole.assistant,
+          content: content,
+          timestamp: DateTime.now(),
+          status: MessageStatus.complete,
+        ),
+      );
+    }
 
     state = state.copyWith(
       messages: updated,
@@ -243,7 +254,7 @@ class ChatService extends StateNotifier<ChatState> {
     final updated = List<ChatMessage>.from(state.messages);
     for (int i = updated.length - 1; i >= 0; i--) {
       final m = updated[i];
-      if (m.isUser && m.id == messageId && m.status == MessageStatus.sent) {
+      if (m.isUser && m.id == messageId && m.status == MessageStatus.sending) {
         updated[i] = m.copyWith(status: MessageStatus.sent);
         break;
       }

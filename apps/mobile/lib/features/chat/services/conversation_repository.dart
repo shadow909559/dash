@@ -38,7 +38,7 @@ class ConversationRepository {
       'include_archived': includeArchived.toString(),
     });
 
-    final method = 'GET';
+    const String method = 'GET';
 
     // Mask Authorization token in logs.
     final maskedHeaders = <String, String>{};
@@ -231,10 +231,8 @@ class ConversationListResponse {
 
   factory ConversationListResponse.fromJson(Map<String, dynamic> json) =>
       ConversationListResponse(
-        items: (json['items'] as List)
-            .map((e) => Conversation.fromJson(e))
-            .toList(),
-        total: json['total'] as int,
+        items: (json['items'] as List?)?.map((e) => Conversation.fromJson(e)).toList() ?? const [],
+        total: json['total'] as int? ?? 0,
         hasMore: json['has_more'] as bool? ?? false,
         nextCursor: json['next_cursor'] as String?,
       );
@@ -255,10 +253,8 @@ class MessageListResponse {
 
   factory MessageListResponse.fromJson(Map<String, dynamic> json) =>
       MessageListResponse(
-        items: (json['items'] as List)
-            .map((e) => ChatMessage.fromJson(e))
-            .toList(),
-        total: json['total'] as int,
+        items: (json['items'] as List?)?.map((e) => ChatMessage.fromJson(e)).toList() ?? const [],
+        total: json['total'] as int? ?? 0,
         hasMore: json['has_more'] as bool? ?? false,
         nextCursor: json['next_cursor'] as String?,
       );

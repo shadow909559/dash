@@ -7,7 +7,8 @@ import uuid
 from typing import Any
 
 from sqlalchemy import Enum, Float, ForeignKey, Index, Integer, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from dash_backend.db.base import Base
@@ -49,7 +50,7 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     model: Mapped[str | None] = mapped_column(Text, nullable=True)
-    meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    meta: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # use generic JSON for cross-db
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
 

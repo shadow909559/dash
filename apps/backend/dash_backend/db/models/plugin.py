@@ -10,7 +10,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import Boolean, ForeignKey, Index, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from dash_backend.db.base import Base
@@ -39,7 +39,7 @@ class Plugin(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     version: Mapped[str] = mapped_column(String(32), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    config: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="plugins")
 

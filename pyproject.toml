@@ -18,9 +18,9 @@ ignore = ["B008"]
 known-first-party = ["dash_backend", "dash_ai_core", "dash_agents", "dash_automation", "dash_memory", "dash_prompts", "dash_voice"]
 
 [tool.pytest.ini_options]
-testpaths = ["apps/backend/tests", "tests"]
+testpaths = ["apps/backend/tests"]
 asyncio_mode = "auto"
-pythonpath = ["apps/backend", "packages"]
+pythonpath = ["apps/backend", "packages", "."]
 
 [tool.mypy]
 python_version = "3.11"

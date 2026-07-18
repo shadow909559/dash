@@ -5,8 +5,9 @@ from __future__ import annotations
 import uuid
 from typing import List
 
-from sqlalchemy import Integer, Text, String, JSON, Float
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy import Integer, Text, String, JSON, Float, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from dash_backend.db.base import Base
@@ -36,10 +37,10 @@ class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "document_chunks"
 
     document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False, index=True
     )
     chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(ARRAY(Float), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)  # store embedding as JSON for SQLite compatibility
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
 
     document: Mapped[Document] = relationship(back_populates="chunks")

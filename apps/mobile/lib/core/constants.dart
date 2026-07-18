@@ -8,6 +8,7 @@ const String apiPrefix = '/api/v1';
 const String healthPath = '$apiPrefix/health';
 const String authLoginPath = '$apiPrefix/auth/login';
 const String authRegisterPath = '$apiPrefix/auth/register';
+const String authRefreshPath = '$apiPrefix/auth/refresh';
 const String authMePath = '$apiPrefix/auth/me';
 const String websocketPath = '$apiPrefix/ws';
 const String defaultWebSocketUrl = 'ws://localhost:8000$websocketPath';

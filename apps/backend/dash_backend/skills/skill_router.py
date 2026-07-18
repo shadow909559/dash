@@ -5,7 +5,10 @@ from dataclasses import dataclass
 
 from dash_backend.logging_config import get_logger
 from dash_backend.tools.tool_manager import get_tool_manager
-from .registry import SkillRegistry
+from dash_backend.tools.tool_manager import ToolCallRequest
+from dash_backend.tools.base_tool import ToolContext
+from dash_backend.skills.registry import SkillRegistry
+
 
 logger = get_logger(__name__)
 
@@ -25,17 +28,18 @@ class SkillRouter:
     checks and execution logging are preserved.
     """
 
-    def __init__(self, tool_manager: Optional[ToolManager] = None):
-        self.tool_manager = tool_manager or ToolManager.get_instance()
+    def __init__(self, tool_manager: Optional[Any] = None):
+        # Use the global singleton ToolManager if none provided.
+        self.tool_manager = tool_manager or get_tool_manager()
         self.registry = SkillRegistry.get()
 
     async def route(self, intent: str, args: Dict[str, Any], context: SkillContext) -> Dict[str, Any]:
         logger.info("Routing intent=%s args=%s", intent, args)
-        skill_name = self.registry.match_skill_for_intent(intent)
+        skill_name = SkillRegistry.match_skill_for_intent(intent)
         if not skill_name:
             # fallback to research/coding via planner decisions
             skill_name = "research"
-        skill = self.registry.get_skill(skill_name)
+        skill = SkillRegistry.get_skill(skill_name)
         if not skill:
             logger.error("No skill registered for %s", skill_name)
             return {"status": "error", "error": "no_skill"}

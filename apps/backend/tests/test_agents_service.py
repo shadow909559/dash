@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 
 from dash_backend.agents import service as agent_service
@@ -11,12 +13,37 @@ class DummySession:
 
     def add(self, obj):
         self.added.append(obj)
+        if getattr(obj, 'id', None) is None:
+            obj.id = uuid.uuid4()
 
     async def commit(self):
         self.committed = True
 
     async def refresh(self, obj):
         return
+
+    async def execute(self, stmt):
+        if hasattr(stmt, 'whereclause'):
+            where = stmt.whereclause
+            if where is not None:
+                target_id = None
+                if hasattr(where, 'right'):
+                    val = where.right
+                    target_id = val.value if hasattr(val, 'value') else val
+                if target_id is not None:
+                    for obj in self.added:
+                        if getattr(obj, 'id', None) == target_id:
+                            values = getattr(stmt, '_values', {})
+                            for col, param in values.items():
+                                setattr(obj, col.name, param.value)
+                            break
+        return None
+
+    async def get(self, model, pk):
+        for obj in self.added:
+            if getattr(obj, 'id', None) == pk:
+                return obj
+        return None
 
 
 @pytest.mark.asyncio

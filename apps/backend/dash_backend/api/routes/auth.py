@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dash_backend.auth.dependencies import get_current_user
@@ -14,6 +15,7 @@ from dash_backend.auth.service import (
     authenticate_user,
     create_user,
     issue_token_response,
+    refresh_tokens,
 )
 from dash_backend.db.session import get_db_session
 from dash_backend.security.rate_limiter import auth_rate_limit
@@ -64,3 +66,25 @@ async def current_user(
 ) -> User:
     """Return the current authenticated user."""
     return user
+
+
+class RefreshRequest(BaseModel):
+    """Refresh token request payload."""
+    refresh_token: str
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(
+    payload: RefreshRequest,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: None = Depends(auth_rate_limit),
+) -> TokenResponse:
+    """Refresh access token using a valid refresh token."""
+    try:
+        return await refresh_tokens(session, payload.refresh_token)
+    except InvalidCredentialsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc

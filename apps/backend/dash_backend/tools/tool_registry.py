@@ -45,11 +45,14 @@ class ToolRegistry:
             raise TypeError(f"Expected BaseTool instance, got {type(tool)}")
 
         if tool.name in self._tools:
-            raise ValueError(
-                f"Tool '{tool.name}' is already registered. "
-                f"Existing: {type(self._tools[tool.name]).__name__}, "
-                f"New: {type(tool).__name__}"
+            logger.debug(
+                "Tool '%s' already registered (skipping duplicate). "
+                "Existing: %s, New: %s",
+                tool.name,
+                type(self._tools[tool.name]).__name__,
+                type(tool).__name__,
             )
+            return
 
         self._tools[tool.name] = tool
         logger.debug("Registered tool: %s (category=%s)", tool.name, tool.category)

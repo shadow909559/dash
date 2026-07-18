@@ -17,6 +17,9 @@ dependencies:
   shared_preferences: ^2.3.4
   flutter_markdown: ^0.7.7+1
   url_launcher: ^6.3.2
+  bitsdojo_window: ^0.1.0
+  system_tray: ^2.0.3
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:

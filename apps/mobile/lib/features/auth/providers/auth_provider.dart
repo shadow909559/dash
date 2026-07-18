@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/auth_user.dart';
 import '../services/auth_service.dart';
+import '../../../core/services/websocket_service.dart';
+import '../models/auth_user.dart';
 
 /// Possible states of the authentication flow.
 enum AuthStatus {
@@ -48,8 +49,9 @@ class AuthState {
 
 /// Notifier that manages authentication state.
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier(this._authService) : super(AuthState.unknown);
+  AuthNotifier(this._ref, this._authService) : super(AuthState.unknown);
 
+  final Ref _ref;
   final AuthService _authService;
 
   // ---------- initialise ----------
@@ -81,6 +83,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         status: AuthStatus.authenticated,
         user: user,
       );
+      final ws = _ref.read(webSocketServiceProvider.notifier);
+      await ws.disconnect();
+      await ws.connect();
     } on AuthException catch (e) {
       state = AuthState.unauthenticated.copyWith(errorMessage: e.message);
     } catch (e) {
@@ -109,6 +114,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         status: AuthStatus.authenticated,
         user: user,
       );
+      final ws = _ref.read(webSocketServiceProvider.notifier);
+      await ws.disconnect();
+      await ws.connect();
     } on AuthException catch (e) {
       state = AuthState.unauthenticated.copyWith(errorMessage: e.message);
     } catch (e) {
@@ -124,6 +132,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     await _authService.logout();
     state = AuthState.unauthenticated;
+    final ws = _ref.read(webSocketServiceProvider.notifier);
+    await ws.disconnect();
   }
 
   /// Clear any displayed error message.
@@ -136,5 +146,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
 final authProvider =
     StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final authService = ref.watch(authServiceProvider);
-  return AuthNotifier(authService);
+  return AuthNotifier(ref, authService);
 });

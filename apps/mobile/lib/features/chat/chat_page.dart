@@ -22,10 +22,27 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   bool _isSidebarOpen = true;
+  String? _lastLoadedConversationId;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadActiveConversation();
+    });
+    ref.listen<String?>(activeConversationIdProvider, (prev, next) {
+      if (next != null && next != prev) {
+        _loadActiveConversation();
+      }
+    });
+  }
+
+  void _loadActiveConversation() {
+    final activeId = ref.read(activeConversationIdProvider);
+    if (activeId != null && activeId != _lastLoadedConversationId) {
+      _lastLoadedConversationId = activeId;
+      ref.read(chatProvider.notifier).loadConversationMessages(activeId);
+    }
   }
 
 

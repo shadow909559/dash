@@ -68,7 +68,9 @@ async def authenticate_user(session: AsyncSession, payload: LoginRequest) -> Use
 
 async def get_user_by_id(session: AsyncSession, user_id: str) -> User | None:
     """Look up a user by id."""
-    return await session.get(User, user_id)
+    import uuid
+    uid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+    return await session.get(User, uid)
 
 
 async def issue_token_response(session: AsyncSession, user: User) -> TokenResponse:
@@ -90,3 +92,35 @@ async def issue_token_response(session: AsyncSession, user: User) -> TokenRespon
         expires_in=expires_in,
         user=UserRead.model_validate(user),
     )
+
+
+async def refresh_tokens(session: AsyncSession, refresh_token: str) -> TokenResponse:
+    """Refresh access token using a valid refresh token."""
+    from sqlalchemy import and_
+    
+    token_hash = hash_refresh_token(refresh_token)
+    
+    # Find valid, non-revoked refresh token
+    refresh_record = await session.scalar(
+        select(RefreshToken).where(
+            and_(
+                RefreshToken.token_hash == token_hash,
+                RefreshToken.revoked_at.is_(None),
+                RefreshToken.expires_at > datetime.now(UTC),
+            )
+        )
+    )
+    
+    if refresh_record is None:
+        raise InvalidCredentialsError
+    
+    # Get the user
+    user = await session.get(User, refresh_record.user_id)
+    if user is None or not user.is_active:
+        raise InvalidCredentialsError
+    
+    # Revoke old refresh token
+    refresh_record.revoked_at = datetime.now(UTC)
+    
+    # Issue new tokens
+    return await issue_token_response(session, user)

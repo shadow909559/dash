@@ -16,13 +16,9 @@ logger = get_logger(__name__)
 
 # Sandbox root can be overridden by the DASH_FILES_SANDBOX environment variable.
 # Default: repository working directory / user_files
-DEFAULT_SANDBOX = Path(os.getenv("DASH_FILES_SANDBOX", Path.cwd() / "user_files")).resolve()
-DEFAULT_SANDBOX.mkdir(parents=True, exist_ok=True)
-
-
 def get_sandbox_root() -> Path:
     """Return the configured sandbox root directory."""
-    return DEFAULT_SANDBOX
+    return Path(os.getenv("DASH_FILES_SANDBOX", Path.cwd() / "user_files")).resolve()
 
 
 def resolve_path_within_sandbox(path_str: str, working_directory: str | None = None) -> Tuple[Path, Path]:
@@ -33,45 +29,62 @@ def resolve_path_within_sandbox(path_str: str, working_directory: str | None = N
     """
     sandbox = get_sandbox_root()
 
-    # Base directory for resolution is either the provided working_directory (relative to sandbox)
-    # or the sandbox itself.
+    # Determine base directory
     if working_directory:
         base = (sandbox / working_directory).resolve()
+        if not base.is_relative_to(sandbox):
+            base = sandbox
     else:
         base = sandbox
 
-    # Ensure base is inside sandbox
-    try:
-        base.relative_to(sandbox)
-    except Exception:
-        # If base is outside sandbox, reset to sandbox
-        base = sandbox
-
+    # Resolve candidate path
     candidate = (base / path_str).resolve()
 
     # Prevent path traversal: candidate must be inside sandbox
-    try:
-        candidate.relative_to(sandbox)
-    except Exception:
+    if not candidate.is_relative_to(sandbox):
         raise ValueError(f"Path traversal detected: '{path_str}' is outside the sandbox")
 
     return sandbox, candidate
 
 
-def read_file(path_str: str, working_directory: str | None = None, max_size: int = 100 * 1024) -> dict:
+def read_file(path_str: str, working_directory: str | None = None, start_line: int | None = None, end_line: int | None = None) -> dict:
+    """Read the contents of a file within the sandbox.
+
+    Args:
+        path_str: Path to the file (relative to working_directory or sandbox).
+        working_directory: Optional working directory within sandbox.
+        start_line: Optional 1-indexed start line.
+        end_line: Optional 1-indexed end line (inclusive).
+
+    Returns:
+        Dict with path, content, size_bytes, total_lines.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        IsADirectoryError: If the path is a directory.
+    """
     sandbox, file_path = resolve_path_within_sandbox(path_str, working_directory)
     if not file_path.exists():
         raise FileNotFoundError(str(file_path))
-    if not file_path.is_file():
+    if file_path.is_dir():
         raise IsADirectoryError(str(file_path))
-    if file_path.stat().st_size > max_size:
-        raise OSError(f"File too large: {file_path.stat().st_size} bytes")
-    content = file_path.read_text(encoding="utf-8", errors="replace")
-    logger.info("read_file: %s (size=%d)", str(file_path), file_path.stat().st_size)
+
+    raw = file_path.read_bytes()
+    content = raw.decode("utf-8")
+    total_lines = len(content.splitlines())
+
+    if start_line is not None or end_line is not None:
+        s = max(0, (start_line or 1) - 1)
+        e = min(total_lines, end_line or total_lines)
+        lines = content.splitlines()[s:e]
+        content = "\n".join(lines)
+
+    logger.info("read_file: %s (size=%d, lines=%d)", str(file_path), len(raw), total_lines)
     return {
         "path": str(file_path.relative_to(sandbox)),
-        "size_bytes": file_path.stat().st_size,
         "content": content,
+        "size_bytes": len(raw),
+        "total_lines": total_lines,
     }
 
 
@@ -80,9 +93,10 @@ def write_file(path_str: str, content: str, working_directory: str | None = None
     if file_path.exists() and not overwrite:
         raise FileExistsError(str(file_path))
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_text(content, encoding="utf-8")
-    logger.info("write_file: %s (size=%d)", str(file_path), file_path.stat().st_size)
-    return {"path": str(file_path.relative_to(sandbox)), "size_bytes": file_path.stat().st_size}
+    data = content.encode("utf-8")
+    file_path.write_bytes(data)
+    logger.info("write_file: %s (size=%d)", str(file_path), len(data))
+    return {"path": str(file_path.relative_to(sandbox)), "size_bytes": len(data)}
 
 
 def list_directory(path_str: str | None = None, working_directory: str | None = None, recursive: bool = False, pattern: str | None = None) -> dict:

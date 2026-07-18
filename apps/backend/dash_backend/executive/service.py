@@ -51,7 +51,7 @@ async def decompose_goal_into_tasks(session: AsyncSession, goal: executive_model
     for idx, item in enumerate(plan_items):
         name = item.get("name") or f"task-{idx}"
         desc = item.get("description") or ""
-        task = executive_models.Task(goal_id=goal.id, name=name[:255], description=desc[:1000], metadata={"index": idx, "est_minutes": item.get("est_minutes"), "tools": item.get("tools", [])})
+        task = executive_models.Task(goal_id=goal.id, name=name[:255], description=desc[:1000], meta_data={"index": idx, "est_minutes": item.get("est_minutes"), "tools": item.get("tools", [])})
         session.add(task)
         tasks.append(task)
 
@@ -174,7 +174,7 @@ async def worker_loop(poll_interval: float = 2.0, stuck_seconds: float = 60.0):
                         from sqlalchemy import text
 
                         query = text(
-                            "SELECT id FROM tasks WHERE status = :pending ORDER BY created_at ASC FOR UPDATE SKIP LOCKED LIMIT 1"
+                            "SELECT id FROM executive_tasks WHERE status = :pending ORDER BY created_at ASC FOR UPDATE SKIP LOCKED LIMIT 1"
                         )
                         res = await session.execute(query, {"pending": "pending"})
                         row = res.first()
@@ -185,7 +185,7 @@ async def worker_loop(poll_interval: float = 2.0, stuck_seconds: float = 60.0):
                             task_id = row[0]
                             # Claim the task by updating its status and claimed_by/claimed_at
                             claim_q = text(
-                                "UPDATE tasks SET status = :running, claimed_by = :worker, claimed_at = now(), last_heartbeat = now() WHERE id = :tid RETURNING id"
+                                "UPDATE executive_tasks SET status = :running, claimed_by = :worker, claimed_at = now(), last_heartbeat = now() WHERE id = :tid RETURNING id"
                             )
                             worker_id = str(uuid.uuid4())
                             claim_res = await session.execute(claim_q, {"running": "running", "worker": worker_id, "tid": str(task_id)})
@@ -194,8 +194,8 @@ async def worker_loop(poll_interval: float = 2.0, stuck_seconds: float = 60.0):
                                 # refresh to load the task object outside the transaction
                                 task_obj = await session.get(executive_models.Task, task_id)
                                 # attach worker id to task metadata for heartbeat updates
-                                task_obj.metadata = (task_obj.metadata or {})
-                                task_obj.metadata["_claimed_by_worker"] = worker_id
+                                task_obj.meta_data = (task_obj.meta_data or {})
+                                task_obj.meta_data["_claimed_by_worker"] = worker_id
                             else:
                                 task_obj = None
 
@@ -204,7 +204,7 @@ async def worker_loop(poll_interval: float = 2.0, stuck_seconds: float = 60.0):
                         await asyncio.sleep(poll_interval)
                         continue
 
-                    logger.info("Picked pending task %s claimed_by=%s", task_obj.id, task_obj.metadata.get("_claimed_by_worker"))
+                    logger.info("Picked pending task %s claimed_by=%s", task_obj.id, task_obj.meta_data.get("_claimed_by_worker"))
                     try:
                         # Run task and periodically heartbeat
                         await run_task_with_heartbeat(session, task_obj, heartbeat_interval=5.0)
@@ -227,7 +227,7 @@ async def reset_stuck_tasks(session: AsyncSession, stuck_seconds: float = 60.0) 
     from sqlalchemy import text
 
     reset_q = text(
-        "UPDATE tasks SET status = 'pending', claimed_by = NULL, claimed_at = NULL, last_heartbeat = NULL WHERE status = 'running' AND COALESCE(EXTRACT(EPOCH FROM now() - last_heartbeat), 0) > :stuck"
+        "UPDATE executive_tasks SET status = 'pending', claimed_by = NULL, claimed_at = NULL, last_heartbeat = NULL WHERE status = 'running' AND COALESCE(EXTRACT(EPOCH FROM now() - last_heartbeat), 0) > :stuck"
     )
     res = await session.execute(reset_q, {"stuck": float(stuck_seconds)})
     await session.commit()
@@ -243,7 +243,7 @@ async def run_task_with_heartbeat(session: AsyncSession, task: executive_models.
     The heartbeat is updated in the DB so other workers can detect a live worker.
     The actual task execution is delegated to run_pending_task.
     """
-    worker_meta = task.metadata or {}
+    worker_meta = task.meta_data or {}
     worker_id = worker_meta.get("_claimed_by_worker")
 
     # helper to update heartbeat
@@ -254,7 +254,7 @@ async def run_task_with_heartbeat(session: AsyncSession, task: executive_models.
                     from sqlalchemy import text
 
                     hb_q = text(
-                        "UPDATE tasks SET last_heartbeat = now() WHERE id = :tid AND claimed_by = :worker"
+                        "UPDATE executive_tasks SET last_heartbeat = now() WHERE id = :tid AND claimed_by = :worker"
                     )
                     await hb_sess.execute(hb_q, {"tid": str(task.id), "worker": worker_id})
                     await hb_sess.commit()
