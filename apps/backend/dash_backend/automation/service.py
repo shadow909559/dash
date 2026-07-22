@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import uuid
-from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from datetime import datetime, timezone
+from typing import Any, List
 
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dash_backend.automation import models
@@ -113,7 +112,7 @@ async def execute_automation(session: AsyncSession, automation: models.Automatio
             logger.exception("Failed to create AutomationExecution record")
 
         # record execution by touching updated_at on automation
-        automation.updated_at = datetime.utcnow()
+        automation.updated_at = datetime.now(timezone.utc)
         session.add(automation)
         await session.commit()
 

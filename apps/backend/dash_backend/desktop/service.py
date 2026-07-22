@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from typing import Dict, Any, Optional
-from dataclasses import dataclass
 
 from dash_backend.logging_config import get_logger
 from dash_backend.tools import tool_manager as _tool_manager_module
-from dash_backend.tools.tool_manager import ToolCallRequest, ToolContext
 from dash_backend.skills.registry import SkillRegistry
 
 logger = get_logger(__name__)

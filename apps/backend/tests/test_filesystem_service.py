@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import pytest
@@ -9,7 +8,6 @@ from dash_backend.tools.filesystem.filesystem_service import (
     list_directory,
     search_files,
     resolve_path_within_sandbox,
-    get_sandbox_root,
 )
 
 

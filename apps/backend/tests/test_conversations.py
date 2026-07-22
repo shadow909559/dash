@@ -17,7 +17,6 @@ from dash_backend.chat.service import (
     search_conversations,
     update_conversation,
 )
-from dash_backend.db.models.conversation import Conversation
 from dash_backend.db.models.message import MessageRole
 
 

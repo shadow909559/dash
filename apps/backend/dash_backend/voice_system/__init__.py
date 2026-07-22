@@ -9,8 +9,7 @@ existing endpoints. All heavy functionality (wake-word, VAD, audio processing)
 is provider-abstracted and ships with safe noop defaults so the system runs in
 environments without native audio tooling.
 """
-from .manager import VoiceManager
+from .service import VoiceManager, VoiceService, get_voice_manager
 from .providers import SpeechProviderInterface, TTSProviderInterface
-from .service import VoiceService
 
-__all__ = ["VoiceManager", "SpeechProviderInterface", "TTSProviderInterface", "VoiceService"]
+__all__ = ["VoiceManager", "VoiceService", "get_voice_manager", "SpeechProviderInterface", "TTSProviderInterface"]

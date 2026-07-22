@@ -104,6 +104,10 @@ class WebSocketService extends StateNotifier<WebSocketState> {
   /// Stream of typing indicators.
   Stream<bool> get typingStream => _typingController.stream;
 
+  /// Controller for adding chat messages from external sources (e.g., sync).
+  StreamController<Map<String, dynamic>> get chatMessageController =>
+      _chatMessageController;
+
   /// Whether auto-reconnect is currently active.
   bool get isReconnecting => state.status == WebSocketStatus.reconnecting || _reconnectTimer != null;
 

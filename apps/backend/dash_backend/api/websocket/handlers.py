@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,10 +15,6 @@ from dash_backend.api.websocket.protocol import (
     ChatErrorMessage,
     ChatSendMessage,
     ChatTokenMessage,
-    ToolErrorMessage,
-    ToolFinishedMessage,
-    ToolProgressMessage,
-    ToolStartedMessage,
     VoiceSTTDoneMessage,
     VoiceSTTErrorMessage,
     VoiceSTTMessage,
@@ -75,7 +70,7 @@ async def handle_chat_send(
 
     from dash_backend.tools.base_tool import ToolContext
     from dash_backend.tools.tool_manager import ToolCallRequest, get_tool_manager
-    from dash_backend.tools.tool_result import ToolEvent, ToolStatus
+    from dash_backend.tools.tool_result import ToolEvent
 
     MAX_TOOL_STEPS = 5
 
@@ -128,7 +123,8 @@ async def handle_chat_send(
         logger.exception("Failed to trim conversation history")
 
     try:
-        memory_context = await build_memory_context(session, user_id)
+        # Pass the user message as query for semantic memory retrieval
+        memory_context = await build_memory_context(session, user_id, query=msg.content)
     except Exception:
         logger.exception("Failed to load memory context")
 
@@ -495,7 +491,8 @@ async def handle_chat_send(
                     {"role": "assistant", "content": last_assistant_text},
                 ]
                 summary = await summarize_conversation(
-                    session, msg.conversation_id, all_messages
+                    session, msg.conversation_id, all_messages,
+                    user_id=user_id, save_as_memory=True,
                 )
                 if summary:
                     await save_conversation_summary(
@@ -526,8 +523,7 @@ async def handle_voice_stt(msg: VoiceSTTMessage, session: AsyncSession, user_id:
 
     from dash_backend.voice import transcribe_audio
     from dash_backend.api.websocket.protocol import ChatSendMessage
-    from dash_backend.chat.service import add_message, create_conversation, get_conversation
-    from dash_backend.db.session import AsyncSessionLocal
+    from dash_backend.chat.service import add_message, create_conversation
     from dash_backend.db.models.message import MessageRole
 
     # Decode audio

@@ -10,9 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from dash_backend.agents import schemas
 from dash_backend.agents import service as agent_service
-from dash_backend.auth.dependencies import get_current_user
 from dash_backend.db.session import get_db_session
-from dash_backend.db.models.user import User
 
 router = APIRouter(prefix="", tags=["agents"])
 

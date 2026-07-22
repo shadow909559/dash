@@ -15,7 +15,6 @@ Key features provided by this MVP implementation:
 """
 from __future__ import annotations
 
-import asyncio
 from typing import Callable, Optional, Awaitable
 import time
 
@@ -24,7 +23,6 @@ from .providers import get_speech_provider, get_tts_provider
 from .vad import get_default_vad
 from .wake_word import NoopWakeWordEngine
 from .profiles import get_profile_manager
-from .parser import parse_command
 
 logger = get_logger(__name__)
 

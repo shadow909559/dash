@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional, Any, Dict
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dash_backend.executive import models as executive_models
@@ -26,7 +26,7 @@ async def create_goal(session: AsyncSession, user_id: uuid.UUID, name: str, desc
     return goal
 
 
-async def decompose_goal_into_tasks(session: AsyncSession, goal: executive_models.Goal) -> List[executive_models.Task]:
+async def decompose_goal_into_tasks(session: AsyncSession, goal: executive_models.Goal) -> List[executive_models.ExecutiveTask]:
     """Decompose a goal into structured tasks using the Planner. Falls back to
     a simple heuristic if the Planner/LLM fails or is not configured.
     """
@@ -47,11 +47,11 @@ async def decompose_goal_into_tasks(session: AsyncSession, goal: executive_model
             candidates = [goal.name]
         plan_items = [{"name": c[:255], "description": c, "est_minutes": None, "tools": []} for c in candidates]
 
-    tasks: List[executive_models.Task] = []
+    tasks: List[executive_models.ExecutiveTask] = []
     for idx, item in enumerate(plan_items):
         name = item.get("name") or f"task-{idx}"
         desc = item.get("description") or ""
-        task = executive_models.Task(goal_id=goal.id, name=name[:255], description=desc[:1000], meta_data={"index": idx, "est_minutes": item.get("est_minutes"), "tools": item.get("tools", [])})
+        task = executive_models.ExecutiveTask(goal_id=goal.id, name=name[:255], description=desc[:1000], meta_data={"index": idx, "est_minutes": item.get("est_minutes"), "tools": item.get("tools", [])})
         session.add(task)
         tasks.append(task)
 
@@ -68,8 +68,8 @@ async def list_goals_for_user(session: AsyncSession, user_id: uuid.UUID) -> List
     return list(res.scalars().all())
 
 
-async def get_tasks_for_goal(session: AsyncSession, goal_id: uuid.UUID) -> List[executive_models.Task]:
-    stmt = select(executive_models.Task).where(executive_models.Task.goal_id == goal_id).order_by(executive_models.Task.created_at.asc())
+async def get_tasks_for_goal(session: AsyncSession, goal_id: uuid.UUID) -> List[executive_models.ExecutiveTask]:
+    stmt = select(executive_models.ExecutiveTask).where(executive_models.ExecutiveTask.goal_id == goal_id).order_by(executive_models.ExecutiveTask.created_at.asc())
     res = await session.execute(stmt)
     return list(res.scalars().all())
 
@@ -79,7 +79,7 @@ async def start_goal(session: AsyncSession, goal_id: uuid.UUID) -> bool:
     if goal is None:
         raise ValueError("Goal not found")
     # If no tasks exist, decompose
-    stmt = select(executive_models.Task).where(executive_models.Task.goal_id == goal.id)
+    stmt = select(executive_models.ExecutiveTask).where(executive_models.ExecutiveTask.goal_id == goal.id)
     res = await session.execute(stmt)
     tasks = list(res.scalars().all())
     if not tasks:
@@ -91,7 +91,7 @@ async def start_goal(session: AsyncSession, goal_id: uuid.UUID) -> bool:
     return True
 
 
-async def run_pending_task(session: AsyncSession, task: executive_models.Task) -> Dict[str, Any]:
+async def run_pending_task(session: AsyncSession, task: executive_models.ExecutiveTask) -> Dict[str, Any]:
     """Execute a single task by routing to a matching skill.
 
     Returns an execution result dict and writes ExecutionHistory.
@@ -134,7 +134,7 @@ async def run_pending_task(session: AsyncSession, task: executive_models.Task) -
     await session.refresh(history)
 
     # Check goal completeness
-    stmt = select(executive_models.Task).where(executive_models.Task.goal_id == task.goal_id)
+    stmt = select(executive_models.ExecutiveTask).where(executive_models.ExecutiveTask.goal_id == task.goal_id)
     res = await session.execute(stmt)
     all_tasks = list(res.scalars().all())
     if all_tasks and all(t.status == "completed" for t in all_tasks):
@@ -192,7 +192,7 @@ async def worker_loop(poll_interval: float = 2.0, stuck_seconds: float = 60.0):
                             claimed = claim_res.first()
                             if claimed:
                                 # refresh to load the task object outside the transaction
-                                task_obj = await session.get(executive_models.Task, task_id)
+                                task_obj = await session.get(executive_models.ExecutiveTask, task_id)
                                 # attach worker id to task metadata for heartbeat updates
                                 task_obj.meta_data = (task_obj.meta_data or {})
                                 task_obj.meta_data["_claimed_by_worker"] = worker_id
@@ -237,7 +237,7 @@ async def reset_stuck_tasks(session: AsyncSession, stuck_seconds: float = 60.0) 
     return rowcount
 
 
-async def run_task_with_heartbeat(session: AsyncSession, task: executive_models.Task, heartbeat_interval: float = 5.0) -> dict:
+async def run_task_with_heartbeat(session: AsyncSession, task: executive_models.ExecutiveTask, heartbeat_interval: float = 5.0) -> dict:
     """Run a task while periodically issuing heartbeats to update last_heartbeat.
 
     The heartbeat is updated in the DB so other workers can detect a live worker.

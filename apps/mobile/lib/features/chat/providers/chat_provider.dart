@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/websocket_service.dart';
+import '../../../core/sync/sync_service.dart';
 import '../models/chat_message.dart';
 import '../services/conversation_repository.dart';
 
@@ -279,8 +280,7 @@ class ChatService extends StateNotifier<ChatState> {
     if (text.isEmpty) return;
 
     final wsStatus = _ref.read(webSocketServiceProvider).status;
-    if (wsStatus != WebSocketStatus.connected) return;
-
+    final isOnline = wsStatus == WebSocketStatus.connected;
     final id = _nextMessageId();
 
     final userMessage = ChatMessage(
@@ -288,7 +288,7 @@ class ChatService extends StateNotifier<ChatState> {
       role: MessageRole.user,
       content: text,
       timestamp: DateTime.now(),
-      status: MessageStatus.sending,
+      status: isOnline ? MessageStatus.sending : MessageStatus.pending,
     );
 
     state = state.copyWith(
@@ -306,8 +306,17 @@ class ChatService extends StateNotifier<ChatState> {
       if (conversationId != null) 'conversation_id': conversationId,
     };
 
-    _ws.send(jsonEncode(payload));
-    _markLastUserMessageSent();
+    if (isOnline) {
+      _ws.send(jsonEncode(payload));
+      _markLastUserMessageSent();
+    } else {
+      _ref.read(syncServiceProvider.notifier).queueMessage(
+            id: id,
+            type: 'chat.send',
+            payload: payload,
+            conversationId: conversationId,
+          );
+    }
   }
 
   /// Load messages for a specific conversation from the REST API.

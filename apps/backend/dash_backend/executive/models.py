@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, String, Text, Enum, JSON
+from sqlalchemy import String, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,7 +38,7 @@ class Goal(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     meta_data: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
 
 
-class Task(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+class ExecutiveTask(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "executive_tasks"
 
     goal_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)

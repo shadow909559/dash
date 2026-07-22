@@ -1,10 +1,8 @@
-"""Vision skill package: screenshot, OCR, UI detection helpers.
+"""Vision subsystem: OCR, screenshot, UI detection, image understanding.
 
-This package provides a VisionSkill service that exposes high-level vision
-operations. Implementations can plug in Tesseract/OpenCV/vision models as
-needed. By default the service uses safe no-op behaviors so the system remains
-functional without heavy dependencies.
+Provides a VisionService with provider abstraction. Plug in Tesseract, OpenCV,
+GPT-4V, or custom models without rewriting core logic.
 """
-from .service import VisionSkill
+from .service import VisionService, VisionSkill, VisionProviderRegistry, get_vision_registry
 
-__all__ = ["VisionSkill"]
+__all__ = ["VisionService", "VisionSkill", "VisionProviderRegistry", "get_vision_registry"]

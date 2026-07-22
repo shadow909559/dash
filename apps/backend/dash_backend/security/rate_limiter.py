@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Dict, Optional
+from typing import Dict
 
 from fastapi import HTTPException, Request, status
 

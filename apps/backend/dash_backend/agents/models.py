@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import uuid
-from typing import List
 
 from sqlalchemy import String, Text, JSON
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from dash_backend.db.base import Base

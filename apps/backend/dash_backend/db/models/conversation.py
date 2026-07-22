@@ -26,6 +26,7 @@ class Conversation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_conversations_user_id_created_at", "user_id", "created_at"),
         Index("ix_conversations_user_id_pinned", "user_id", "is_pinned"),
         Index("ix_conversations_user_id_archived", "user_id", "is_archived"),
+        Index("ix_conversations_user_id_last_message_at", "user_id", "last_message_at"),  # For sorting by recent activity
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(

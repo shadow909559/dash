@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import subprocess
 import sys
 from typing import Any
 
@@ -132,7 +131,7 @@ class RunTerminalCommandTool(BaseTool):
             return ToolResult(
                 tool_name=self.name,
                 status=ToolStatus.ERROR,
-                error_message=f"Shell not found. Cannot execute command.",
+                error_message="Shell not found. Cannot execute command.",
             )
         except Exception as exc:
             return ToolResult(

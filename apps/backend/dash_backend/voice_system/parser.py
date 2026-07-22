@@ -7,7 +7,7 @@ parse commands.
 """
 from __future__ import annotations
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from dash_backend.logging_config import get_logger
 

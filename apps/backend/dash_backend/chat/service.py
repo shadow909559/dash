@@ -7,14 +7,13 @@ and return domain objects or raise appropriate exceptions.
 
 from __future__ import annotations
 
-import math
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import ScalarResult, func, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import selectinload
 
 from dash_backend.db.models.conversation import Conversation
 from dash_backend.db.models.conversation_summary import ConversationSummary
@@ -269,6 +268,37 @@ async def save_assistant_message(
 
 
 AUTO_SUMMARIZE_THRESHOLD = 20  # messages
+
+
+async def generate_conversation_title(
+    session: AsyncSession,
+    conversation_id: str | uuid.UUID,
+    first_message: str,
+) -> str:
+    """Generate a title for a conversation based on the first user message.
+    
+    Uses a simple heuristic to extract a meaningful title (first 50 chars
+    or first sentence). For production, this could use the LLM to generate
+    more descriptive titles.
+    """
+    # Simple heuristic: take first sentence or first 50 characters
+    title = first_message.strip()
+    
+    # Take first sentence if there's punctuation
+    for punct in ['.', '!', '?']:
+        if punct in title:
+            title = title.split(punct)[0].strip()
+            break
+    
+    # Truncate if too long
+    if len(title) > 50:
+        title = title[:47] + "..."
+    
+    # Capitalize first letter
+    if title:
+        title = title[0].upper() + title[1:]
+    
+    return title or "New Chat"
 
 
 async def needs_summary(session: AsyncSession, conversation_id: str | uuid.UUID) -> bool:

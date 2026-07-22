@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Planner Decompose",
+    "duration_ms": 115597.2540000007,
+    "iterations": 5,
+    "avg_ms": 23119.45080000014,
+    "min_ms": 0.010400000064691994,
+    "max_ms": 65198.08860000012
+  },
+  {
+    "name": "Single Embedding",
+    "duration_ms": 17.751799999587092,
+    "iterations": 10,
+    "avg_ms": 1.7751799999587092,
+    "min_ms": 0.008099999831756577,
+    "max_ms": 17.578099999809638
+  },
+  {
+    "name": "Batch Embeddings (5)",
+    "duration_ms": 29.684099999485625,
+    "iterations": 5,
+    "avg_ms": 5.936819999897125,
+    "min_ms": 0.10849999989659409,
+    "max_ms": 28.636999999889667
+  }
+]

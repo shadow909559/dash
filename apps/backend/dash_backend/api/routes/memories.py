@@ -11,7 +11,6 @@ from dash_backend.api.schemas.memory import (
     MemoryCreate,
     MemoryListResponse,
     MemoryRead,
-    MemorySearchResponse,
     MemoryUpdate,
 )
 

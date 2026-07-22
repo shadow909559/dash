@@ -3,7 +3,6 @@ import uuid
 import pytest
 
 from dash_backend.agents import service as agent_service
-from dash_backend.agents import models as agent_models
 
 
 class DummySession:

@@ -8,10 +8,21 @@ This module now also supports tool-call detection:
 - Detect whether the response is a JSON tool_call
 - Validate schema and parse into a structured result
 - Never crash on malformed JSON (falls back to assistant text)
+
+Features:
+- Streaming responses with timeout
+- Retry logic with exponential backoff
+- Health check for AI providers
+- Automatic reconnect on connection failures
+- Context window handling and history truncation
+- Token estimation
+- System prompt injection
+- Input sanitization for prompt injection prevention
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
@@ -19,9 +30,17 @@ from typing import Any, AsyncIterator
 import httpx
 
 from dash_backend.config import get_settings
+from dash_backend.llm.openai_message_validator import validate_openai_message_history
 from dash_backend.logging_config import get_logger
+from dash_backend.security.input_sanitizer import sanitize_for_llm, sanitize_memory_context
+
 
 logger = get_logger(__name__)
+
+# Retry configuration
+MAX_RETRIES = 3
+RETRY_DELAY_SECONDS = 1.0
+RETRY_BACKOFF_MULTIPLIER = 2.0
 
 
 @dataclass(frozen=True)
@@ -36,6 +55,118 @@ class ToolCall:
 
 
 ToolOrAssistant = AssistantResponse | ToolCall
+
+
+async def check_provider_health() -> dict[str, Any]:
+    """Check the health of the configured AI provider.
+    
+    Returns a dict with:
+    - healthy: bool
+    - provider: str
+    - model: str | None
+    - error: str | None
+    - latency_ms: float | None
+    """
+    settings = get_settings()
+    provider = settings.ai_provider.lower()
+    
+    result = {
+        "healthy": False,
+        "provider": provider,
+        "model": None,
+        "error": None,
+        "latency_ms": None,
+    }
+    
+    try:
+        if provider == "ollama":
+            # Check Ollama health via /api/tags
+            base_url = settings.ollama_base_url.rstrip("/")
+            tags_url = f"{base_url}/api/tags"
+            
+            start_time = asyncio.get_event_loop().time()
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(tags_url)
+                latency_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    models = data.get("models", [])
+                    result["healthy"] = True
+                    result["model"] = models[0].get("name") if models else None
+                    result["latency_ms"] = latency_ms
+                else:
+                    result["error"] = f"Ollama returned status {response.status_code}"
+        else:
+            # Check OpenAI-compatible provider health
+            api_key = settings.openai_api_key
+            if not api_key:
+                result["error"] = "No OPENAI_API_KEY configured"
+                return result
+            
+            base_url = settings.openai_base_url.rstrip("/")
+            # Use a minimal request to check connectivity
+            models_url = f"{base_url}/models"
+            
+            start_time = asyncio.get_event_loop().time()
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    models_url,
+                    headers={"Authorization": f"Bearer {api_key}"}
+                )
+                latency_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+                
+                if response.status_code == 200:
+                    result["healthy"] = True
+                    result["model"] = settings.ai_model or settings.openai_model
+                    result["latency_ms"] = latency_ms
+                else:
+                    result["error"] = f"Provider returned status {response.status_code}"
+    except asyncio.TimeoutError:
+        result["error"] = "Health check timed out"
+    except httpx.RequestError as exc:
+        result["error"] = f"Could not reach provider: {exc}"
+    except Exception as exc:
+        result["error"] = f"Health check failed: {exc}"
+    
+    return result
+
+
+async def _retry_with_backoff(
+    func,
+    *args,
+    max_retries: int = MAX_RETRIES,
+    **kwargs
+) -> AsyncIterator[str]:
+    """Execute a streaming function with retry logic and exponential backoff."""
+    last_error = None
+    delay = RETRY_DELAY_SECONDS
+    
+    for attempt in range(max_retries + 1):
+        try:
+            async for token in func(*args, **kwargs):
+                yield token
+            return  # Success, exit retry loop
+        except (httpx.TimeoutException, httpx.RequestError) as exc:
+            last_error = exc
+            if attempt < max_retries:
+                logger.warning(
+                    "LLM request failed (attempt %d/%d), retrying in %.1fs: %s",
+                    attempt + 1,
+                    max_retries,
+                    delay,
+                    exc
+                )
+                await asyncio.sleep(delay)
+                delay *= RETRY_BACKOFF_MULTIPLIER
+            else:
+                logger.error("LLM request failed after %d retries: %s", max_retries, exc)
+                yield f"*Error: AI provider unavailable after {max_retries} retries*"
+        except Exception as exc:
+            # Non-retryable errors, yield immediately
+            logger.error("LLM request failed with non-retryable error: %s", exc)
+            yield f"*Error: AI provider error: {exc}*"
+            return
 
 
 async def _detect_ollama_model() -> str | None:
@@ -88,6 +219,7 @@ async def stream_chat_response(
 
     Supports OpenAI-compatible APIs and Ollama.
     Yields content tokens as they arrive.
+    Includes retry logic with exponential backoff for transient failures.
     """
     settings = get_settings()
 
@@ -95,10 +227,10 @@ async def stream_chat_response(
     logger.info("Using AI provider: %s", provider)
 
     if provider == "ollama":
-        async for token in _stream_ollama(messages, model):
+        async for token in _retry_with_backoff(_stream_ollama, messages, model):
             yield token
     else:
-        async for token in _stream_openai(messages, model):
+        async for token in _retry_with_backoff(_stream_openai, messages, model):
             yield token
 
 
@@ -189,6 +321,7 @@ async def chat_completion_with_native_tool_calls(
     tool_choice: str | dict[str, Any] | None = None,
     model: str | None = None,
 ) -> NativeAssistantResponse:
+
     """Call OpenAI-compatible /chat/completions and return native tool_calls.
 
     This path intentionally does NOT use custom JSON parsing.
@@ -209,9 +342,15 @@ async def chat_completion_with_native_tool_calls(
         "Content-Type": "application/json",
     }
 
+    # Validate message history before sending to OpenAI/LiteLLM
+    validated_messages = validate_openai_message_history(messages)
+    if len(validated_messages) != len(messages):
+        dropped = len(messages) - len(validated_messages)
+        logger.warning("Dropped %d invalid tool messages before native tool call request", dropped)
+
     payload: dict[str, Any] = {
         "model": model_name,
-        "messages": messages,
+        "messages": validated_messages,
         "stream": False,
         "tools": tools,
     }
@@ -256,6 +395,14 @@ async def _stream_openai(
         "Content-Type": "application/json",
     }
 
+    # Validate message history before sending to OpenAI/LiteLLM
+    # This prevents the "Invalid parameter: messages with role 'tool' must be a response
+    # to a preceding message with 'tool_calls'" error.
+    validated_messages = validate_openai_message_history(messages)
+    if len(validated_messages) != len(messages):
+        dropped = len(messages) - len(validated_messages)
+        logger.warning("Dropped %d invalid tool messages before OpenAI request", dropped)
+
     # Ollama low-memory optimization:
     # - keep context small
     # - avoid unnecessary GPU offload (let Ollama decide on CPU-only setups)
@@ -263,7 +410,7 @@ async def _stream_openai(
     # Note: Ollama ignores unknown fields; still safe across versions.
     payload = {
         "model": model_name,
-        "messages": messages,
+        "messages": validated_messages,
         "stream": True,
         # keep generation short enough for limited VRAM/CPU
         "options": {
@@ -344,9 +491,15 @@ async def _stream_ollama(
 
     logger.info("Sending prompt to Ollama model: %s", model_name)
 
+    # Validate message history before sending to Ollama
+    validated_messages = validate_openai_message_history(messages)
+    if len(validated_messages) != len(messages):
+        dropped = len(messages) - len(validated_messages)
+        logger.warning("Dropped %d invalid tool messages before Ollama request", dropped)
+
     payload = {
         "model": model_name,
-        "messages": messages,
+        "messages": validated_messages,
         "stream": True,
         "options": {
             # Smaller context to fit limited RAM/VRAM.
@@ -464,13 +617,17 @@ def build_chat_messages(
         system_parts.append(system_prompt)
 
     if memory_context:
+        # Sanitize memory context before injection
+        sanitized_memory = sanitize_memory_context(memory_context)
         system_parts.append("\n[USER MEMORY CONTEXT]")
-        system_parts.append(memory_context)
+        system_parts.append(sanitized_memory)
         system_parts.append("[/USER MEMORY CONTEXT]\n")
 
     if conversation_summary:
+        # Sanitize conversation summary before injection
+        sanitized_summary = sanitize_for_llm(conversation_summary, 2000)
         system_parts.append("\n[CONVERSATION SUMMARY]")
-        system_parts.append(conversation_summary)
+        system_parts.append(sanitized_summary)
         system_parts.append("[/CONVERSATION SUMMARY]\n")
 
     if system_parts:
@@ -480,7 +637,12 @@ def build_chat_messages(
         messages.extend(history)
 
     if user_message:
-        messages.append({"role": "user", "content": user_message})
+        # Sanitize user message before injection
+        sanitized_user_message = sanitize_for_llm(user_message)
+        messages.append({"role": "user", "content": sanitized_user_message})
+
+    # Validate the built messages to catch any orphan tool messages early
+    messages = validate_openai_message_history(messages)
 
     return messages
 

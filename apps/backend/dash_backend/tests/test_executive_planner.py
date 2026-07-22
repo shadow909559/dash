@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 
 from dash_backend.executive.planner import Planner

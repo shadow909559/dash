@@ -1,0 +1,62 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+build/
+dist/
+*.tsbuildinfo
+
+# Flutter
+flutter/
+.dart_tool/
+.packages
+*.iml
+
+# Node
+node_modules/
+
+# Docker
+Dockerfile*
+docker-compose*
+*.log
+
+# Docs
+docs/
+
+# Tests (coverage artifacts)
+coverage/
+.coverage*
+*.xml
+
+# Temp
+tmp/
+temp/
+*.tmp
+

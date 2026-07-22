@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import math
 import platform
 import shutil
@@ -13,7 +12,6 @@ import psutil
 
 from dash_backend.tools.base_tool import (
     BaseTool,
-    PermissionLevel,
     ToolContext,
     ToolParameter,
 )

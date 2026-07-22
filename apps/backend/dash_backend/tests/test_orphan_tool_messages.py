@@ -1,6 +1,4 @@
-import pytest
 
-from dash_backend.tools.tool_manager import ToolCallRequest
 
 
 def _is_valid_openai_tool_sequence(messages: list[dict]):

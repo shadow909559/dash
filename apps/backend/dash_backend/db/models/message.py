@@ -6,7 +6,7 @@ import enum
 import uuid
 from typing import Any
 
-from sqlalchemy import Enum, Float, ForeignKey, Index, Integer, Text
+from sqlalchemy import Enum, ForeignKey, Index, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -35,6 +35,7 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "messages"
     __table_args__ = (
         Index("ix_messages_conversation_id_created_at", "conversation_id", "created_at"),
+        Index("ix_messages_conversation_id_role_created_at", "conversation_id", "role", "created_at"),
     )
 
     conversation_id: Mapped[uuid.UUID] = mapped_column(

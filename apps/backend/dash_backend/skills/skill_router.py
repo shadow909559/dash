@@ -5,8 +5,6 @@ from dataclasses import dataclass
 
 from dash_backend.logging_config import get_logger
 from dash_backend.tools.tool_manager import get_tool_manager
-from dash_backend.tools.tool_manager import ToolCallRequest
-from dash_backend.tools.base_tool import ToolContext
 from dash_backend.skills.registry import SkillRegistry
 
 

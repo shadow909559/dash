@@ -17,7 +17,6 @@ from dash_backend.auth.dependencies import get_current_user
 from dash_backend.db.session import get_db_session
 from dash_backend.memory import service as memory_service
 from dash_backend.rag import service as rag_service
-from dash_backend.api.schemas.memory import MemoryRead as MemoryReadSchema
 from pydantic import BaseModel
 
 router = APIRouter()

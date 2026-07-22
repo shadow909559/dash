@@ -19,6 +19,7 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "websockets>=14.0",
     "httpx>=0.28.0",
+    "matplotlib>=3.11.1",
 ]
 
 [project.optional-dependencies]

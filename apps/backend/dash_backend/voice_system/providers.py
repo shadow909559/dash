@@ -7,8 +7,6 @@ noop adapters which are used when no real provider is configured.
 from __future__ import annotations
 
 from typing import Optional, Protocol, runtime_checkable
-import asyncio
-import base64
 
 from dash_backend.logging_config import get_logger
 import dash_backend.voice as core_voice

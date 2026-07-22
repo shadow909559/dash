@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/about/about_page.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/chat/chat_page.dart';
 import '../../features/dashboard/dashboard_page.dart';
+import '../../features/memory/memory_page.dart';
+import '../../features/notifications/notification_center.dart';
+import '../../features/projects/project_manager_page.dart';
 import '../../features/settings/settings_page.dart';
 import '../../features/splash/splash_page.dart';
+import '../../features/workspace/workspace_page.dart';
 import '../../shared/widgets/app_shell.dart';
 import 'app_routes.dart';
 
@@ -71,6 +76,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: AppRoutes.settings,
             name: 'settings',
             builder: (context, state) => const SettingsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.memory,
+            name: 'memory',
+            builder: (context, state) => const MemoryPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.about,
+            name: 'about',
+            builder: (context, state) => const AboutPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.workspace,
+            name: 'workspace',
+            builder: (context, state) => const WorkspacePage(),
+          ),
+          GoRoute(
+            path: AppRoutes.projects,
+            name: 'projects',
+            builder: (context, state) => const ProjectManagerPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.notifications,
+            name: 'notifications',
+            builder: (context, state) => const NotificationCenterPage(),
           ),
         ],
       ),

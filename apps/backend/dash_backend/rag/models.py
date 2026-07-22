@@ -5,9 +5,8 @@ from __future__ import annotations
 import uuid
 from typing import List
 
-from sqlalchemy import Integer, Text, String, JSON, Float, ForeignKey
+from sqlalchemy import Integer, Text, String, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from dash_backend.db.base import Base

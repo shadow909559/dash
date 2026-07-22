@@ -6,7 +6,7 @@ be persisted in the DB later (via memory or a new table) if desired.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Optional
 
 from dash_backend.logging_config import get_logger

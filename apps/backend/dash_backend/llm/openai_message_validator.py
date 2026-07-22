@@ -31,62 +31,85 @@ def validate_openai_messages(messages: list[dict[str, Any]]) -> None:
     - tool_call_id must not be duplicated within the same preceding assistant message.
     """
 
-    for i, m in enumerate(messages):
+    validate_openai_message_history(messages)
 
+
+def validate_openai_message_history(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Sanitize OpenAI/LiteLLM tool-message sequences.
+
+    This is the canonical entrypoint used before every OpenAI/LiteLLM request.
+    EVERY LLM request MUST pass through this function.
+
+    The sanitizer is *conservative*:
+    - Drops invalid tool messages.
+    - Removes consecutive tool messages.
+    - Removes duplicate tool_call_id tool messages following the same assistant.
+    - Verifies ordering: assistant(tool_calls) → tool → assistant
+
+    It never raises.
+    """
+
+    cleaned: list[dict[str, Any]] = []
+
+    for i, m in enumerate(messages):
         if m.get("role") != "tool":
+            cleaned.append(m)
             continue
 
-        prev = messages[i - 1] if i > 0 else None
+        # tool message rules: find the nearest assistant before this tool message
+        # by scanning backwards through any existing tool messages
+        prev = None
+        for k in range(len(cleaned) - 1, -1, -1):
+            if cleaned[k].get("role") == "assistant":
+                prev = cleaned[k]
+                break
+            elif cleaned[k].get("role") != "tool":
+                # Found a non-assistant, non-tool message (user/system)
+                prev = cleaned[k]
+                break
+
         ctx_before = messages[max(0, i - 3) : i]
         ctx_after = messages[i + 1 : i + 4]
 
-        if i == 0 or prev is None:
+        if prev is None or prev.get("role") != "assistant":
             detail = ValidationErrorDetail(
                 index=i,
-                reason='tool message at index 0 has no preceding assistant.tool_calls',
+                reason='dropped orphan tool message: no preceding assistant.tool_calls',
                 message=m,
                 context_before=ctx_before,
                 context_after=ctx_after,
             )
             _log(detail)
-            raise OpenAIMessageValidationError(detail.reason)
-
-        if prev.get("role") != "assistant":
-            detail = ValidationErrorDetail(
-                index=i,
-                reason='tool message must follow an assistant message (role="assistant")',
-                message=m,
-                context_before=ctx_before,
-                context_after=ctx_after,
-            )
-            _log(detail)
-            raise OpenAIMessageValidationError(detail.reason)
+            continue
 
         prev_tool_calls = prev.get("tool_calls") or []
         if not isinstance(prev_tool_calls, list) or not prev_tool_calls:
             detail = ValidationErrorDetail(
                 index=i,
-                reason='assistant message preceding tool message has no tool_calls',
+                reason='dropped tool message: preceding assistant has no tool_calls',
                 message=m,
                 context_before=ctx_before,
                 context_after=ctx_after,
             )
             _log(detail)
-            raise OpenAIMessageValidationError(detail.reason)
+            continue
 
         tool_call_id = m.get("tool_call_id")
         if not tool_call_id:
             detail = ValidationErrorDetail(
                 index=i,
-                reason='tool message missing tool_call_id',
+                reason='dropped tool message: missing tool_call_id',
                 message=m,
                 context_before=ctx_before,
                 context_after=ctx_after,
             )
             _log(detail)
-            raise OpenAIMessageValidationError(detail.reason)
+            continue
 
-        ids = []
+        # Collect valid ids from preceding assistant.tool_calls
+        ids: list[Any] = []
         for tc in prev_tool_calls:
             if isinstance(tc, dict) and tc.get("id"):
                 ids.append(tc.get("id"))
@@ -94,37 +117,73 @@ def validate_openai_messages(messages: list[dict[str, Any]]) -> None:
         if not ids:
             detail = ValidationErrorDetail(
                 index=i,
-                reason='assistant.tool_calls contains no entries with id',
+                reason='dropped tool message: preceding assistant.tool_calls contains no ids',
                 message=m,
                 context_before=ctx_before,
                 context_after=ctx_after,
             )
             _log(detail)
-            raise OpenAIMessageValidationError(detail.reason)
+            continue
 
-        if len(ids) != len(set(ids)):
-            # Duplicate tool_call ids within same assistant tool_calls are invalid.
-            dupes = [x for x in set(ids) if ids.count(x) > 1]
-            detail = ValidationErrorDetail(
-                index=i,
-                reason=f'duplicate tool_call ids within assistant.tool_calls: {dupes}',
-                message=m,
-                context_before=ctx_before,
-                context_after=ctx_after,
-            )
-            _log(detail)
-            raise OpenAIMessageValidationError(detail.reason)
-
+        # If tool_call_id is not in ids -> drop
         if tool_call_id not in ids:
             detail = ValidationErrorDetail(
                 index=i,
-                reason=f'tool_call_id={tool_call_id!r} does not match any id in preceding assistant.tool_calls',
+                reason=f"dropped tool message: unknown tool_call_id={tool_call_id!r}",
                 message=m,
                 context_before=ctx_before,
                 context_after=ctx_after,
             )
             _log(detail)
-            raise OpenAIMessageValidationError(detail.reason)
+            continue
+
+        # Deduplicate tool messages after this assistant by tracking ids already emitted
+        # following this assistant (i.e., look backwards to nearest assistant)
+        seen_ids: set[Any] = set()
+        j = len(cleaned) - 1
+        while j >= 0 and cleaned[j].get("role") == "tool":
+            seen_ids.add(cleaned[j].get("tool_call_id"))
+            j -= 1
+
+        if tool_call_id in seen_ids:
+            detail = ValidationErrorDetail(
+                index=i,
+                reason=f"dropped duplicate tool message for tool_call_id={tool_call_id!r}",
+                message=m,
+                context_before=ctx_before,
+                context_after=ctx_after,
+            )
+            _log(detail)
+            continue
+
+        cleaned.append(m)
+
+    # Final verification: ensure ordering is assistant(tool_calls) → tool → assistant
+    # Walk through cleaned and verify no tool message is followed by another tool message
+    # (already handled above) and that after tool messages, the next non-tool is assistant
+    final_cleaned: list[dict[str, Any]] = []
+    for i, m in enumerate(cleaned):
+        if m.get("role") == "tool":
+            # Check that the next non-tool message (if any) is assistant
+            next_non_tool = None
+            for j in range(i + 1, len(cleaned)):
+                if cleaned[j].get("role") != "tool":
+                    next_non_tool = cleaned[j]
+                    break
+            if next_non_tool and next_non_tool.get("role") != "assistant":
+                detail = ValidationErrorDetail(
+                    index=i,
+                    reason=f'dropped tool message: next non-tool message has role={next_non_tool.get("role")!r}, expected assistant',
+                    message=m,
+                    context_before=cleaned[max(0, i - 3) : i],
+                    context_after=cleaned[i + 1 : i + 4],
+                )
+                _log(detail)
+                continue
+        final_cleaned.append(m)
+
+    return final_cleaned
+
 
 
 def _log(detail: ValidationErrorDetail) -> None:

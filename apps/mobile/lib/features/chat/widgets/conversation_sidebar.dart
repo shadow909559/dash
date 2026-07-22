@@ -5,7 +5,12 @@ import '../models/conversation.dart';
 import '../providers/conversation_provider.dart';
 
 class ConversationSidebar extends ConsumerStatefulWidget {
-  const ConversationSidebar({super.key});
+  const ConversationSidebar({
+    super.key,
+    this.onConversationSelected,
+  });
+
+  final VoidCallback? onConversationSelected;
 
   @override
   ConsumerState<ConversationSidebar> createState() =>
@@ -240,6 +245,7 @@ class _ConversationSidebarState extends ConsumerState<ConversationSidebar> {
         onTap: () {
           ref.read(activeConversationIdProvider.notifier).state =
               conversation.id;
+          widget.onConversationSelected?.call();
         },
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

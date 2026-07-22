@@ -7,7 +7,6 @@ extended to use webrtcvad or other native implementations.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 import numpy as _np
 
 from dash_backend.logging_config import get_logger

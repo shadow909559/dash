@@ -1,12 +1,22 @@
+"""Alembic environment configuration.
+
+This file handles:
+- Model discovery (imports dash_backend.db to register models on Base.metadata)
+- Database URL resolution (env var, CLI arg, or settings default)
+- Sync driver conversion (asyncpg -> psycopg for Alembic sync engine)
+- Online and offline migration modes
+"""
+
 from __future__ import annotations
 
-import asyncio
 import logging
 from logging.config import fileConfig
-from typing import Any
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import create_engine, inspect, pool, text
+
+# Import all models so they register on Base.metadata
+import dash_backend.db  # noqa: F401
 
 # Import your app's metadata
 from dash_backend.db.base import Base
@@ -18,56 +28,69 @@ config = context.config
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
-logger = logging.getLogger('alembic.env')
+logger = logging.getLogger("alembic.env")
 
 # Provide Alembic with your model's MetaData object:
 target_metadata = Base.metadata
 
 
+def to_sync_dsn(url: str) -> str:
+    """Convert async DSN to a sync DSN Alembic can use.
+
+    Alembic runs migrations with a synchronous SQLAlchemy engine.
+    We must swap async drivers for their sync equivalents.
+    """
+    replacements = [
+        ("postgresql+asyncpg://", "postgresql+psycopg://"),
+        ("sqlite+aiosqlite://", "sqlite://"),
+        ("postgresql+asyncp://", "postgresql+psycopg://"),
+    ]
+    for async_prefix, sync_prefix in replacements:
+        if url.startswith(async_prefix):
+            return url.replace(async_prefix, sync_prefix, 1)
+    return url
+
+
 def get_database_url() -> str:
-    # Priority:
-    # 1) alembic -x database_url=...
-    # 2) DASH_DATABASE_URL env var
-    # 3) dash_backend default settings.database_url
-    x_args = context.get_x_argument(as_dictionary=True)
-    if isinstance(x_args, dict):
-        override = x_args.get('database_url')
-        if override:
-            return override
+    """Resolve the database URL from CLI arg, env var, or settings default."""
+    # Priority 1: CLI argument (-x database_url=...)
+    try:
+        x_args = context.get_x_argument(as_dictionary=True)
+        if isinstance(x_args, dict):
+            override = x_args.get("database_url")
+            if override:
+                return override
+    except Exception:
+        pass
 
-    settings = get_settings()
-    return settings.database_url
+    # Priority 2: Environment variable or settings default
+    try:
+        settings = get_settings()
+        return settings.database_url
+    except Exception:
+        pass
 
-
-def _configure_context(connection: Any, *, target_metadata: Any) -> None:
-    naming_convention = config.get_section(config.config_ini_section).get('naming_convention') if config.config_ini_section else None
-
-    context.configure(
-        connection=connection,
-        target_metadata=target_metadata,
-        compare_type=True,
-        render_as_batch=False,
-        # Always use naming conventions if provided by SQLAlchemy metadata.
-        # (Our project Base.metadata should already include it if defined.)
-        process_revision_directives=None,
-        **{
-            'version_table': config.get_main_option('version_table', 'alembic_version')
-        },
-        literal_binds=True,
-        dialect_opts={'paramstyle': 'named'},
-    )
+    # Priority 3: Hardcoded fallback for development
+    return "sqlite:///dash_dev.db"
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode."""
-    url = get_database_url()
+    """Run migrations in 'offline' (no DB connection) mode.
+
+    SQL is emitted to stdout instead of being executed
+    against a live database.
+    """
+    url = to_sync_dsn(get_database_url())
+    logger.info("Offline migration DSN: %s", url)
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
-        dialect_opts={'paramstyle': 'named'},
+        dialect_opts={"paramstyle": "named"},
         compare_type=True,
-        version_table=config.get_main_option('version_table', 'alembic_version'),
+        version_table=config.get_main_option(
+            "version_table", "alembic_version"
+        ),
     )
 
     with context.begin_transaction():
@@ -75,19 +98,39 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
+    """Run migrations in 'online' mode against a live database.
 
-    configuration = config.get_section(config.config_ini_section) or {}
-    configuration['sqlalchemy.url'] = get_database_url()
+    Creates a synchronous engine using the configured URL, then
+    executes all pending migrations within a transaction.
+    """
+    url = to_sync_dsn(get_database_url())
+    logger.info("Online migration DSN: %s", url)
 
-    connectable = engine_from_config(
-        configuration,
-        prefix='sqlalchemy.',
-        poolclass=pool.NullPool,
-    )
+    connectable = create_engine(url, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
-        _configure_context(connection, target_metadata=target_metadata)
+        # Only widen version_num column if alembic_version already exists.
+        # On a fresh DB the table will not exist yet.
+        if connection.dialect.name == "postgresql":
+            inspector = inspect(connection)
+            if "alembic_version" in inspector.get_table_names():
+                connection.execute(
+                    text(
+                        "ALTER TABLE alembic_version "
+                        "ALTER COLUMN version_num TYPE VARCHAR(64)"
+                    )
+                )
+                connection.commit()
+
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            version_table=config.get_main_option(
+                "version_table", "alembic_version"
+            ),
+        )
+
         with context.begin_transaction():
             context.run_migrations()
 
@@ -96,4 +139,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-

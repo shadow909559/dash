@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
 
 from dash_backend.tools.tool_registry import get_registry
 

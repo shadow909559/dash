@@ -306,7 +306,6 @@ class CopyTextTool(BaseTool):
         try:
             if IS_WINDOWS:
                 import ctypes
-                from ctypes import wintypes
 
                 CF_UNICODETEXT = 13
                 user32 = ctypes.windll.user32
@@ -345,7 +344,6 @@ class ReadClipboardTool(BaseTool):
         try:
             if IS_WINDOWS:
                 import ctypes
-                from ctypes import wintypes
 
                 CF_UNICODETEXT = 13
                 user32 = ctypes.windll.user32

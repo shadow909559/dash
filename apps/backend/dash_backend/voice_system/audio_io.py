@@ -11,7 +11,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, List, Callable
 import asyncio
-import time
 
 from dash_backend.logging_config import get_logger
 

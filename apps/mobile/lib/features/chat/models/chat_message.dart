@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-enum MessageStatus { sending, sent, streaming, complete, error }
+enum MessageStatus { pending, sending, sent, streaming, complete, error }
 
 enum MessageRole { user, assistant }
 

@@ -1,0 +1,28 @@
+# Development Dockerfile for DASH Backend
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    postgresql-client \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install dev dependencies
+RUN pip install --no-cache-dir \
+    pytest pytest-asyncio pytest-cov \
+    httpx aiosqlite \
+    ruff black mypy
+
+# Copy application code
+COPY . .
+
+# Expose port and enable hot reload
+EXPOSE 8000
+CMD ["uvicorn", "dash_backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+

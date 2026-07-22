@@ -9,11 +9,9 @@ worker/cron system is recommended.
 from __future__ import annotations
 
 import asyncio
-import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from dash_backend.db.session import AsyncSessionLocal
 from dash_backend.automation import service
@@ -40,7 +38,7 @@ class AutomationScheduler:
                 logger.exception("Failed to fetch automations")
                 return
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             for a in autos:
                 try:
                     key = str(a.id)

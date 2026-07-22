@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: dash-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dash
+      POSTGRES_USER: dash
+      POSTGRES_PASSWORD: dash
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dash"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: dash-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile.dev
+    container_name: dash-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DASH_ENV: development
+      DASH_DEBUG: "true"
+      DASH_DATABASE_URL: postgresql+asyncpg://dash:dash@postgres:5432/dash
+      DASH_REDIS_URL: redis://redis:6379/0
+      DASH_JWT_SECRET_KEY: development-secret-key-change-in-production
+      DASH_CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    volumes:
+      - ./apps/backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: nginx:alpine
+    container_name: dash-frontend
+    ports:
+      - "80:80"
+    volumes:
+      - ./apps/mobile/build/web:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+

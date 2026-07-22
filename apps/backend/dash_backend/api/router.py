@@ -10,6 +10,7 @@ from dash_backend.api.routes.websocket import router as websocket_router
 from dash_backend.rag.router import router as rag_router
 from dash_backend.automation.router import router as automation_router
 from dash_backend.personal import router as personal_router
+from dash_backend.sync.router import router as sync_router
 
 
 api_router = APIRouter()
@@ -59,5 +60,10 @@ api_router.include_router(
 api_router.include_router(
     websocket_router,
     tags=["websocket"],
+)
+
+api_router.include_router(
+    sync_router,
+    tags=["sync"],
 )
 
