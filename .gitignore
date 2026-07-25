@@ -50,3 +50,6 @@ __pycache__/
 
 # Node
 node_modules/
+
+# Local desktop backup
+apps/desktop_backup_v1/
