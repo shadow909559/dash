@@ -23,8 +23,8 @@ async def create_automation(
     name: str,
     description: str | None,
     trigger_type: str,
-    schedule: str,
-    tool_name: str,
+    schedule: str | None = None,
+    tool_name: str = "",
     tool_arguments: dict[str, Any] | None = None,
     enabled: bool = True,
 ) -> models.Automation:

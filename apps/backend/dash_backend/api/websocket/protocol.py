@@ -128,6 +128,7 @@ class ChatDoneMessage(WSBaseMessage):
     type: Literal["chat.done"] = "chat.done"
 
     message_id: str
+    conversation_id: str | None = None
 
 
 class ChatErrorMessage(WSBaseMessage):

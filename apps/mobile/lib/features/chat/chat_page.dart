@@ -2,13 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/services/websocket_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/dash_theme.dart';
+import '../../core/widgets/animated_background.dart';
+import '../../core/widgets/glassmorphism.dart';
 import 'models/chat_message.dart';
 import 'providers/chat_provider.dart';
 import 'providers/conversation_provider.dart';
+import 'conversation_history_page.dart';
 import 'widgets/conversation_sidebar.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -131,13 +136,28 @@ class _ChatPageState extends ConsumerState<ChatPage>
           ),
         Expanded(
           child: Scaffold(
+            backgroundColor: Colors.transparent,
             appBar: _buildAppBar(context, isWideScreen),
-            body: Column(
+            body: Stack(
               children: [
-                _buildConnectionBar(context),
-                Expanded(child: _buildMessagesArea(context)),
-                _buildTypingIndicator(context),
-                _buildInputArea(context),
+                // Animated Background
+                Positioned.fill(
+                  child: AnimatedBackground(
+                    type: BackgroundType.particles,
+                    primaryColor: DashColors.electricBlue,
+                    secondaryColor: DashColors.purpleGlow,
+                    opacity: 0.08,
+                  ),
+                ),
+                // Main Content
+                Column(
+                  children: [
+                    _buildConnectionBar(context),
+                    Expanded(child: _buildMessagesArea(context)),
+                    _buildTypingIndicator(context),
+                    _buildInputArea(context),
+                  ],
+                ),
               ],
             ),
           ),
@@ -149,8 +169,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   PreferredSizeWidget _buildAppBar(BuildContext context, bool isWideScreen) {
     final theme = Theme.of(context);
     final activeId = ref.watch(activeConversationIdProvider);
+    final chatState = ref.watch(chatProvider);
 
     return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       leading: isWideScreen
           ? null
           : IconButton(
@@ -169,25 +192,59 @@ class _ChatPageState extends ConsumerState<ChatPage>
               tooltip: 'Toggle sidebar',
             ),
           const SizedBox(width: 4),
-          Text(
-            activeId != null ? 'Chat' : 'New Chat',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: DashGradients.blue,
+                  borderRadius: BorderRadius.circular(DashSpacing.radiusSm),
+                  boxShadow: DashElevation.blueGlow(opacity: 0.3),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: DashColors.pureWhite,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                activeId != null ? 'Chat' : 'New Chat',
+                style: DashTypography.titleMedium.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: DashColors.softWhite,
+                ),
+              ),
+            ],
           ),
         ],
       ),
       actions: [
-        if (ref.watch(chatProvider).isStreaming)
-          TextButton.icon(
-            onPressed: () =>
-                ref.read(chatProvider.notifier).cancelStreaming(),
-            icon: const Icon(Icons.stop, size: 18),
-            label: const Text('Stop'),
-            style: TextButton.styleFrom(
-              foregroundColor: theme.colorScheme.error,
+        if (chatState.isStreaming)
+          GlassButton(
+            onPressed: () => ref.read(chatProvider.notifier).cancelStreaming(),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            activeColor: DashColors.errorRed,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.stop, size: 16),
+                const SizedBox(width: 4),
+                Text('Stop', style: DashTypography.labelSmall),
+              ],
             ),
           ),
+        IconButton(
+          icon: const Icon(Icons.history_rounded),
+          tooltip: 'Conversation history',
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const ConversationHistoryPage(),
+              ),
+            );
+          },
+        ),
         IconButton(
           icon: const Icon(Icons.delete_outline),
           tooltip: 'Clear chat',
@@ -211,64 +268,67 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
     switch (wsState.status) {
       case WebSocketStatus.connecting:
-        barColor = Colors.blue.shade700;
+        barColor = DashColors.electricBlue;
         text = 'Connecting...';
         icon = Icons.cloud_upload;
         break;
       case WebSocketStatus.reconnecting:
-        barColor = Colors.orange.shade700;
+        barColor = DashColors.warningAmber;
         text = 'Reconnecting...';
         icon = Icons.sync;
         break;
       case WebSocketStatus.error:
-        barColor = Colors.red.shade700;
+        barColor = DashColors.errorRed;
         text = chatState.errorMessage ?? 'Connection error';
         icon = Icons.error;
         break;
       default:
-        barColor = Colors.grey.shade700;
+        barColor = DashColors.textGray;
         text = 'Offline';
         icon = Icons.cloud_off;
     }
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      color: barColor,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            barColor.withValues(alpha: 0.8),
+            barColor.withValues(alpha: 0.4),
+          ],
+        ),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (wsState.status == WebSocketStatus.connecting ||
               wsState.status == WebSocketStatus.reconnecting)
-            const SizedBox(
+            SizedBox(
               width: 14,
               height: 14,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                valueColor: AlwaysStoppedAnimation<Color>(DashColors.pureWhite),
               ),
             )
           else
-            Icon(icon, color: Colors.white, size: 14),
+            Icon(icon, color: DashColors.pureWhite, size: 14),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+              style: DashTypography.bodySmall.copyWith(
+                color: DashColors.pureWhite,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
           if (wsState.status == WebSocketStatus.error)
-            TextButton(
-              onPressed: () =>
-                  ref.read(webSocketServiceProvider.notifier).connect(),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text('Retry', style: TextStyle(fontSize: 12)),
+            GlassButton(
+              onPressed: () => ref.read(webSocketServiceProvider.notifier).connect(),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Text('Retry', style: DashTypography.labelSmall),
             ),
         ],
       ),
@@ -317,6 +377,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     ),
                   );
                 },
+                onRegenerate: !message.isUser && !message.isStreaming && message.status == MessageStatus.complete
+                    ? () {
+                        ref.read(chatProvider.notifier).regenerate(message);
+                      }
+                    : null,
+                onRetry: message.hasError
+                    ? () {
+                        ref.read(chatProvider.notifier).retryMessage(message);
+                      }
+                    : null,
+                onEdit: message.isUser && !message.isStreaming
+                    ? () {
+                        _showEditDialog(context, message);
+                      }
+                    : null,
               );
             },
           ),
@@ -412,8 +487,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
-  Widget _buildEmptyState(ThemeData theme) {
-    final colorScheme = theme.colorScheme;
+Widget _buildEmptyState(ThemeData theme) {
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Center(
       child: Padding(
@@ -490,15 +565,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
       padding: EdgeInsets.only(
         left: 16,
         right: 16,
-        top: 8,
-        bottom: MediaQuery.of(context).padding.bottom + 8,
+        top: 12,
+        bottom: MediaQuery.of(context).padding.bottom + 12,
       ),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: DashColors.glassFrost.withValues(alpha: 0.1),
         border: Border(
           top: BorderSide(
-            color: colorScheme.outlineVariant,
-            width: 0.5,
+            color: DashColors.glassFrost.withValues(alpha: 0.2),
+            width: 1,
           ),
         ),
       ),
@@ -509,31 +584,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
             child: KeyboardListener(
               focusNode: FocusNode(),
               onKeyEvent: _handleKeyEvent,
-              child: TextField(
+              child: GlassInput(
                 controller: _controller,
                 focusNode: _focusNode,
                 maxLines: 6,
                 minLines: 1,
-                textInputAction: TextInputAction.newline,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: InputDecoration(
-                  hintText: 'Type a message...',
-                  filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                ),
-                style: theme.textTheme.bodyMedium,
+                hintText: 'Type a message to DASH AI...',
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           _buildSendButton(chatState, colorScheme),
         ],
       ),
@@ -541,32 +602,31 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Widget _buildSendButton(ChatState chatState, ColorScheme colorScheme) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([]),
-      builder: (context, child) {
-        final isStreaming = chatState.isStreaming;
-        return IconButton(
-          onPressed: isStreaming
-              ? () => ref.read(chatProvider.notifier).cancelStreaming()
-              : _sendMessage,
-          icon: Icon(
-            isStreaming ? Icons.stop : Icons.send_rounded,
-            size: isStreaming ? 20 : 22,
-          ),
-          style: IconButton.styleFrom(
-            backgroundColor: isStreaming
-                ? colorScheme.errorContainer
-                : colorScheme.primary,
-            foregroundColor: isStreaming
-                ? colorScheme.onErrorContainer
-                : colorScheme.onPrimary,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.all(12),
-          ),
-        );
-      },
+    final isStreaming = chatState.isStreaming;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: isStreaming
+            ? LinearGradient(colors: [
+                DashColors.errorRed.withValues(alpha: 0.8),
+                DashColors.errorRed,
+              ])
+            : DashGradients.blue,
+        borderRadius: BorderRadius.circular(DashSpacing.radiusLg),
+        boxShadow: isStreaming
+            ? DashElevation.redGlow(opacity: 0.4)
+            : DashElevation.blueGlow(opacity: 0.4),
+      ),
+      child: IconButton(
+        onPressed: isStreaming
+            ? () => ref.read(chatProvider.notifier).cancelStreaming()
+            : _sendMessage,
+        icon: Icon(
+          isStreaming ? Icons.stop : Icons.send_rounded,
+          size: isStreaming ? 20 : 22,
+          color: DashColors.pureWhite,
+        ),
+        padding: const EdgeInsets.all(14),
+      ),
     );
   }
 
@@ -593,6 +653,35 @@ class _ChatPageState extends ConsumerState<ChatPage>
       ),
     );
   }
+
+  void _showEditDialog(BuildContext context, ChatMessage message) {
+    final controller = TextEditingController(text: message.content);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit message'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 4,
+          decoration: const InputDecoration(hintText: 'Enter new prompt'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final newContent = controller.text.trim();
+              if (newContent.isNotEmpty) {
+                ref.read(chatProvider.notifier).editMessage(message, newContent);
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    ).then((_) => controller.dispose());
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -604,11 +693,17 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.isLast,
     required this.onCopy,
+    this.onRegenerate,
+    this.onRetry,
+    this.onEdit,
   });
 
   final ChatMessage message;
   final bool isLast;
   final VoidCallback onCopy;
+  final VoidCallback? onRegenerate;
+  final VoidCallback? onRetry;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -618,8 +713,8 @@ class _MessageBubble extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.only(
-        top: 4,
-        bottom: isLast ? 4 : 2,
+        top: 8,
+        bottom: isLast ? 8 : 4,
       ),
       child: Column(
         crossAxisAlignment:
@@ -633,8 +728,7 @@ class _MessageBubble extends StatelessWidget {
               if (!isUser) ...[
                 _Avatar(
                   icon: Icons.auto_awesome,
-                  color: chatTheme?.assistantAvatarColor ??
-                      theme.colorScheme.secondaryContainer,
+                  color: DashColors.electricBlue,
                   size: 28,
                 ),
                 const SizedBox(width: 8),
@@ -652,23 +746,52 @@ class _MessageBubble extends StatelessWidget {
                 const SizedBox(width: 8),
                 _Avatar(
                   icon: Icons.person,
-                  color: chatTheme?.userAvatarColor ??
-                      theme.colorScheme.primaryContainer,
+                  color: DashColors.purpleGlow,
                   size: 28,
                 ),
               ],
             ],
+          ).animate().fadeIn(duration: DashDuration.fast).slideX(
+            begin: isUser ? 0.1 : -0.1,
+            curve: DashCurves.easeOut,
           ),
           Padding(
             padding: EdgeInsets.only(
               left: isUser ? 0 : 36,
               right: isUser ? 36 : 0,
-              top: 2,
+              top: 4,
             ),
             child: _buildTimestamp(context),
           ),
+          if (!isLast)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 4),
+              child: _buildActions(context),
+            ),
         ],
       ),
+    );
+  }
+
+  Widget _buildActions(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisAlignment: message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+      children: [
+        _ActionIcon(Icons.copy_rounded, 'Copy', onCopy, theme),
+        const SizedBox(width: 4),
+        if (onEdit != null) ...[
+          _ActionIcon(Icons.edit_rounded, 'Edit', onEdit!, theme),
+          const SizedBox(width: 4),
+        ],
+        if (onRetry != null) ...[
+          _ActionIcon(Icons.refresh_rounded, 'Retry', onRetry!, theme, isError: message.hasError),
+          const SizedBox(width: 4),
+        ],
+        if (onRegenerate != null) ...[
+          _ActionIcon(Icons.refresh_rounded, 'Regenerate', onRegenerate!, theme),
+        ],
+      ],
     );
   }
 
@@ -758,6 +881,34 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
+class _ActionIcon extends StatelessWidget {
+  const _ActionIcon(this.icon, this.tooltip, this.onTap, this.theme, {this.isError = false});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final ThemeData theme;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: Icon(
+          icon,
+          size: 14,
+          color: isError
+              ? theme.colorScheme.error
+              : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+        ),
+      ),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Bubble Content
 // ─────────────────────────────────────────────────────────────────────
@@ -780,32 +931,39 @@ class _BubbleContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bgColor = isUser
-        ? chatTheme?.userBubbleColor ?? theme.colorScheme.primaryContainer
-        : chatTheme?.assistantBubbleColor ?? const Color(0xFFF0F4F8);
+        ? DashColors.electricBlue.withValues(alpha: 0.3)
+        : DashColors.glassFrost.withValues(alpha: 0.15);
     final textColor = isUser
-        ? chatTheme?.userBubbleTextColor ?? theme.colorScheme.onPrimaryContainer
-        : chatTheme?.assistantBubbleTextColor ?? theme.colorScheme.onSurface;
-    final shadowColor =
-        chatTheme?.bubbleShadowColor ?? Colors.black.withValues(alpha: 0.06);
+        ? DashColors.pureWhite
+        : DashColors.softWhite;
+    final borderColor = isUser
+        ? DashColors.electricBlue.withValues(alpha: 0.5)
+        : DashColors.glassFrost.withValues(alpha: 0.3);
 
     return Container(
       constraints: BoxConstraints(
         maxWidth: MediaQuery.of(context).size.width * 0.75,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.only(
-          topLeft: const Radius.circular(16),
-          topRight: const Radius.circular(16),
-          bottomLeft: Radius.circular(isUser ? 16 : 4),
-          bottomRight: Radius.circular(isUser ? 4 : 16),
+          topLeft: const Radius.circular(DashSpacing.radiusLg),
+          topRight: const Radius.circular(DashSpacing.radiusLg),
+          bottomLeft: Radius.circular(isUser ? DashSpacing.radiusLg : DashSpacing.radiusSm),
+          bottomRight: Radius.circular(isUser ? DashSpacing.radiusSm : DashSpacing.radiusLg),
+        ),
+        border: Border.all(
+          color: borderColor,
+          width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: shadowColor,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: isUser
+                ? DashColors.electricBlue.withValues(alpha: 0.2)
+                : Colors.black.withValues(alpha: 0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -816,13 +974,12 @@ class _BubbleContent extends StatelessWidget {
             _StreamingContent(
               content: message.content,
               textColor: textColor,
-              cursorColor:
-                  chatTheme?.streamingCursorColor ?? theme.colorScheme.primary,
+              cursorColor: DashColors.electricBlue,
             )
           else if (isUser)
             Text(
               message.content,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: DashTypography.bodyMedium.copyWith(
                 color: textColor,
               ),
             )
@@ -830,30 +987,39 @@ class _BubbleContent extends StatelessWidget {
             MarkdownBody(
               data: message.content,
               styleSheet: MarkdownStyleSheet(
-                p: theme.textTheme.bodyMedium?.copyWith(color: textColor),
-                h1: theme.textTheme.titleLarge?.copyWith(color: textColor),
-                h2: theme.textTheme.titleMedium?.copyWith(color: textColor),
-                h3: theme.textTheme.titleSmall?.copyWith(color: textColor),
+                p: DashTypography.bodyMedium.copyWith(color: textColor),
+                h1: DashTypography.headlineSmall.copyWith(color: textColor),
+                h2: DashTypography.titleLarge.copyWith(color: textColor),
+                h3: DashTypography.titleMedium.copyWith(color: textColor),
                 code: TextStyle(
-                  backgroundColor: chatTheme?.codeBlockBackground ??
-                      const Color(0xFF1E1E2E),
-                  color: const Color(0xFFE0E0E0),
+                  backgroundColor: DashColors.carbonBlack.withValues(alpha: 0.5),
+                  color: DashColors.neonCyan,
                   fontSize: 13,
+                  fontFamily: 'monospace',
                 ),
                 codeblockDecoration: BoxDecoration(
-                  color: chatTheme?.codeBlockBackground ??
-                      const Color(0xFF1E1E2E),
-                  borderRadius: BorderRadius.circular(8),
+                  color: DashColors.carbonBlack.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(DashSpacing.radiusMd),
+                  border: Border.all(
+                    color: DashColors.electricBlue.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
                 ),
                 blockquoteDecoration: BoxDecoration(
+                  color: DashColors.electricBlue.withValues(alpha: 0.1),
                   border: Border(
                     left: BorderSide(
-                      color: theme.colorScheme.primary,
+                      color: DashColors.electricBlue,
                       width: 3,
                     ),
                   ),
+                  borderRadius: BorderRadius.circular(DashSpacing.radiusSm),
                 ),
                 listBullet: TextStyle(color: textColor),
+                a: TextStyle(
+                  color: DashColors.electricBlue,
+                  decoration: TextDecoration.underline,
+                ),
               ),
               onTapLink: (text, href, title) {
                 if (href != null) {
@@ -869,11 +1035,11 @@ class _BubbleContent extends StatelessWidget {
                 onTap: onCopy,
                 borderRadius: BorderRadius.circular(4),
                 child: Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.only(top: 6),
                   child: Icon(
                     Icons.content_copy,
                     size: 14,
-                    color: textColor.withValues(alpha: 0.4),
+                    color: textColor.withValues(alpha: 0.5),
                   ),
                 ),
               ),
@@ -1066,4 +1232,3 @@ class _Avatar extends StatelessWidget {
     );
   }
 }
-

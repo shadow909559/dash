@@ -1,0 +1,948 @@
+INFO  [alembic.env] Online migration DSN: postgresql+psycopg://dash:dash@localhost:5432/dash
+INFO  [alembic.env] Online migration DSN: postgresql+psycopg://dash:dash@localhost:5432/dash
+INFO  [sqlalchemy.engine.Engine] select pg_catalog.version()
+INFO  [sqlalchemy.engine.Engine] select pg_catalog.version()
+INFO  [sqlalchemy.engine.Engine] [raw sql] {}
+INFO  [sqlalchemy.engine.Engine] [raw sql] {}
+INFO  [sqlalchemy.engine.Engine] select current_schema()
+INFO  [sqlalchemy.engine.Engine] select current_schema()
+INFO  [sqlalchemy.engine.Engine] [raw sql] {}
+INFO  [sqlalchemy.engine.Engine] [raw sql] {}
+INFO  [sqlalchemy.engine.Engine] show standard_conforming_strings
+INFO  [sqlalchemy.engine.Engine] show standard_conforming_strings
+INFO  [sqlalchemy.engine.Engine] [raw sql] {}
+INFO  [sqlalchemy.engine.Engine] [raw sql] {}
+INFO  [sqlalchemy.engine.Engine] BEGIN (implicit)
+INFO  [sqlalchemy.engine.Engine] BEGIN (implicit)
+INFO  [sqlalchemy.engine.Engine] SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s::VARCHAR, %(param_2)s::VARCHAR]) AND pg_catalog.pg_class.relpersistence != %(relpersistence_1)s::VARCHAR AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s::VARCHAR
+INFO  [sqlalchemy.engine.Engine] SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s::VARCHAR, %(param_2)s::VARCHAR]) AND pg_catalog.pg_class.relpersistence != %(relpersistence_1)s::VARCHAR AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s::VARCHAR
+INFO  [sqlalchemy.engine.Engine] [generated in 0.00034s] {'param_1': 'r', 'param_2': 'p', 'relpersistence_1': 't', 'nspname_1': 'pg_catalog'}
+INFO  [sqlalchemy.engine.Engine] [generated in 0.00034s] {'param_1': 'r', 'param_2': 'p', 'relpersistence_1': 't', 'nspname_1': 'pg_catalog'}
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [sqlalchemy.engine.Engine] SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s::VARCHAR AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s::VARCHAR, %(param_2)s::VARCHAR, %(param_3)s::VARCHAR, %(param_4)s::VARCHAR, %(param_5)s::VARCHAR]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s::VARCHAR
+INFO  [sqlalchemy.engine.Engine] SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s::VARCHAR AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s::VARCHAR, %(param_2)s::VARCHAR, %(param_3)s::VARCHAR, %(param_4)s::VARCHAR, %(param_5)s::VARCHAR]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s::VARCHAR
+INFO  [sqlalchemy.engine.Engine] [generated in 0.00018s] {'table_name': 'alembic_version', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+INFO  [sqlalchemy.engine.Engine] [generated in 0.00018s] {'table_name': 'alembic_version', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+INFO  [sqlalchemy.engine.Engine] SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s::VARCHAR AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s::VARCHAR, %(param_2)s::VARCHAR, %(param_3)s::VARCHAR, %(param_4)s::VARCHAR, %(param_5)s::VARCHAR]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s::VARCHAR
+INFO  [sqlalchemy.engine.Engine] SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s::VARCHAR AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s::VARCHAR, %(param_2)s::VARCHAR, %(param_3)s::VARCHAR, %(param_4)s::VARCHAR, %(param_5)s::VARCHAR]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s::VARCHAR
+INFO  [sqlalchemy.engine.Engine] [cached since 0.002194s ago] {'table_name': 'alembic_version', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+INFO  [sqlalchemy.engine.Engine] [cached since 0.002194s ago] {'table_name': 'alembic_version', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE alembic_version (
+	version_num VARCHAR(32) NOT NULL, 
+	CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE alembic_version (
+	version_num VARCHAR(32) NOT NULL, 
+	CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00011s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00011s] {}
+INFO  [alembic.runtime.migration] Running upgrade  -> 308955bf55b0, Initial schema: create all core tables
+INFO  [alembic.runtime.migration] Running upgrade  -> 308955bf55b0, Initial schema: create all core tables
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE agents (
+	name VARCHAR(128) NOT NULL, 
+	description TEXT, 
+	system_prompt TEXT, 
+	allowed_tools JSON, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE agents (
+	name VARCHAR(128) NOT NULL, 
+	description TEXT, 
+	system_prompt TEXT, 
+	allowed_tools JSON, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE approvals (
+	confirmation_token VARCHAR(255) NOT NULL, 
+	summary TEXT, 
+	user_id UUID, 
+	metadata JSON, 
+	resolved BOOLEAN NOT NULL, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (confirmation_token)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE approvals (
+	confirmation_token VARCHAR(255) NOT NULL, 
+	summary TEXT, 
+	user_id UUID, 
+	metadata JSON, 
+	resolved BOOLEAN NOT NULL, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (confirmation_token)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE documents (
+	user_id UUID NOT NULL, 
+	filename VARCHAR(255), 
+	content TEXT NOT NULL, 
+	metadata JSON, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE documents (
+	user_id UUID NOT NULL, 
+	filename VARCHAR(255), 
+	content TEXT NOT NULL, 
+	metadata JSON, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00026s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00026s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_documents_user_id ON documents (user_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_documents_user_id ON documents (user_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00014s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00014s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE execution_history (
+	task_id UUID NOT NULL, 
+	result JSON, 
+	duration_ms FLOAT, 
+	success BOOLEAN, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE execution_history (
+	task_id UUID NOT NULL, 
+	result JSON, 
+	duration_ms FLOAT, 
+	success BOOLEAN, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00020s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00020s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE executive_tasks (
+	goal_id UUID NOT NULL, 
+	name VARCHAR(255) NOT NULL, 
+	description TEXT, 
+	status VARCHAR(50) NOT NULL, 
+	attempt INTEGER NOT NULL, 
+	metadata JSON, 
+	claimed_by UUID, 
+	claimed_at TIMESTAMP WITHOUT TIME ZONE, 
+	last_heartbeat TIMESTAMP WITHOUT TIME ZONE, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE executive_tasks (
+	goal_id UUID NOT NULL, 
+	name VARCHAR(255) NOT NULL, 
+	description TEXT, 
+	status VARCHAR(50) NOT NULL, 
+	attempt INTEGER NOT NULL, 
+	metadata JSON, 
+	claimed_by UUID, 
+	claimed_at TIMESTAMP WITHOUT TIME ZONE, 
+	last_heartbeat TIMESTAMP WITHOUT TIME ZONE, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE goals (
+	user_id UUID NOT NULL, 
+	name VARCHAR(255) NOT NULL, 
+	description TEXT, 
+	status VARCHAR(50) NOT NULL, 
+	metadata JSON, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE goals (
+	user_id UUID NOT NULL, 
+	name VARCHAR(255) NOT NULL, 
+	description TEXT, 
+	status VARCHAR(50) NOT NULL, 
+	metadata JSON, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00019s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00019s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE users (
+	email VARCHAR(255) NOT NULL, 
+	password_hash VARCHAR(255) NOT NULL, 
+	username VARCHAR(64) NOT NULL, 
+	display_name VARCHAR(128), 
+	is_active BOOLEAN NOT NULL, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE users (
+	email VARCHAR(255) NOT NULL, 
+	password_hash VARCHAR(255) NOT NULL, 
+	username VARCHAR(64) NOT NULL, 
+	display_name VARCHAR(128), 
+	is_active BOOLEAN NOT NULL, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00016s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00016s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE UNIQUE INDEX ix_users_email ON users (email)
+INFO  [sqlalchemy.engine.Engine] CREATE UNIQUE INDEX ix_users_email ON users (email)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE UNIQUE INDEX ix_users_username ON users (username)
+INFO  [sqlalchemy.engine.Engine] CREATE UNIQUE INDEX ix_users_username ON users (username)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE api_keys (
+	user_id UUID NOT NULL, 
+	name VARCHAR(128) NOT NULL, 
+	key_prefix VARCHAR(16) NOT NULL, 
+	key_hash VARCHAR(255) NOT NULL, 
+	last_used_at TIMESTAMP WITH TIME ZONE, 
+	revoked_at TIMESTAMP WITH TIME ZONE, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, 
+	UNIQUE (key_hash)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE api_keys (
+	user_id UUID NOT NULL, 
+	name VARCHAR(128) NOT NULL, 
+	key_prefix VARCHAR(16) NOT NULL, 
+	key_hash VARCHAR(255) NOT NULL, 
+	last_used_at TIMESTAMP WITH TIME ZONE, 
+	revoked_at TIMESTAMP WITH TIME ZONE, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, 
+	UNIQUE (key_hash)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_api_keys_key_prefix ON api_keys (key_prefix)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_api_keys_key_prefix ON api_keys (key_prefix)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00017s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00017s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_api_keys_user_id ON api_keys (user_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_api_keys_user_id ON api_keys (user_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00020s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00020s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_api_keys_user_id_revoked_at ON api_keys (user_id, revoked_at)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_api_keys_user_id_revoked_at ON api_keys (user_id, revoked_at)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE automations (
+	user_id UUID NOT NULL, 
+	name VARCHAR(128) NOT NULL, 
+	description TEXT, 
+	trigger_type VARCHAR(32) NOT NULL, 
+	schedule VARCHAR(256) NOT NULL, 
+	tool_name VARCHAR(128) NOT NULL, 
+	tool_arguments JSON, 
+	enabled BOOLEAN NOT NULL, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE automations (
+	user_id UUID NOT NULL, 
+	name VARCHAR(128) NOT NULL, 
+	description TEXT, 
+	trigger_type VARCHAR(32) NOT NULL, 
+	schedule VARCHAR(256) NOT NULL, 
+	tool_name VARCHAR(128) NOT NULL, 
+	tool_arguments JSON, 
+	enabled BOOLEAN NOT NULL, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00032s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00032s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_automations_user_id ON automations (user_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_automations_user_id ON automations (user_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_automations_user_id_enabled ON automations (user_id, enabled)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_automations_user_id_enabled ON automations (user_id, enabled)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00014s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00014s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE conversations (
+	user_id UUID NOT NULL, 
+	title VARCHAR(255), 
+	is_pinned BOOLEAN NOT NULL, 
+	is_favorited BOOLEAN NOT NULL, 
+	is_archived BOOLEAN NOT NULL, 
+	archived_at TIMESTAMP WITH TIME ZONE, 
+	summary TEXT, 
+	summary_updated_at TIMESTAMP WITH TIME ZONE, 
+	message_count INTEGER NOT NULL, 
+	token_count INTEGER NOT NULL, 
+	last_message_at TIMESTAMP WITH TIME ZONE, 
+	model VARCHAR(128), 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE conversations (
+	user_id UUID NOT NULL, 
+	title VARCHAR(255), 
+	is_pinned BOOLEAN NOT NULL, 
+	is_favorited BOOLEAN NOT NULL, 
+	is_archived BOOLEAN NOT NULL, 
+	archived_at TIMESTAMP WITH TIME ZONE, 
+	summary TEXT, 
+	summary_updated_at TIMESTAMP WITH TIME ZONE, 
+	message_count INTEGER NOT NULL, 
+	token_count INTEGER NOT NULL, 
+	last_message_at TIMESTAMP WITH TIME ZONE, 
+	model VARCHAR(128), 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00022s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00022s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_conversations_user_id ON conversations (user_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_conversations_user_id ON conversations (user_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00025s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00025s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_conversations_user_id_archived ON conversations (user_id, is_archived)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_conversations_user_id_archived ON conversations (user_id, is_archived)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00014s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00014s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_conversations_user_id_created_at ON conversations (user_id, created_at)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_conversations_user_id_created_at ON conversations (user_id, created_at)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_conversations_user_id_last_message_at ON conversations (user_id, last_message_at)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_conversations_user_id_last_message_at ON conversations (user_id, last_message_at)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00021s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00021s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_conversations_user_id_pinned ON conversations (user_id, is_pinned)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_conversations_user_id_pinned ON conversations (user_id, is_pinned)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE devices (
+	user_id UUID NOT NULL, 
+	name VARCHAR(128) NOT NULL, 
+	type VARCHAR(16) NOT NULL, 
+	platform VARCHAR(64), 
+	last_seen_at TIMESTAMP WITH TIME ZONE, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE devices (
+	user_id UUID NOT NULL, 
+	name VARCHAR(128) NOT NULL, 
+	type VARCHAR(16) NOT NULL, 
+	platform VARCHAR(64), 
+	last_seen_at TIMESTAMP WITH TIME ZONE, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00021s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00021s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_devices_user_id ON devices (user_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_devices_user_id ON devices (user_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00022s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00022s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_devices_user_id_type ON devices (user_id, type)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_devices_user_id_type ON devices (user_id, type)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE document_chunks (
+	document_id UUID NOT NULL, 
+	chunk_text TEXT NOT NULL, 
+	embedding JSON, 
+	chunk_index INTEGER NOT NULL, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(document_id) REFERENCES documents (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE document_chunks (
+	document_id UUID NOT NULL, 
+	chunk_text TEXT NOT NULL, 
+	embedding JSON, 
+	chunk_index INTEGER NOT NULL, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(document_id) REFERENCES documents (id)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_document_chunks_document_id ON document_chunks (document_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_document_chunks_document_id ON document_chunks (document_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00016s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00016s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE memories (
+	user_id UUID NOT NULL, 
+	type VARCHAR(32) NOT NULL, 
+	title VARCHAR(255), 
+	content TEXT NOT NULL, 
+	importance FLOAT NOT NULL, 
+	tags JSON, 
+	conversation_id UUID, 
+	last_accessed TIMESTAMP WITH TIME ZONE, 
+	access_count INTEGER NOT NULL, 
+	source VARCHAR(64), 
+	category VARCHAR(64), 
+	embedding JSON, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	id UUID NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE memories (
+	user_id UUID NOT NULL, 
+	type VARCHAR(32) NOT NULL, 
+	title VARCHAR(255), 
+	content TEXT NOT NULL, 
+	importance FLOAT NOT NULL, 
+	tags JSON, 
+	conversation_id UUID, 
+	last_accessed TIMESTAMP WITH TIME ZONE, 
+	access_count INTEGER NOT NULL, 
+	source VARCHAR(64), 
+	category VARCHAR(64), 
+	embedding JSON, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	id UUID NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_conversation_id ON memories (conversation_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_conversation_id ON memories (conversation_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00019s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00019s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_type ON memories (type)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_type ON memories (type)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00032s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00032s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_user_id ON memories (user_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_user_id ON memories (user_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_user_id_access_count ON memories (user_id, access_count)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_user_id_access_count ON memories (user_id, access_count)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_user_id_importance_last_accessed ON memories (user_id, importance, last_accessed)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_user_id_importance_last_accessed ON memories (user_id, importance, last_accessed)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00021s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00021s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_user_id_last_accessed ON memories (user_id, last_accessed)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_user_id_last_accessed ON memories (user_id, last_accessed)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00016s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00016s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_user_id_type_created_at ON memories (user_id, type, created_at)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_memories_user_id_type_created_at ON memories (user_id, type, created_at)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00022s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00022s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE notifications (
+	user_id UUID NOT NULL, 
+	type VARCHAR(16) NOT NULL, 
+	title VARCHAR(255) NOT NULL, 
+	body TEXT, 
+	read_at TIMESTAMP WITH TIME ZONE, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE notifications (
+	user_id UUID NOT NULL, 
+	type VARCHAR(16) NOT NULL, 
+	title VARCHAR(255) NOT NULL, 
+	body TEXT, 
+	read_at TIMESTAMP WITH TIME ZONE, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_notifications_user_id ON notifications (user_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_notifications_user_id ON notifications (user_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00020s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00020s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_notifications_user_id_created_at ON notifications (user_id, created_at)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_notifications_user_id_created_at ON notifications (user_id, created_at)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00023s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00023s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_notifications_user_id_read_at ON notifications (user_id, read_at)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_notifications_user_id_read_at ON notifications (user_id, read_at)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00035s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00035s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE plugins (
+	user_id UUID NOT NULL, 
+	name VARCHAR(128) NOT NULL, 
+	version VARCHAR(32) NOT NULL, 
+	enabled BOOLEAN NOT NULL, 
+	config JSON, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, 
+	CONSTRAINT uq_plugins_user_id_name UNIQUE (user_id, name)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE plugins (
+	user_id UUID NOT NULL, 
+	name VARCHAR(128) NOT NULL, 
+	version VARCHAR(32) NOT NULL, 
+	enabled BOOLEAN NOT NULL, 
+	config JSON, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, 
+	CONSTRAINT uq_plugins_user_id_name UNIQUE (user_id, name)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00021s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00021s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_plugins_user_id ON plugins (user_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_plugins_user_id ON plugins (user_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00013s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00013s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_plugins_user_id_enabled ON plugins (user_id, enabled)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_plugins_user_id_enabled ON plugins (user_id, enabled)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00028s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00028s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE refresh_tokens (
+	id VARCHAR(36) NOT NULL, 
+	user_id UUID NOT NULL, 
+	token_hash VARCHAR(64) NOT NULL, 
+	expires_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	revoked_at TIMESTAMP WITH TIME ZONE, 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, 
+	CONSTRAINT uq_refresh_tokens_token_hash UNIQUE (token_hash)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE refresh_tokens (
+	id VARCHAR(36) NOT NULL, 
+	user_id UUID NOT NULL, 
+	token_hash VARCHAR(64) NOT NULL, 
+	expires_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	revoked_at TIMESTAMP WITH TIME ZONE, 
+	created_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE, 
+	CONSTRAINT uq_refresh_tokens_token_hash UNIQUE (token_hash)
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_refresh_tokens_user_id ON refresh_tokens (user_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_refresh_tokens_user_id ON refresh_tokens (user_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00013s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00013s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE tasks (
+	user_id UUID NOT NULL, 
+	title VARCHAR(255) NOT NULL, 
+	description TEXT, 
+	status VARCHAR(16) NOT NULL, 
+	due_at TIMESTAMP WITH TIME ZONE, 
+	completed_at TIMESTAMP WITH TIME ZONE, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE tasks (
+	user_id UUID NOT NULL, 
+	title VARCHAR(255) NOT NULL, 
+	description TEXT, 
+	status VARCHAR(16) NOT NULL, 
+	due_at TIMESTAMP WITH TIME ZONE, 
+	completed_at TIMESTAMP WITH TIME ZONE, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00025s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00025s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_tasks_user_id ON tasks (user_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_tasks_user_id ON tasks (user_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00020s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00020s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_tasks_user_id_due_at ON tasks (user_id, due_at)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_tasks_user_id_due_at ON tasks (user_id, due_at)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00025s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00025s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_tasks_user_id_status ON tasks (user_id, status)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_tasks_user_id_status ON tasks (user_id, status)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00020s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00020s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE automation_executions (
+	automation_id UUID NOT NULL, 
+	status VARCHAR(32) NOT NULL, 
+	summary TEXT, 
+	output JSON, 
+	error TEXT, 
+	started_at TIMESTAMP WITH TIME ZONE, 
+	finished_at TIMESTAMP WITH TIME ZONE, 
+	duration_ms FLOAT, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(automation_id) REFERENCES automations (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE automation_executions (
+	automation_id UUID NOT NULL, 
+	status VARCHAR(32) NOT NULL, 
+	summary TEXT, 
+	output JSON, 
+	error TEXT, 
+	started_at TIMESTAMP WITH TIME ZONE, 
+	finished_at TIMESTAMP WITH TIME ZONE, 
+	duration_ms FLOAT, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(automation_id) REFERENCES automations (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00017s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00017s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_automation_executions_automation_id ON automation_executions (automation_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_automation_executions_automation_id ON automation_executions (automation_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00020s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00020s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_execution_automation_id_created_at ON automation_executions (automation_id, created_at)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_execution_automation_id_created_at ON automation_executions (automation_id, created_at)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00024s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00024s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE conversation_summaries (
+	conversation_id UUID NOT NULL, 
+	summary TEXT NOT NULL, 
+	message_count INTEGER NOT NULL, 
+	token_count INTEGER NOT NULL, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE conversation_summaries (
+	conversation_id UUID NOT NULL, 
+	summary TEXT NOT NULL, 
+	message_count INTEGER NOT NULL, 
+	token_count INTEGER NOT NULL, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00035s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00035s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_conversation_summaries_conversation_id ON conversation_summaries (conversation_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_conversation_summaries_conversation_id ON conversation_summaries (conversation_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00015s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_summaries_conversation_id ON conversation_summaries (conversation_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_summaries_conversation_id ON conversation_summaries (conversation_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00019s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00019s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE messages (
+	conversation_id UUID NOT NULL, 
+	role VARCHAR(16) NOT NULL, 
+	content TEXT NOT NULL, 
+	token_count INTEGER, 
+	model TEXT, 
+	meta JSON, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE messages (
+	conversation_id UUID NOT NULL, 
+	role VARCHAR(16) NOT NULL, 
+	content TEXT NOT NULL, 
+	token_count INTEGER, 
+	model TEXT, 
+	meta JSON, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00023s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00023s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_messages_conversation_id ON messages (conversation_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_messages_conversation_id ON messages (conversation_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_messages_conversation_id_created_at ON messages (conversation_id, created_at)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_messages_conversation_id_created_at ON messages (conversation_id, created_at)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_messages_conversation_id_role_created_at ON messages (conversation_id, role, created_at)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_messages_conversation_id_role_created_at ON messages (conversation_id, role, created_at)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00017s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00017s] {}
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE sessions (
+	user_id UUID NOT NULL, 
+	device_id UUID, 
+	token_hash VARCHAR(255) NOT NULL, 
+	expires_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	revoked_at TIMESTAMP WITH TIME ZONE, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(device_id) REFERENCES devices (id) ON DELETE SET NULL, 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] 
+CREATE TABLE sessions (
+	user_id UUID NOT NULL, 
+	device_id UUID, 
+	token_hash VARCHAR(255) NOT NULL, 
+	expires_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+	revoked_at TIMESTAMP WITH TIME ZONE, 
+	id UUID NOT NULL, 
+	created_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	updated_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP) NOT NULL, 
+	PRIMARY KEY (id), 
+	FOREIGN KEY(device_id) REFERENCES devices (id) ON DELETE SET NULL, 
+	FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+)
+
+
+INFO  [sqlalchemy.engine.Engine] [no key 0.00019s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00019s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_sessions_device_id ON sessions (device_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_sessions_device_id ON sessions (device_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00019s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00019s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE UNIQUE INDEX ix_sessions_token_hash ON sessions (token_hash)
+INFO  [sqlalchemy.engine.Engine] CREATE UNIQUE INDEX ix_sessions_token_hash ON sessions (token_hash)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_sessions_user_id ON sessions (user_id)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_sessions_user_id ON sessions (user_id)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00027s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00027s] {}
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_sessions_user_id_expires_at ON sessions (user_id, expires_at)
+INFO  [sqlalchemy.engine.Engine] CREATE INDEX ix_sessions_user_id_expires_at ON sessions (user_id, expires_at)
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] [no key 0.00018s] {}
+INFO  [sqlalchemy.engine.Engine] INSERT INTO alembic_version (version_num) VALUES ('308955bf55b0') RETURNING alembic_version.version_num
+INFO  [sqlalchemy.engine.Engine] INSERT INTO alembic_version (version_num) VALUES ('308955bf55b0') RETURNING alembic_version.version_num
+INFO  [sqlalchemy.engine.Engine] [generated in 0.00023s] {}
+INFO  [sqlalchemy.engine.Engine] [generated in 0.00023s] {}
+INFO  [sqlalchemy.engine.Engine] ROLLBACK
+INFO  [sqlalchemy.engine.Engine] ROLLBACK

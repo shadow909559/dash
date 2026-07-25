@@ -13,9 +13,9 @@ class AutomationCreate(BaseModel):
     name: str = Field(..., max_length=128)
     description: str | None = None
     trigger_type: str = Field(..., max_length=32)
-    schedule: str = Field(..., max_length=256)
+    schedule: str | None = None
     tool_name: str = Field(..., max_length=128)
-    tool_arguments: dict[str, Any] | None = None
+    tool_arguments: list[str] | None = None
     enabled: bool = True
 
 
@@ -25,9 +25,9 @@ class AutomationRead(BaseModel):
     name: str
     description: str | None
     trigger_type: str
-    schedule: str
+    schedule: str | None
     tool_name: str
-    tool_arguments: dict[str, Any] | None
+    tool_arguments: list[str] | None
     enabled: bool
     created_at: datetime
     updated_at: datetime
@@ -55,5 +55,5 @@ class AutomationUpdate(BaseModel):
     trigger_type: str | None = None
     schedule: str | None = None
     tool_name: str | None = None
-    tool_arguments: dict[str, Any] | None = None
+    tool_arguments: list[str] | None = None
     enabled: bool | None = None

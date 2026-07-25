@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
+import '../../../core/theme/dash_theme.dart';
+import '../../../core/widgets/glassmorphism.dart';
 import '../models/conversation.dart';
 import '../providers/conversation_provider.dart';
 
@@ -36,10 +39,10 @@ class _ConversationSidebarState extends ConsumerState<ConversationSidebar> {
     return Container(
       width: 320,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: DashColors.glassFrost.withValues(alpha: 0.05),
         border: Border(
           right: BorderSide(
-            color: theme.colorScheme.outlineVariant,
+            color: DashColors.glassFrost.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -49,15 +52,11 @@ class _ConversationSidebarState extends ConsumerState<ConversationSidebar> {
           _buildHeader(theme),
           _buildSearchBar(theme),
           if (state.isLoading)
-            const Expanded(
-              child: Center(child: CircularProgressIndicator()),
-            )
+            Expanded(child: _buildSkeleton(theme))
           else if (state.errorMessage != null)
             _buildError(theme)
           else
-            Expanded(
-              child: _buildConversationList(state, activeId, theme),
-            ),
+            Expanded(child: _buildConversationList(state, activeId, theme)),
         ],
       ),
     );
@@ -65,26 +64,36 @@ class _ConversationSidebarState extends ConsumerState<ConversationSidebar> {
 
   Widget _buildHeader(ThemeData theme) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Row(
         children: [
-          Icon(Icons.chat_bubble_outline,
-              color: theme.colorScheme.primary, size: 24),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              gradient: DashGradients.blue,
+              borderRadius: BorderRadius.circular(DashSpacing.radiusSm),
+              boxShadow: DashElevation.blueGlow(opacity: 0.3),
+            ),
+            child: const Icon(
+              Icons.chat_bubble_outline,
+              color: DashColors.pureWhite,
+              size: 20,
+            ),
+          ),
           const SizedBox(width: 12),
           Text(
             'Conversations',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
+            style: DashTypography.titleMedium.copyWith(
+              fontWeight: FontWeight.w700,
+              color: DashColors.softWhite,
+              letterSpacing: 0.5,
             ),
           ),
           const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline),
-            tooltip: 'New chat',
+          GlassButton(
             onPressed: () => _createNewConversation(),
-            style: IconButton.styleFrom(
-              foregroundColor: theme.colorScheme.primary,
-            ),
+            padding: const EdgeInsets.all(8),
+            child: const Icon(Icons.add_rounded),
           ),
         ],
       ),
@@ -147,11 +156,58 @@ class _ConversationSidebarState extends ConsumerState<ConversationSidebar> {
               const SizedBox(height: 8),
               TextButton(
                 onPressed: () =>
-                    ref.read(conversationListProvider.notifier).load(),
+                    ref.read(conversationListProvider.notifier).load(includeArchived: false),
                 child: const Text('Retry'),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSkeleton(ThemeData theme) {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: 6,
+      itemBuilder: (context, index) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: 80,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -196,7 +252,6 @@ class _ConversationSidebarState extends ConsumerState<ConversationSidebar> {
       );
     }
 
-    // Separate pinned and active
     final pinned = conversations.where((c) => c.isPinned).toList();
     final active = conversations.where((c) => !c.isPinned).toList();
 
@@ -251,7 +306,6 @@ class _ConversationSidebarState extends ConsumerState<ConversationSidebar> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             children: [
-              // Pin icon
               if (conversation.isPinned)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
@@ -259,7 +313,6 @@ class _ConversationSidebarState extends ConsumerState<ConversationSidebar> {
                       size: 14,
                       color: theme.colorScheme.primary.withValues(alpha: 0.6)),
                 ),
-              // Content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -303,7 +356,6 @@ class _ConversationSidebarState extends ConsumerState<ConversationSidebar> {
                   ],
                 ),
               ),
-              // Actions
               PopupMenuButton<String>(
                 icon: Icon(Icons.more_horiz,
                     size: 18,
@@ -358,8 +410,11 @@ class _ConversationSidebarState extends ConsumerState<ConversationSidebar> {
   }
 
   void _createNewConversation() {
+    final timestamp = DateTime.now().millisecondsSinceEpoch % 10000;
     ref.read(activeConversationIdProvider.notifier).state = null;
-    ref.read(conversationListProvider.notifier).create();
+    ref.read(conversationListProvider.notifier).create(
+          title: 'New Chat $timestamp',
+        );
   }
 
   void _handleAction(

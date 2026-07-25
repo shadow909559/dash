@@ -1,12 +1,33 @@
 abstract final class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
+  static const String register = '/register';
   static const String dashboard = '/dashboard';
   static const String chat = '/chat';
+  static const String conversationDetails = '/conversation';
+  static const String conversationHistory = '/conversation-history';
   static const String settings = '/settings';
   static const String memory = '/memory';
+  static const String memoryDetails = '/memory-details/:memoryId';
   static const String about = '/about';
   static const String workspace = '/workspace';
-  static const String projects = '/projects';
+  static const String planner = '/planner';
+  static const String calendar = '/calendar';
+  static const String goals = '/goals';
+  static const String goalDetails = '/goal-details';
+  static const String tasks = '/tasks';
+  static const String taskDetails = '/task-details';
+  static const String desktop = '/desktop';
+  static const String automation = '/automation';
+  static const String automationHistory = '/automation-history';
+  static const String vision = '/vision';
+  static const String voice = '/voice';
+  static const String files = '/files';
+  static const String plugins = '/plugins';
+  static const String pluginDetails = '/plugin-details';
   static const String notifications = '/notifications';
+  static const String projects = '/projects';
+  static const String search = '/search';
+  static const String profile = '/profile';
+  static const String help = '/help';
 }

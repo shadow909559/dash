@@ -1,64 +1,114 @@
-# DASH Architecture
+import 'package:flutter/foundation.dart';
 
-## System Overview
+enum MessageStatus {
+  pending,
+  sending,
+  sent,
+  streaming,
+  complete,
+  error,
+}
 
-DASH is built on a client-server architecture with a Python/FastAPI backend and a Flutter cross-platform frontend.
+enum MessageRole {
+  user,
+  assistant,
+}
 
-```
-Frontend (Flutter) -> WebSocket + REST -> Backend (FastAPI) -> PostgreSQL
-```
+@immutable
+class ChatMessage {
+  final String id;
+  final MessageRole role;
+  final String content;
+  final DateTime timestamp;
+  final MessageStatus status;
 
-## Core Packages
+  const ChatMessage({
+    required this.id,
+    required this.role,
+    required this.content,
+    required this.timestamp,
+    this.status = MessageStatus.sent,
+  });
 
-| Package | Responsibility |
-|---------|---------------|
-| `api/` | REST and WebSocket endpoints |
-| `auth/` | JWT, PBKDF2, refresh tokens |
-| `chat/` | Conversation management |
-| `llm/` | LLM provider abstraction |
-| `memory/` | Semantic memory with importance scoring |
-| `executive/` | Planner and goal decomposition |
-| `rag/` | Document ingestion, chunking, embedding, search |
-| `tools/` | Tool framework, registry, executor |
-| `security/` | Input sanitization, rate limiting |
-| `voice_system/` | STT, TTS, wake word, VAD, streaming |
-| `vision/` | OCR, screenshot, UI detection |
-| `plugins/` | Plugin SDK, sandbox, permissions |
-| `automation/` | Scheduled automation tasks |
-| `sync/` | Multi-device synchronization |
-| `db/` | SQLAlchemy models, session management |
+  ChatMessage copyWith({
+    String? id,
+    MessageRole? role,
+    String? content,
+    DateTime? timestamp,
+    MessageStatus? status,
+  }) {
+    return ChatMessage(
+      id: id ?? this.id,
+      role: role ?? this.role,
+      content: content ?? this.content,
+      timestamp: timestamp ?? this.timestamp,
+      status: status ?? this.status,
+    );
+  }
 
-## Request Lifecycle
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'role': role.name,
+      'content': content,
+      'timestamp': timestamp.toIso8601String(),
+      'status': status.name,
+    };
+  }
 
-1. HTTP request arrives at FastAPI router
-2. Authentication middleware validates JWT
-3. Rate limiter checks token bucket
-4. Input sanitizer cleans content
-5. Service logic processes the request
-6. LLM calls routed through provider abstraction
-7. Tool execution passes through permission checks
-8. Response returned to client
+  factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    // Supports both REST API format and locally cached format.
+    final roleStr = json['role'] as String? ?? 'user';
+    final statusStr = json['status'] as String? ?? 'complete';
 
-## Frontend Architecture
+    final timestampStr = json['timestamp'] as String? ??
+        json['created_at'] as String? ??
+        DateTime.now().toIso8601String();
 
-- **State Management**: Riverpod
-- **Routing**: GoRouter with ShellRoute
-- **Sync**: WebSocket with offline queue
-| [Architecture](docs/Architecture.md) | System architecture and design |
-| [Setup](docs/Setup.md) | Installation and configuration |
-| [Developer Guide](docs/DeveloperGuide.md) | Development workflow |
-| [User Guide](docs/UserGuide.md) | End-user documentation |
-| [API Reference](docs/API.md) | REST and WebSocket API |
-| [Security](docs/Security.md) | Security architecture |
-| [Testing](docs/Testing.md) | Testing guidelines |
-| [Deployment](docs/Deployment.md) | Production deployment |
-| [Memory System](docs/MemorySystem.md) | Memory architecture |
-| [Planner](docs/Planner.md) | Planning system |
-| [RAG](docs/RAG.md) | RAG system |
-| [Voice](docs/Voice.md) | Voice subsystem |
-| [Plugin SDK](docs/PluginSDK.md) | Plugin development |
-| [Changelog](docs/Changelog.md) | Release history |
+    return ChatMessage(
+      id: (json['id'] ?? '').toString(),
+      role: MessageRole.values.firstWhere(
+        (r) => r.name == roleStr,
+        orElse: () => MessageRole.user,
+      ),
+      content: (json['content'] ?? '').toString(),
+      timestamp: DateTime.parse(timestampStr),
+      status: MessageStatus.values.firstWhere(
+        (s) => s.name == statusStr,
+        orElse: () => MessageStatus.complete,
+      ),
+    );
+  }
 
-## License
+  bool get isUser => role == MessageRole.user;
 
-MIT License
+  bool get isAssistant => role == MessageRole.assistant;
+
+  bool get isStreaming => status == MessageStatus.streaming;
+
+  bool get hasError => status == MessageStatus.error;
+
+  /// Approximate token count (~4 characters/token)
+  int get tokenCount => content.length ~/ 4;
+
+  @override
+  String toString() {
+    return 'ChatMessage(id: $id, role: $role, status: $status)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is ChatMessage &&
+            runtimeType == other.runtimeType &&
+            id == other.id &&
+            role == other.role &&
+            content == other.content &&
+            timestamp == other.timestamp &&
+            status == other.status;
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, role, content, timestamp, status);
+}

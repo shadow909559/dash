@@ -11,6 +11,8 @@ class ChatMessage {
   final String content;
   final DateTime timestamp;
   final MessageStatus status;
+  final int? tokenCount;
+  final Map<String, dynamic>? meta;
 
   const ChatMessage({
     required this.id,
@@ -18,6 +20,8 @@ class ChatMessage {
     required this.content,
     required this.timestamp,
     this.status = MessageStatus.sent,
+    this.tokenCount,
+    this.meta,
   });
 
   ChatMessage copyWith({
@@ -42,6 +46,8 @@ class ChatMessage {
         'content': content,
         'timestamp': timestamp.toIso8601String(),
         'status': status.name,
+        if (tokenCount != null) 'token_count': tokenCount,
+        if (meta != null) 'meta': meta,
       };
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -61,6 +67,8 @@ class ChatMessage {
         (s) => s.name == statusStr,
         orElse: () => MessageStatus.complete,
       ),
+      tokenCount: json['token_count'] as int? ?? json['tokenCount'] as int?,
+      meta: json['meta'] as Map<String, dynamic>?,
     );
   }
 
@@ -68,4 +76,5 @@ class ChatMessage {
   bool get isUser => role == MessageRole.user;
   bool get isAssistant => role == MessageRole.assistant;
   bool get isStreaming => status == MessageStatus.streaming;
+  bool get hasError => status == MessageStatus.error;
 }

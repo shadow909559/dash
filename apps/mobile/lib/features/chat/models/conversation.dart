@@ -12,6 +12,7 @@ class Conversation {
   final String? model;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final int? _tokenCount;
 
   const Conversation({
     required this.id,
@@ -22,9 +23,10 @@ class Conversation {
     this.messageCount = 0,
     this.lastMessageAt,
     this.model,
+    int? tokenCount,
     required this.createdAt,
     required this.updatedAt,
-  });
+  }) : _tokenCount = tokenCount;
 
   Conversation copyWith({
     String? id,
@@ -35,6 +37,7 @@ class Conversation {
     int? messageCount,
     String? lastMessageAt,
     String? model,
+    int? tokenCount,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -47,6 +50,7 @@ class Conversation {
       messageCount: messageCount ?? this.messageCount,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
       model: model ?? this.model,
+      tokenCount: tokenCount ?? _tokenCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -61,6 +65,7 @@ class Conversation {
         'message_count': messageCount,
         'last_message_at': lastMessageAt,
         'model': model,
+        if (_tokenCount != null) 'token_count': _tokenCount,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
       };
@@ -74,11 +79,13 @@ class Conversation {
         messageCount: json['message_count'] as int? ?? 0,
         lastMessageAt: json['last_message_at'] as String?,
         model: json['model'] as String?,
+        tokenCount: json['token_count'] as int?,
         createdAt: DateTime.parse(json['created_at'] as String),
         updatedAt: DateTime.parse(json['updated_at'] as String),
       );
 
   String get displayTitle => title ?? 'New Chat';
+  int get tokenCount => _tokenCount ?? 0;
   String get timeAgo {
     final diff = DateTime.now().difference(createdAt);
     if (diff.inMinutes < 1) return 'Just now';

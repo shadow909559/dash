@@ -10,7 +10,6 @@ This file handles:
 from __future__ import annotations
 
 import logging
-from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import create_engine, inspect, pool, text
@@ -25,10 +24,14 @@ from dash_backend.config import get_settings
 # Alembic Config object
 config = context.config
 
-# Interpret the config file for Python logging.
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# Configure logging minimally — do NOT use fileConfig() or basicConfig()
+# as they conflict with the app's own logging_config.setup_logging().
 logger = logging.getLogger("alembic.env")
+if not logger.handlers:
+    logger.setLevel(logging.INFO)
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(levelname)-5.5s [%(name)s] %(message)s"))
+    logger.addHandler(_handler)
 
 # Provide Alembic with your model's MetaData object:
 target_metadata = Base.metadata
@@ -72,6 +75,12 @@ def get_database_url() -> str:
 
     # Priority 3: Hardcoded fallback for development
     return "sqlite:///dash_dev.db"
+
+
+def include_object(obj, name, type_, reflected, compare_to):
+    """Filter out tables that are already managed by other revisions
+    or belong to other systems. By default, include everything."""
+    return True
 
 
 def run_migrations_offline() -> None:
@@ -126,13 +135,21 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            include_object=include_object,
             version_table=config.get_main_option(
                 "version_table", "alembic_version"
             ),
         )
 
-        with context.begin_transaction():
-            context.run_migrations()
+        # Use a transaction block that commits on success.
+        # Alembic's context.run_migrations() handles individual migration
+        # transactions via context.begin_transaction() internally.
+        # The outer connection transaction must be committed explicitly.
+        context.run_migrations()
+
+        # Commit the outer connection transaction so that ALL changes
+        # (including the migration version stamp) are persisted.
+        connection.commit()
 
 
 if context.is_offline_mode():

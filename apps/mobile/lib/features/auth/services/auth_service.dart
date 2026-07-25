@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -94,11 +95,18 @@ class AuthService {
     required String password,
   }) async {
     final uri = Uri.parse('$defaultBackendUrl$authLoginPath');
+    final body = jsonEncode({'email': email, 'password': password});
+    // Debug: print request
+    debugPrint('[AuthService] POST $uri');
+    debugPrint('[AuthService] Request body: $body');
     final response = await _httpClient.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email, 'password': password}),
+      body: body,
     );
+    // Debug: print response
+    debugPrint('[AuthService] Response status: ${response.statusCode}');
+    debugPrint('[AuthService] Response body: ${response.body}');
 
     if (response.statusCode != 200) {
       final detail = _extractErrorDetail(response.body);
@@ -120,15 +128,22 @@ class AuthService {
     required String password,
   }) async {
     final uri = Uri.parse('$defaultBackendUrl$authRegisterPath');
+    final body = jsonEncode({
+      'email': email,
+      'username': username,
+      'password': password,
+    });
+    // Debug: print request
+    debugPrint('[AuthService] POST $uri');
+    debugPrint('[AuthService] Request body: $body');
     final response = await _httpClient.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'email': email,
-        'username': username,
-        'password': password,
-      }),
+      body: body,
     );
+    // Debug: print response
+    debugPrint('[AuthService] Response status: ${response.statusCode}');
+    debugPrint('[AuthService] Response body: ${response.body}');
 
     if (response.statusCode != 201) {
       final detail = _extractErrorDetail(response.body);
@@ -216,10 +231,38 @@ class AuthService {
     await prefs.remove(_kUserKey);
   }
 
+  /// Extracts a human-readable error message from the backend response body.
+  ///
+  /// Handles two common FastAPI error formats:
+  /// - Standard HTTPException: `{"detail": "error message"}`
+  /// - Pydantic validation errors: `{"detail": [{"loc": [...], "msg": "...", "type": "..."}]}`
   String _extractErrorDetail(String body) {
     try {
-      final json = jsonDecode(body) as Map<String, dynamic>;
-      return json['detail'] as String? ?? 'Authentication failed';
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        final detail = decoded['detail'];
+        if (detail is String) {
+          return detail;
+        }
+        if (detail is List) {
+          // Pydantic validation errors format
+          final messages = detail.map((e) {
+            if (e is Map<String, dynamic>) {
+              final loc = e['loc'] as List? ?? [];
+              final msg = e['msg'] as String? ?? '';
+              // Include field name from location if available
+              final field = loc.length >= 2 ? loc[1] : null;
+              if (field != null && msg.isNotEmpty) {
+                return '$field: $msg';
+              }
+              return msg;
+            }
+            return e.toString();
+          }).where((m) => m.isNotEmpty).join('; ');
+          if (messages.isNotEmpty) return messages;
+        }
+      }
+      return 'Authentication failed';
     } catch (_) {
       return 'Authentication failed';
     }

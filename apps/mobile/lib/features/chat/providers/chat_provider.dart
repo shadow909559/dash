@@ -7,7 +7,7 @@ import '../../../core/services/websocket_service.dart';
 import '../../../core/sync/sync_service.dart';
 import '../models/chat_message.dart';
 import '../services/conversation_repository.dart';
-
+import 'conversation_provider.dart';
 
 
 class ChatState {
@@ -71,7 +71,8 @@ class ChatService extends StateNotifier<ChatState> {
       state = state.copyWith(connectionStatus: status);
     });
 
-    _ws.connect();
+    // Defer connect to avoid modifying another provider during build (Riverpod rule)
+    Future.microtask(() => _ws.connect());
   }
 
   final Ref _ref;
@@ -371,6 +372,72 @@ class ChatService extends StateNotifier<ChatState> {
 
   void clearMessages() {
     state = state.copyWith(messages: []);
+  }
+
+  void regenerate(ChatMessage message) {
+    final idx = state.messages.indexOf(message);
+    if (idx == -1 || message.role != MessageRole.assistant) return;
+
+    final updated = List<ChatMessage>.from(state.messages);
+    updated.removeRange(idx, updated.length);
+
+    state = state.copyWith(messages: updated, isStreaming: false, isTyping: false);
+
+    final userMessage = updated.lastWhere((m) => m.isUser, orElse: () => updated.isNotEmpty ? updated.last : message);
+    sendMessage(userMessage.content, conversationId: _ref.read(activeConversationIdProvider));
+  }
+
+  void retryMessage(ChatMessage message) {
+    if (message.role != MessageRole.user) return;
+    final updated = List<ChatMessage>.from(state.messages);
+    for (int i = updated.length - 1; i >= 0; i--) {
+      if (updated[i].id == message.id) {
+        updated[i] = updated[i].copyWith(status: MessageStatus.sending);
+        break;
+      }
+    }
+    state = state.copyWith(messages: updated);
+    sendMessage(message.content, conversationId: _ref.read(activeConversationIdProvider));
+  }
+
+  void editMessage(ChatMessage message, String newContent) {
+    if (message.role != MessageRole.user) return;
+    final updated = List<ChatMessage>.from(state.messages);
+    final idx = updated.indexWhere((m) => m.id == message.id);
+    if (idx == -1) return;
+
+    updated[idx] = message.copyWith(content: newContent, status: MessageStatus.sending);
+    state = state.copyWith(messages: updated);
+
+    // Remove all assistant messages after this user message (re-send flow)
+    int removeFrom = idx + 1;
+    while (removeFrom < updated.length && updated[removeFrom].role == MessageRole.assistant) {
+      removeFrom++;
+    }
+    if (removeFrom > idx + 1) {
+      updated.removeRange(idx + 1, removeFrom);
+      state = state.copyWith(messages: updated);
+    }
+
+    final conversationId = _ref.read(activeConversationIdProvider);
+    final payload = {
+      'type': 'chat.send',
+      'message_id': message.id,
+      'content': newContent,
+      if (conversationId != null) 'conversation_id': conversationId,
+    };
+    final wsStatus = _ref.read(webSocketServiceProvider).status;
+    if (wsStatus == WebSocketStatus.connected) {
+      _ws.send(jsonEncode(payload));
+      _markLastUserMessageSent();
+    } else {
+      _ref.read(syncServiceProvider.notifier).queueMessage(
+            id: message.id,
+            type: 'chat.send',
+            payload: payload,
+            conversationId: conversationId,
+          );
+    }
   }
 
   @override

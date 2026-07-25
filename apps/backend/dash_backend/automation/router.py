@@ -17,7 +17,7 @@ from dash_backend.db.models.user import User
 router = APIRouter(prefix="", tags=["automation"])
 
 
-@router.post("/automation", response_model=schemas.AutomationRead, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=schemas.AutomationRead, status_code=status.HTTP_201_CREATED)
 async def create_automation(
     payload: schemas.AutomationCreate,
     user: User = Depends(get_current_user),
@@ -37,13 +37,13 @@ async def create_automation(
     return schemas.AutomationRead.model_validate(auto)
 
 
-@router.get("/automation", response_model=List[schemas.AutomationRead])
+@router.get("/", response_model=List[schemas.AutomationRead])
 async def list_automations(user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db_session)) -> List[schemas.AutomationRead]:
     autos = await automation_service.list_automations(session, user.id)
     return [schemas.AutomationRead.model_validate(a) for a in autos]
 
 
-@router.patch("/automation/{automation_id}", response_model=schemas.AutomationRead)
+@router.patch("/{automation_id}", response_model=schemas.AutomationRead)
 async def patch_automation(
     automation_id: uuid.UUID,
     payload: schemas.AutomationUpdate,
@@ -59,7 +59,7 @@ async def patch_automation(
     return schemas.AutomationRead.model_validate(updated)
 
 
-@router.delete("/automation/{automation_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{automation_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_automation(
     automation_id: uuid.UUID,
     user: User = Depends(get_current_user),
@@ -74,7 +74,7 @@ async def delete_automation(
     return None
 
 
-@router.get("/automation/{automation_id}/history", response_model=List[schemas.AutomationExecutionRead])
+@router.get("/{automation_id}/history", response_model=List[schemas.AutomationExecutionRead])
 async def get_automation_history(
     automation_id: uuid.UUID,
     user: User = Depends(get_current_user),

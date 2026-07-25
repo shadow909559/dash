@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/auth_service.dart';
@@ -58,14 +60,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Check SharedPreferences for a persisted session.
   Future<void> checkSession() async {
+    debugPrint('[AuthNotifier] checkSession: starting...');
     final restored = await _authService.tryRestoreSession();
+    debugPrint('[AuthNotifier] checkSession: restored=$restored, isAuthenticated=${_authService.isAuthenticated}');
     if (restored && _authService.isAuthenticated) {
       state = AuthState(
         status: AuthStatus.authenticated,
         user: _authService.user,
       );
+      debugPrint('[AuthNotifier] checkSession: Session restored, user=${_authService.user?.email}');
     } else {
       state = AuthState.unauthenticated;
+      debugPrint('[AuthNotifier] checkSession: No session found');
     }
   }
 
@@ -76,19 +82,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String email,
     required String password,
   }) async {
+    debugPrint('[AuthNotifier] login: starting for email=$email');
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final user = await _authService.login(email: email, password: password);
+      debugPrint('[AuthNotifier] login: success, user=${user.email}');
       state = AuthState(
         status: AuthStatus.authenticated,
         user: user,
       );
-      final ws = _ref.read(webSocketServiceProvider.notifier);
-      await ws.disconnect();
-      await ws.connect();
+      _reconnectWebSocket();
     } on AuthException catch (e) {
+      debugPrint('[AuthNotifier] login: AuthException: ${e.message}');
       state = AuthState.unauthenticated.copyWith(errorMessage: e.message);
     } catch (e) {
+      debugPrint('[AuthNotifier] login: unexpected error: $e');
       state = AuthState.unauthenticated.copyWith(
         errorMessage: 'Connection error. Please try again.',
       );
@@ -103,6 +111,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String username,
     required String password,
   }) async {
+    debugPrint('[AuthNotifier] register: starting for email=$email, username=$username');
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final user = await _authService.register(
@@ -110,19 +119,32 @@ class AuthNotifier extends StateNotifier<AuthState> {
         username: username,
         password: password,
       );
+      debugPrint('[AuthNotifier] register: success, user=${user.email}');
       state = AuthState(
         status: AuthStatus.authenticated,
         user: user,
       );
-      final ws = _ref.read(webSocketServiceProvider.notifier);
-      await ws.disconnect();
-      await ws.connect();
+      _reconnectWebSocket();
     } on AuthException catch (e) {
+      debugPrint('[AuthNotifier] register: AuthException: ${e.message}');
       state = AuthState.unauthenticated.copyWith(errorMessage: e.message);
     } catch (e) {
+      debugPrint('[AuthNotifier] register: unexpected error: $e');
       state = AuthState.unauthenticated.copyWith(
         errorMessage: 'Connection error. Please try again.',
       );
+    }
+  }
+
+  /// Reconnect WebSocket after authentication, without affecting auth state.
+  void _reconnectWebSocket() {
+    try {
+      final ws = _ref.read(webSocketServiceProvider.notifier);
+      // Fire-and-forget: WebSocket failure must NOT affect auth state.
+      unawaited(ws.disconnect().then((_) => ws.connect()).catchError((_) {}));
+    } catch (e) {
+      // WebSocket failure should NEVER overwrite authenticated state.
+      debugPrint('[AuthNotifier] WebSocket reconnect failed (non-fatal): $e');
     }
   }
 

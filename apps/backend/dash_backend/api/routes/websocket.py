@@ -315,6 +315,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         session=session,
                         user_id=user_id,
                     ):
+                        if hasattr(event, 'type') and event.type == 'chat.done':
+                            event.conversation_id = str(conversation.id)
                         await send_json(event.model_dump())
 
                     logger.info("Completed response for user %s", user_id)
