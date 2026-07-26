@@ -1,6 +1,6 @@
 {
   "name": "dash-desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DASH AI Desktop Assistant",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.75.0",
+    "electron-updater": "^6.3.9",
     "framer-motion": "^12.10.0",
     "lucide-react": "^0.510.0",
     "react": "^19.2.7",
@@ -53,6 +54,11 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "your-username",
+      "repo": "your-repo-name"
     }
   },
   "allowScripts": {

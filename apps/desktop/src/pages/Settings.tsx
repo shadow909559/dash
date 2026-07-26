@@ -1,9 +1,50 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuthStore } from "@/stores/authStore";
+import UpdateModal from "@/components/UpdateModal";
 
 export default function Settings() {
   const { user } = useAuthStore();
   const [apiUrl, setApiUrl] = useState("http://127.0.0.1:8000/api/v1");
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
+  const [autoDownloadUpdates, setAutoDownloadUpdates] = useState(false);
+  const [installOnExit, setInstallOnExit] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+
+  useEffect(() => {
+    // Load saved settings from localStorage
+    const savedAutoCheck = localStorage.getItem("dash_auto_check_updates");
+    const savedAutoDownload = localStorage.getItem("dash_auto_download_updates");
+    const savedInstallOnExit = localStorage.getItem("dash_install_on_exit");
+    
+    if (savedAutoCheck !== null) setAutoCheckUpdates(JSON.parse(savedAutoCheck));
+    if (savedAutoDownload !== null) setAutoDownloadUpdates(JSON.parse(savedAutoDownload));
+    if (savedInstallOnExit !== null) setInstallOnExit(JSON.parse(savedInstallOnExit));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("dash_auto_check_updates", JSON.stringify(autoCheckUpdates));
+  }, [autoCheckUpdates]);
+
+  useEffect(() => {
+    localStorage.setItem("dash_auto_download_updates", JSON.stringify(autoDownloadUpdates));
+    if (window.dash?.updater?.setAutoDownload) {
+      window.dash.updater.setAutoDownload(autoDownloadUpdates);
+    }
+  }, [autoDownloadUpdates]);
+
+  useEffect(() => {
+    localStorage.setItem("dash_install_on_exit", JSON.stringify(installOnExit));
+    if (window.dash?.updater?.setAutoInstallOnQuit) {
+      window.dash.updater.setAutoInstallOnQuit(installOnExit);
+    }
+  }, [installOnExit]);
+
+  const handleManualCheck = () => {
+    setShowUpdateModal(true);
+    if (window.dash?.updater?.checkForUpdates) {
+      window.dash.updater.checkForUpdates();
+    }
+  };
 
   return (
     <div>
@@ -74,6 +115,58 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Updates */}
+        <div className="glass-card" style={{ padding: 24 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16 }}>
+            Software Updates
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>Automatically check for updates</div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Periodically check GitHub for new versions</div>
+              </div>
+              <input
+                type="checkbox"
+                checked={autoCheckUpdates}
+                onChange={(e) => setAutoCheckUpdates(e.target.checked)}
+                style={{ width: 20, height: 20, cursor: "pointer" }}
+              />
+            </label>
+            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>Automatically download updates</div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Download updates in the background when available</div>
+              </div>
+              <input
+                type="checkbox"
+                checked={autoDownloadUpdates}
+                onChange={(e) => setAutoDownloadUpdates(e.target.checked)}
+                style={{ width: 20, height: 20, cursor: "pointer" }}
+              />
+            </label>
+            <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>Install updates on exit</div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Automatically install updates when closing the app</div>
+              </div>
+              <input
+                type="checkbox"
+                checked={installOnExit}
+                onChange={(e) => setInstallOnExit(e.target.checked)}
+                style={{ width: 20, height: 20, cursor: "pointer" }}
+              />
+            </label>
+            <button
+              onClick={handleManualCheck}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors text-sm"
+              style={{ alignSelf: "flex-start" }}
+            >
+              Check for Updates
+            </button>
+          </div>
+        </div>
+
         {/* About */}
         <div className="glass-card" style={{ padding: 24 }}>
           <h3 style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16 }}>
@@ -95,6 +188,8 @@ export default function Settings() {
           </div>
         </div>
       </div>
+      
+      <UpdateModal isOpen={showUpdateModal} onClose={() => setShowUpdateModal(false)} />
     </div>
   );
 }
