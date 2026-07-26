@@ -53,3 +53,17 @@ node_modules/
 
 # Local desktop backup
 apps/desktop_backup_v1/
+
+# Electron
+apps/desktop/release/
+apps/desktop/dist/
+apps/desktop/dist-electron/
+
+# Flutter
+apps/mobile/windows/flutter/ephemeral/
+apps/mobile/build/
+apps/mobile/.dart_tool/
+apps/mobile/windows/runner/Debug/
+apps/mobile/windows/runner/Release/
+
+*.tsbuildinfo

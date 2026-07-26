@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import UpdateModal from "@/components/UpdateModal";
 
@@ -27,22 +27,25 @@ export default function Settings() {
 
   useEffect(() => {
     localStorage.setItem("dash_auto_download_updates", JSON.stringify(autoDownloadUpdates));
-    if (window.dash?.updater?.setAutoDownload) {
-      window.dash.updater.setAutoDownload(autoDownloadUpdates);
+    const dash = window.dash as any;
+    if (dash?.updater?.setAutoDownload) {
+      dash.updater.setAutoDownload(autoDownloadUpdates);
     }
   }, [autoDownloadUpdates]);
 
   useEffect(() => {
     localStorage.setItem("dash_install_on_exit", JSON.stringify(installOnExit));
-    if (window.dash?.updater?.setAutoInstallOnQuit) {
-      window.dash.updater.setAutoInstallOnQuit(installOnExit);
+    const dash = window.dash as any;
+    if (dash?.updater?.setAutoInstallOnQuit) {
+      dash.updater.setAutoInstallOnQuit(installOnExit);
     }
   }, [installOnExit]);
 
   const handleManualCheck = () => {
     setShowUpdateModal(true);
-    if (window.dash?.updater?.checkForUpdates) {
-      window.dash.updater.checkForUpdates();
+    const dash = window.dash as any;
+    if (dash?.updater?.checkForUpdates) {
+      dash.updater.checkForUpdates();
     }
   };
 

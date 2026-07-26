@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("dash", {
-  version: "0.1.0",
+  version: "0.1.1",
   platform: process.platform,
   // Updater IPC methods
   updater: {
@@ -14,6 +14,10 @@ contextBridge.exposeInMainWorld("dash", {
       const rendererEvent = `updater:${event}`;
       ipcRenderer.on(rendererEvent, (_, data) => callback(data));
       return () => ipcRenderer.removeListener(rendererEvent, callback);
+    },
+    off: (event: string, callback: (...args: any[]) => void) => {
+      const rendererEvent = `updater:${event}`;
+      ipcRenderer.removeListener(rendererEvent, callback);
     }
   }
 });

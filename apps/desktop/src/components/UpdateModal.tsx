@@ -27,34 +27,35 @@ const UpdateModal: React.FC<{
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!window.dash?.updater?.on) return;
+    const dash = window.dash as any;
+    if (!dash?.updater?.on) return;
 
-    const removeCheck = window.dash.updater.on("checking", () => {
+    const removeCheck = dash.updater.on("checking", () => {
       setUpdateState("checking");
       setError(null);
     });
 
-    const removeAvailable = window.dash.updater.on("available", (info: UpdateInfo) => {
+    const removeAvailable = dash.updater.on("available", (info: UpdateInfo) => {
       setUpdateState("available");
       setUpdateInfo(info);
     });
 
-    const removeNotAvailable = window.dash.updater.on("not-available", () => {
+    const removeNotAvailable = dash.updater.on("not-available", () => {
       setUpdateState("idle");
       setError(null);
     });
 
-    const removeProgress = window.dash.updater.on("progress", (data: ProgressData) => {
+    const removeProgress = dash.updater.on("progress", (data: ProgressData) => {
       setUpdateState("downloading");
       setProgress(data);
     });
 
-    const removeDownloaded = window.dash.updater.on("downloaded", (info: UpdateInfo) => {
+    const removeDownloaded = dash.updater.on("downloaded", (info: UpdateInfo) => {
       setUpdateState("downloaded");
       setUpdateInfo(info);
     });
 
-    const removeError = window.dash.updater.on("error", (err: string) => {
+    const removeError = dash.updater.on("error", (err: string) => {
       setUpdateState("error");
       setError(err);
     });
@@ -70,15 +71,18 @@ const UpdateModal: React.FC<{
   }, []);
 
   const handleCheckForUpdates = () => {
-    window.dash?.updater?.checkForUpdates();
+    const dash = window.dash as any;
+    dash?.updater?.checkForUpdates();
   };
 
   const handleStartDownload = () => {
-    window.dash?.updater?.startDownload();
+    const dash = window.dash as any;
+    dash?.updater?.startDownload();
   };
 
   const handleRestartAndInstall = () => {
-    window.dash?.updater?.quitAndInstall();
+    const dash = window.dash as any;
+    dash?.updater?.quitAndInstall();
   };
 
   const formatBytes = (bytes: number): string => {
