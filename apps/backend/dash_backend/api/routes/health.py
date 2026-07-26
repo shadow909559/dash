@@ -1,6 +1,7 @@
 """Health check endpoint."""
 
 from datetime import UTC, datetime
+import time
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -10,6 +11,9 @@ from dash_backend.config import get_settings
 
 router = APIRouter()
 
+# Server start time for uptime calculation
+_start_time = time.time()
+
 
 class HealthResponse(BaseModel):
     """Health check response payload."""
@@ -18,6 +22,7 @@ class HealthResponse(BaseModel):
     service: str
     version: str
     environment: str
+    uptime: float
     timestamp: datetime
 
 
@@ -30,5 +35,6 @@ async def health_check() -> HealthResponse:
         service=settings.app_name,
         version=__version__,
         environment=settings.env,
+        uptime=time.time() - _start_time,
         timestamp=datetime.now(UTC),
     )

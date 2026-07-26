@@ -1,0 +1,10 @@
+import sys  
+content = open('src/pages/Dashboard.tsx', 'r', encoding='utf-8').read()  
+content = content.replace('\\u{1F4AC}', chr(0x1F4AC))  
+content = content.replace('\\u{1F9E0}', chr(0x1F9E0))  
+content = content.replace('\\u{1F7E2}', chr(0x1F7E2))  
+content = content.replace('\\u{1F534}', chr(0x1F534))  
+content = content.replace('\\u{1F4E6}', chr(0x1F4E6))  
+content = content.replace('\\u2014', chr(0x2014))  
+open('src/pages/Dashboard.tsx', 'w', encoding='utf-8').write(content)  
+print('Done')  

@@ -7,6 +7,9 @@ from dash_backend.api.routes.conversations import router as conversations_router
 from dash_backend.api.routes.health import router as health_router
 from dash_backend.api.routes.memories import router as memories_router
 from dash_backend.api.routes.websocket import router as websocket_router
+from dash_backend.api.routes.projects import router as projects_router
+from dash_backend.api.routes.notifications import router as notifications_router
+from dash_backend.api.routes.automation_rules import router as automation_rules_router
 from dash_backend.rag.router import router as rag_router
 from dash_backend.automation.router import router as automation_router
 from dash_backend.personal import router as personal_router
@@ -39,6 +42,21 @@ api_router.include_router(
 )
 
 api_router.include_router(
+    projects_router,
+    tags=["projects"],
+)
+
+api_router.include_router(
+    notifications_router,
+    tags=["notifications"],
+)
+
+api_router.include_router(
+    automation_rules_router,
+    tags=["automation-rules"],
+)
+
+api_router.include_router(
     rag_router,
     prefix="/rag",
     tags=["rag"],
@@ -66,4 +84,3 @@ api_router.include_router(
     sync_router,
     tags=["sync"],
 )
-

@@ -11,6 +11,7 @@ from dash_backend.api.schemas.memory import (
     MemoryCreate,
     MemoryListResponse,
     MemoryRead,
+    MemorySearchResponse,
     MemoryUpdate,
 )
 
@@ -50,6 +51,26 @@ async def list_memories(
 
 
     return MemoryListResponse(items=items, total=total)
+
+
+# ──────────────────────────────────────────────
+# Search memories
+# ──────────────────────────────────────────────
+
+
+@router.get("/search", response_model=MemorySearchResponse)
+async def search_memories(
+    q: str = Query(..., min_length=1, max_length=200),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> MemorySearchResponse:
+    """Search memories by content query."""
+    results = await memory_service.search_memories(
+        session, user.id, q, limit=limit,
+    )
+    items = [MemoryRead.model_validate(m) for m in results]
+    return MemorySearchResponse(items=items, query=q)
 
 
 # ──────────────────────────────────────────────

@@ -6,6 +6,20 @@ import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from dash_backend.api.websocket.handlers import (
+    handle_agent_run,
+    handle_chat_send,
+    handle_voice_stt,
+    handle_voice_tts,
+)
+from dash_backend.api.websocket.protocol import (
+    ChatSendMessage,
+    VoiceSTTMessage,
+    VoiceTTSMessage,
+    parse_client_message,
+)
+from dash_backend.auth.security import decode_access_token
+from dash_backend.db.session import AsyncSessionLocal
 from dash_backend.logging_config import get_logger
 
 router = APIRouter()
@@ -14,34 +28,7 @@ logger = get_logger(__name__)
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
-    """Real-time DASH websocket with keepalive, sync, and streaming support.
-
-    Supports:
-    - Session recovery via sync.register
-    - Heartbeat tracking
-    - Offline message queue delivery
-    - Message deduplication
-    - Chat, voice, and agent streaming
-    """
-
-    from dash_backend.api.websocket.handlers import (
-        handle_agent_run,
-        handle_chat_send,
-        handle_voice_stt,
-        handle_voice_tts,
-    )
-
-    from dash_backend.api.websocket.protocol import (
-        AuthMessage,
-        ChatErrorMessage,
-        ChatSendMessage,
-        VoiceSTTMessage,
-        VoiceTTSMessage,
-        parse_client_message,
-    )
-
-    from dash_backend.auth.security import decode_access_token
-    from dash_backend.sync.service import get_sync_service
+    """Real-time DASH websocket with keepalive, chat, voice, and agent support."""
 
     await websocket.accept()
     logger.info("WebSocket connected")
@@ -50,19 +37,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     client_id: str | None = None
     disconnected = False
 
-    async def send_json(data: object):
-        """Safely send JSON, ignoring errors if disconnected."""
+    async def send_json(data: object) -> None:
         if disconnected:
             return
         try:
             await websocket.send_json(data)
-        except WebSocketDisconnect:
-            pass
-        except Exception:
+        except (WebSocketDisconnect, Exception):
             pass
 
-    async def keepalive_loop():
-        """Send periodic pong messages to keep proxies from closing the connection."""
+    async def keepalive_loop() -> None:
         nonlocal disconnected
         while not disconnected:
             await asyncio.sleep(30)
@@ -82,289 +65,125 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             try:
                 raw = json.loads(raw_text)
             except json.JSONDecodeError:
-                await send_json(
-                    ChatErrorMessage(
-                        type="chat.error",
-                        message_id=None,
-                        error="Invalid JSON",
-                    ).model_dump()
-                )
+                await send_json({"type": "chat.error", "message_id": None, "error": "Invalid JSON"})
                 continue
 
-            try:
-                msg = parse_client_message(raw)
-            except Exception as exc:
-                await send_json(
-                    ChatErrorMessage(
-                        type="chat.error",
-                        message_id=None,
-                        error=str(exc),
-                    ).model_dump()
-                )
+            if not isinstance(raw, dict):
+                await send_json({"type": "chat.error", "message_id": None, "error": "Expected JSON object"})
                 continue
 
-            # AUTH
-            if msg.type == "auth":
-                auth_msg = AuthMessage.model_validate(raw)
+            msg_type = raw.get("type")
+
+            # Authentication
+            if msg_type == "auth":
+                token = raw.get("access_token", "")
+                payload = decode_access_token(token)
+                if payload is None:
+                    await send_json({"type": "chat.error", "message_id": None, "error": "Invalid token"})
+                    await websocket.close(code=4001)
+                    return
+                user_id = payload.get("sub")
+                client_id = raw.get("client_id", str(uuid.uuid4()))
+                logger.info("WebSocket authenticated: user=%s", user_id)
 
                 try:
-                    payload = decode_access_token(auth_msg.access_token)
-                    user_id = payload["sub"]
-                    logger.info("Authenticated user: %s", user_id)
-
-                    # Register sync session for recovery
+                    from dash_backend.sync.service import get_sync_service
                     sync_service = get_sync_service()
-                    session_id = str(uuid.uuid4())
-                    client_id = f"ws_{user_id}_{session_id[:8]}"
-                    session_result = await sync_service.register_session(
-                        session_id=session_id,
+                    await sync_service.register_session(
+                        session_id=str(uuid.uuid4()),
                         client_id=client_id,
-                        client_type="mobile",
+                        client_type="desktop",
                         user_id=user_id,
                     )
+                except Exception:
+                    logger.exception("Failed to register sync session")
 
-                    # Send session info to client
-                    await send_json({
-                        "type": "session.info",
-                        "session_id": session_id,
-                        "client_id": client_id,
-                        "recovery_count": session_result.get("recovery_count", 0),
-                        "requires_full_sync": session_result.get("requires_full_sync", False),
-                    })
-
-                    # Deliver any queued offline messages
-                    queued = session_result.get("queued_messages", [])
-                    if queued:
-                        for q_msg in queued:
-                            await send_json(q_msg)
-                        logger.info(
-                            "Delivered %d queued offline messages to %s",
-                            len(queued), client_id,
-                        )
-
-                except Exception as exc:
-                    logger.warning("Auth failed: %s", exc)
-                    await send_json(
-                        ChatErrorMessage(
-                            type="chat.error",
-                            message_id=None,
-                            error=f"Auth failed: {exc}",
-                        ).model_dump()
-                    )
-
+                await send_json({"type": "session.info", "session_id": client_id, "client_id": client_id})
                 continue
 
-            # PING / HEARTBEAT
-            if msg.type in ("ping", "heartbeat"):
-                # Record heartbeat in sync service
-                if client_id:
-                    sync_service = get_sync_service()
-                    await sync_service.record_heartbeat(client_id)
-                await websocket.send_json({"type": "pong"})
+            # All other messages require authentication
+            if not user_id:
+                await send_json({"type": "chat.error", "message_id": None, "error": "Not authenticated"})
                 continue
 
-            if msg.type == "hello":
-                logger.info("Client hello received")
+            # Parse typed message
+            try:
+                msg = parse_client_message(raw)
+            except ValueError as exc:
+                await send_json({"type": "chat.error", "message_id": None, "error": str(exc)})
                 continue
 
-            # SYNC: Register session
-            if msg.type == "sync.register":
-                if user_id is None:
-                    await send_json(
-                        ChatErrorMessage(
-                            type="chat.error",
-                            message_id=None,
-                            error="Not authenticated",
-                        ).model_dump()
-                    )
-                    continue
+            # Chat send - process user message and stream AI response
+            if msg_type == "chat.send":
+                chat_msg = msg
+                assistant_content = ""
 
-                sync_service = get_sync_service()
-                session_id = str(uuid.uuid4())
-                raw_client_id = raw.get("client_id", f"ws_{user_id}_{session_id[:8]}")
-                client_type = raw.get("client_type", "mobile")
-                session_result = await sync_service.register_session(
-                    session_id=session_id,
-                    client_id=raw_client_id,
-                    client_type=client_type,
-                    user_id=user_id,
-                )
-                client_id = raw_client_id
-                await send_json({
-                    "type": "sync.registered",
-                    "session_id": session_id,
-                    "client_id": client_id,
-                    "recovery_count": session_result.get("recovery_count", 0),
-                    "requires_full_sync": session_result.get("requires_full_sync", False),
-                    "queued_messages": session_result.get("queued_messages", []),
-                })
-                continue
-
-            # SYNC: Heartbeat
-            if msg.type == "sync.heartbeat":
-                if client_id:
-                    sync_service = get_sync_service()
-                    await sync_service.record_heartbeat(client_id)
-                await send_json({"type": "sync.heartbeat_ack"})
-                continue
-
-            # SYNC: Mark messages seen
-            if msg.type == "sync.mark_seen":
-                if client_id:
-                    sync_service = get_sync_service()
-                    message_ids = raw.get("message_ids", [])
-                    await sync_service.mark_messages_seen_bulk(client_id, message_ids)
-                continue
-
-            # SYNC: Full sync request
-            if msg.type == "sync.request":
-                if user_id is None:
-                    await send_json(
-                        ChatErrorMessage(
-                            type="chat.error",
-                            message_id=None,
-                            error="Not authenticated",
-                        ).model_dump()
-                    )
-                    continue
-
-                sync_service = get_sync_service()
-                from dash_backend.sync.service import SyncRequest
-
-                sync_request = SyncRequest(
-                    client_id=raw.get("client_id", client_id or "unknown"),
-                    client_type=raw.get("client_type", "mobile"),
-                    last_sync_timestamp=raw.get("last_sync_timestamp"),
-                    conversations_since=raw.get("conversations", []),
-                    memories_since=raw.get("memories", []),
-                    message_ids_seen=set(raw.get("message_ids_seen", [])),
-                    vector_clock=raw.get("vector_clock", {}),
-                )
-                response = await sync_service.perform_full_sync(
-                    user_id, sync_request.client_id, sync_request
-                )
-                await send_json({
-                    "type": "sync.response",
-                    "conversations": response.conversations,
-                    "memories": response.memories,
-                    "conflicts": response.conflicts,
-                    "server_timestamp": response.server_timestamp,
-                    "requires_full_sync": response.requires_full_sync,
-                })
-                continue
-
-            if user_id is None:
-                await send_json(
-                    ChatErrorMessage(
-                        type="chat.error",
-                        message_id=None,
-                        error="Not authenticated",
-                    ).model_dump()
-                )
-                continue
-
-            # CHAT
-            if msg.type == "chat.send":
-                chat_msg = ChatSendMessage.model_validate(raw)
-
-                from dash_backend.chat.service import (
-                    add_message, create_conversation, get_conversation,
-                    generate_conversation_title, get_user_conversations,
-                    update_conversation
-                )
-
-                from dash_backend.db.session import AsyncSessionLocal
+                from dash_backend.chat.service import add_message, create_conversation
                 from dash_backend.db.models.message import MessageRole
 
+                # ALWAYS persist user message for both new and existing conversations
                 async with AsyncSessionLocal() as session:
-                    conversation = None
-                    if chat_msg.conversation_id:
-                        conversation = await get_conversation(
-                            session, chat_msg.conversation_id
-                        )
+                    if not chat_msg.conversation_id:
+                        conv = await create_conversation(session, user_id)
+                        chat_msg.conversation_id = str(conv.id)
+                    await add_message(session, chat_msg.conversation_id, MessageRole.USER, chat_msg.content)
 
-                    if conversation is None:
-                        # Check if this is the user's first conversation
-                        user_convs, _ = await get_user_conversations(session, user_id, limit=1)
-                        is_first_conversation = len(user_convs) == 0
-                        
-                        conversation = await create_conversation(
-                            session=session,
-                            user_id=user_id,
-                        )
-                        
-                        # Auto-title the first conversation based on the first message
-                        if is_first_conversation:
-                            title = await generate_conversation_title(
-                                session, conversation.id, chat_msg.content
-                            )
-                            conversation = await update_conversation(
-                                session, conversation.id, title=title
-                            )
-
-                    # Persist the user message (assistant message is persisted by the handler)
-                    await add_message(
-                        session=session,
-                        conversation_id=conversation.id,
-                        role=MessageRole.USER,
-                        content=chat_msg.content,
-                    )
-
-                    async for event in handle_chat_send(
-                        chat_msg,
-                        session=session,
-                        user_id=user_id,
-                    ):
-                        if hasattr(event, 'type') and event.type == 'chat.done':
-                            event.conversation_id = str(conversation.id)
+                async with AsyncSessionLocal() as session:
+                    async for event in handle_chat_send(chat_msg, session=session, user_id=user_id):
+                        if event.type == "chat.token":
+                            assistant_content += event.content
+                        if event.type == "chat.done":
+                            event.conversation_id = chat_msg.conversation_id
+                            # Save the complete assistant message to DB after streaming finishes
+                            if assistant_content:
+                                try:
+                                    async with AsyncSessionLocal() as save_session:
+                                        await add_message(
+                                            save_session,
+                                            chat_msg.conversation_id,
+                                            MessageRole.ASSISTANT,
+                                            assistant_content,
+                                        )
+                                except Exception as e:
+                                    logger.exception("Failed to save assistant message: %s", e)
                         await send_json(event.model_dump())
 
-                    logger.info("Completed response for user %s", user_id)
+                    logger.info("Completed chat response for user %s", user_id)
 
-            # VOICE STT
-            elif msg.type == "voice.stt":
-                stt_msg = VoiceSTTMessage.model_validate(raw)
-                from dash_backend.db.session import AsyncSessionLocal
+            # Voice STT
+            elif msg_type == "voice.stt":
+                stt_msg = msg
                 async with AsyncSessionLocal() as session:
                     async for event in handle_voice_stt(stt_msg, session=session, user_id=user_id):
                         await send_json(event.model_dump())
 
-            # VOICE TTS
-            elif msg.type == "voice.tts":
-                tts_msg = VoiceTTSMessage.model_validate(raw)
-                from dash_backend.db.session import AsyncSessionLocal
+            # Voice TTS
+            elif msg_type == "voice.tts":
+                tts_msg = msg
                 async with AsyncSessionLocal() as session:
                     async for event in handle_voice_tts(tts_msg, session=session, user_id=user_id):
                         await send_json(event.model_dump())
 
-            # AGENT
-            elif msg.type == "agent.run":
+            # Agent
+            elif msg_type == "agent.run":
                 async for event in handle_agent_run(msg):
                     await send_json(event.model_dump())
 
             else:
-                logger.debug("Unsupported message type: %s", msg.type)
-                await send_json(
-                    ChatErrorMessage(
-                        type="chat.error",
-                        message_id=None,
-                        error=f"Unsupported message: {msg.type}",
-                    ).model_dump()
-                )
+                logger.debug("Unsupported message type: %s", msg_type)
+                await send_json({"type": "chat.error", "message_id": None, "error": f"Unsupported: {msg_type}"})
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected (user: %s)", user_id or "unauthenticated")
-        # Unregister sync session
         if client_id:
             try:
+                from dash_backend.sync.service import get_sync_service
                 sync_service = get_sync_service()
                 await sync_service.unregister_session(client_id)
             except Exception:
                 pass
-
     except Exception as exc:
         logger.exception("WebSocket error: %s", exc)
-
     finally:
         disconnected = True
         keepalive_task.cancel()

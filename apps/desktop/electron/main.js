@@ -13,7 +13,9 @@ function createWindow() {
         title: "DASH",
         backgroundColor: "#0a0a0f",
         webPreferences: {
-            preload: path.join(__dirname, "preload.js"),
+            preload: isDev
+                ? path.join(__dirname, "preload.js")
+                : path.join(app.getAppPath(), "dist-electron", "preload.js"),
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
@@ -31,7 +33,8 @@ function createWindow() {
         mainWindow.webContents.openDevTools({ mode: "detach" });
     }
     else {
-        mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+        // In production, the dist folder is in the same directory as dist-electron
+        mainWindow.loadFile(path.join(app.getAppPath(), "dist", "index.html"));
     }
 }
 app.whenReady().then(() => {

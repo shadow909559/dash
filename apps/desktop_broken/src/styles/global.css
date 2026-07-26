@@ -1,0 +1,209 @@
+:root {
+  --sidebar-width: 240px;
+  --sidebar-width-collapsed: 80px;
+  --header-height: 60px;
+  --transition-fast: 0.2s ease;
+  --transition-normal: 0.3s ease;
+  --bg-primary: #0a0a0f;
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0a6;
+  --text-muted: #6e6e78;
+  --border-glass: rgba(255, 255, 255, 0.1);
+  --accent-primary: #6366f1;
+  --accent-secondary: #8b5cf6;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Toggle switch styles for settings */
+.toggle-switch {
+  position: relative;
+  width: 48px;
+  height: 24px;
+  background-color: #374151;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.toggle-switch.active {
+  background-color: #2563eb;
+}
+
+.toggle-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background-color: white;
+  border-radius: 9999px;
+  transition: transform 0.2s ease;
+}
+
+.toggle-switch.active .toggle-switch-thumb {
+  transform: translateX(24px);
+}
+
+.toggle-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Range input styles */
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: #374151;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2563eb;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  background: #3b82f6;
+}
+
+/* Glass card styles */
+.glass-card {
+  background: rgba(15, 15, 20, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+}
+
+/* Input styles */
+.input {
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(30, 30, 40, 0.8);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+/* Page header styles */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding: 0 24px 16px;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* Status dot */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.online {
+  background-color: #10b981;
+}
+
+/* Glass effect for sidebar and header */
+.glass {
+  background: rgba(15, 15, 20, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-glass);
+}
+
+/* Main content and page content */
+.main-content {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.page-content {
+  padding: 24px;
+}
+
+/* Non-draggable for titlebar buttons */
+.non-draggable {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Draggable for titlebar */
+.draggable {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+/* Resizable panel handle styles */
+.panel-resize-handle {
+  width: 6px;
+  background-color: rgba(255, 255, 255, 0.05);
+  transition: background-color 0.2s ease;
+  cursor: col-resize;
+  position: relative;
+}
+
+.panel-resize-handle:hover,
+.panel-resize-handle.active {
+  background-color: var(--accent-primary);
+}
+
+.panel-resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 24px;
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 9999px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.panel-resize-handle:hover::before,
+.panel-resize-handle.active::before {
+  opacity: 1;
+}
+
+/* App layout styles */
+.app-layout {
+  height: calc(100vh - 32px); /* Account for titlebar height */
+  width: 100%;
+  overflow: hidden;
+}
