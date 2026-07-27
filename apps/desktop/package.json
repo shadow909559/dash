@@ -1,7 +1,7 @@
 {
   "name": "dash-desktop",
-  "version": "0.1.1",
-  "description": "DASH AI Desktop Assistant",
+  "version": "1.0.0",
+  "description": "DASH AI Operating System - Your Personal Jarvis for Windows",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -29,7 +29,7 @@
     "@vitejs/plugin-react": "^4.4.0",
     "autoprefixer": "^10.4.0",
     "electron": "^35.7.5",
-    "electron-builder": "^26.0.0",
+    "electron-builder": "^26.15.3",
     "postcss": "^8.5.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.8.0",
@@ -45,7 +45,15 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "backend/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../../apps/backend",
+        "to": "backend",
+        "filter": ["**/*", "!__pycache__", "!*.pyc", "!.venv", "!venv", "!.git"]
+      }
     ],
     "win": {
       "target": "nsis",
@@ -53,12 +61,15 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DASH"
     },
     "publish": {
       "provider": "github",
-      "owner": "your-username",
-      "repo": "your-repo-name"
+      "owner": "shadow909559",
+      "repo": "dash"
     }
   },
   "allowScripts": {

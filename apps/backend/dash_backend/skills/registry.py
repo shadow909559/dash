@@ -44,6 +44,18 @@ class SkillRegistry:
         return cls.get().skills.get(name)
 
     @classmethod
+    def list_skills(cls) -> list[dict[str, Any]]:
+        """List all registered skills with their metadata."""
+        r = cls.get()
+        result = []
+        for name, skill in r.skills.items():
+            result.append({
+                "name": name,
+                "type": type(skill).__name__,
+            })
+        return result
+
+    @classmethod
     def match_skill_for_intent(cls, intent: str) -> Optional[str]:
         # Simple heuristic mapping
         i = intent.lower()

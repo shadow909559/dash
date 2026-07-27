@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
         logger.exception("Failed to import tools registration")
 
     # Start automation scheduler
+    scheduler = None
     try:
         scheduler = get_scheduler()
         scheduler.start()
@@ -52,8 +53,8 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     try:
-        scheduler = get_scheduler()
-        await scheduler.stop()
+        if scheduler:
+            await scheduler.stop()
     except Exception:
         logger.exception("Failed to stop automation scheduler")
 
@@ -99,8 +100,18 @@ def create_app() -> FastAPI:
             logger.warning("Debug mode is enabled in non-development environment")
         if settings.jwt_secret_key is None or settings.jwt_secret_key == "changeme":
             logger.warning("JWT secret key is not configured securely")
+            if settings.env in ("production", "staging"):
+                raise RuntimeError(
+                    "DASH_JWT_SECRET_KEY must be set to a strong random value in production"
+                )
         if "sqlite" in settings.database_url:
             logger.warning("Using SQLite database in non-development environment")
+        # Verify CORS origins in production
+        cors_origins = settings.cors_origins
+        if "*" in cors_origins:
+            if settings.env == "production":
+                raise RuntimeError("Wildcard CORS origin '*' is not allowed in production")
+            logger.warning("Wildcard CORS origin '*' is not recommended in production")
 
     return application
 

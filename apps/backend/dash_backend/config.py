@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "DASH"
+    app_name: str = "DASH Backend"
     env: Literal["development", "staging", "production", "test"] = "development"
     debug: bool = False
     log_level: str = "INFO"
@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     port: int = 8000
     api_prefix: str = "/api/v1"
 
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    # Stored as comma-separated string from env, parsed via property below
+    cors_origins_raw: str = "http://localhost:5173"
 
     database_url: str = "postgresql+asyncpg://dash:dash@localhost:5432/dash"
     redis_url: str = "redis://localhost:6379/0"
@@ -53,12 +54,10 @@ class Settings(BaseSettings):
     # Tool execution timeout (seconds)
     tool_execution_timeout_seconds: int = Field(default=60, gt=0)
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
-        if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
-        return value
+    @property
+    def cors_origins(self) -> list[str]:
+        """Parse the raw comma-separated string into a list."""
+        return [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]
 
     @property
     def is_development(self) -> bool:

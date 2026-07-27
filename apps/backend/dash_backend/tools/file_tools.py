@@ -1,319 +1,180 @@
-"""File system tools - read, write, list, search files and directories."""
+"""File tools - favorites, pinned folders, file preview, recent files, recycle bin."""
 
 from __future__ import annotations
 
+import os
+import sys
+from pathlib import Path
 from typing import Any
 
-from dash_backend.tools.base_tool import (
-    BaseTool,
-    PermissionLevel,
-    ToolContext,
-    ToolParameter,
-)
+from dash_backend.logging_config import get_logger
+from dash_backend.tools.base_tool import BaseTool, ToolParameter, ToolContext, PermissionLevel
 from dash_backend.tools.tool_result import ToolResult, ToolStatus
-# Lazy imports to avoid circular dependency during tool discovery.
-# These are resolved at call time rather than at module load time.
-def _get_fs_service():
-    from dash_backend.tools.filesystem.filesystem_service import (
-        read_file as _fs_read_file,
-        write_file as _fs_write_file,
-        list_directory as _fs_list_directory,
-        search_files as _fs_search_files,
-    )
-    return _fs_read_file, _fs_write_file, _fs_list_directory, _fs_search_files
+
+logger = get_logger(__name__)
+IS_WINDOWS = sys.platform == "win32"
 
 
-class ReadFileTool(BaseTool):
-    """Read the contents of a file."""
-
-    name = "read_file"
-    description = "Read the contents of a file at the specified path. Supports text files up to 100KB."
+class ListFavoritesTool(BaseTool):
+    name = "list_favorites"
+    description = "List favorite/pinned folders from Windows Quick Access or user favorites."
+    parameters = []
+    permission_level = PermissionLevel.AUTO
     category = "filesystem"
+
+    async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:
+        try:
+            favorites = []
+            if IS_WINDOWS:
+                # Quick Access pinned items
+                quick_access = Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Recent" / "AutomaticDestinations"
+                if quick_access.exists():
+                    for item in quick_access.iterdir():
+                        favorites.append({"name": item.stem, "path": str(item)})
+                # Start menu pinned
+                start_menu = Path.home() / "AppData" / "Roaming" / "Microsoft" / "Internet Explorer" / "Quick Launch" / "User Pinned" / "TaskBar"
+                if start_menu.exists():
+                    for item in start_menu.iterdir():
+                        if item.suffix.lower() == ".lnk":
+                            favorites.append({"name": item.stem, "path": str(item), "type": "pinned"})
+            # Standard special folders
+            special = {
+                "desktop": str(Path.home() / "Desktop"),
+                "downloads": str(Path.home() / "Downloads"),
+                "documents": str(Path.home() / "Documents"),
+                "pictures": str(Path.home() / "Pictures"),
+                "videos": str(Path.home() / "Videos"),
+                "music": str(Path.home() / "Music"),
+            }
+            for name, path in special.items():
+                if Path(path).exists():
+                    favorites.insert(0, {"name": name.capitalize(), "path": path, "type": "system"})
+            return ToolResult(tool_name=self.name, status=ToolStatus.SUCCESS, output={"favorites": favorites},
+                              summary=f"Found {len(favorites)} favorites")
+        except Exception as exc:
+            return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message=str(exc))
+
+
+class PreviewFileTool(BaseTool):
+    name = "preview_file"
+    description = "Preview a file's content (text, image, PDF text, or metadata)."
     parameters = [
-        ToolParameter(
-            name="path",
-            description="Path to the file to read (absolute or relative to working directory).",
-            type="string",
-            required=True,
-        ),
-        ToolParameter(
-            name="start_line",
-            description="Line number to start reading from (1-indexed).",
-            type="number",
-            required=False,
-        ),
-        ToolParameter(
-            name="end_line",
-            description="Line number to stop reading at (inclusive).",
-            type="number",
-            required=False,
-        ),
+        ToolParameter("path", "File path to preview", required=True),
+        ToolParameter("max_lines", "Maximum text lines to return", type="integer", required=False, default=50),
     ]
+    permission_level = PermissionLevel.AUTO
+    category = "filesystem"
 
     async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:
         path_str = kwargs.get("path", "")
-        start_line = kwargs.get("start_line")
-        end_line = kwargs.get("end_line")
-
+        max_lines = int(kwargs.get("max_lines", 50))
         if not path_str:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message="No path provided.",
-            )
-
+            return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message="path required")
         try:
-            fs_read_file, _fs_write, _fs_list, _fs_search = _get_fs_service()
-            res = fs_read_file(path_str, working_directory=context.working_directory, start_line=start_line, end_line=end_line)
-        except FileNotFoundError:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"File not found: {path_str}",
-            )
-        except IsADirectoryError:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"Not a file: {path_str}",
-            )
+            p = Path(path_str)
+            if not p.exists():
+                return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message=f"File not found: {path_str}")
+            if p.is_dir():
+                return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message="Cannot preview a directory")
+
+            suffix = p.suffix.lower()
+            stat = p.stat()
+            info = {
+                "name": p.name, "path": str(p.resolve()),
+                "size_bytes": stat.st_size, "modified": stat.st_mtime,
+                "type": suffix,
+            }
+
+            # Text files
+            if suffix in (".txt", ".md", ".py", ".js", ".ts", ".html", ".css", ".json", ".xml", ".yaml", ".yml",
+                          ".cfg", ".conf", ".ini", ".log", ".csv", ".sh", ".bat", ".ps1", ".env", ".gitignore",
+                          ".toml", ".lock", ".sql", ".java", ".c", ".cpp", ".h", ".hpp", ".rs", ".go", ".rb"):
+                try:
+                    content = p.read_text(encoding="utf-8", errors="replace")
+                    lines = content.splitlines()
+                    preview = "\n".join(lines[:max_lines])
+                    truncated = len(lines) > max_lines
+                    info["content"] = preview
+                    info["total_lines"] = len(lines)
+                    info["truncated"] = truncated
+                except Exception:
+                    info["content"] = "[Binary or unreadable file]"
+                    info["encoding"] = "binary"
+
+            # Images
+            elif suffix in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"):
+                info["content"] = "[Image file]"
+                try:
+                    from PIL import Image
+                    img = Image.open(p)
+                    info["image_width"] = img.width
+                    info["image_height"] = img.height
+                    info["image_format"] = img.format
+                except ImportError:
+                    pass
+
+            # PDF
+            elif suffix == ".pdf":
+                info["content"] = "[PDF document]"
+                try:
+                    import PyPDF2
+                    with open(p, "rb") as f:
+                        reader = PyPDF2.PdfReader(f)
+                        info["pdf_pages"] = len(reader.pages)
+                        if reader.pages:
+                            info["content"] = reader.pages[0].extract_text()[:2000]
+                except ImportError:
+                    pass
+
+            else:
+                info["content"] = f"[{suffix.upper() or 'Unknown'} file, {stat.st_size} bytes]"
+
+            return ToolResult(tool_name=self.name, status=ToolStatus.SUCCESS, output=info,
+                              summary=f"Previewed {p.name} ({info.get('total_lines', '?')} lines, {stat.st_size} bytes)")
         except Exception as exc:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"Failed to read file: {exc}",
-            )
-
-        content = res.get("content", "")
-        total_lines = len(content.splitlines())
-
-        if start_line is not None or end_line is not None:
-            s = max(0, (start_line or 1) - 1)
-            e = min(total_lines, end_line or total_lines)
-            lines = content.splitlines()[s:e]
-            content = "\n".join(lines)
-        else:
-            lines = content.splitlines()
-
-        return ToolResult(
-            tool_name=self.name,
-            status=ToolStatus.SUCCESS,
-            output={
-                "path": res.get("path"),
-                "size_bytes": res.get("size_bytes"),
-                "total_lines": total_lines,
-                "content": content,
-                "lines_returned": len(lines),
-            },
-            summary=f"Read {len(lines)} lines from {path_str}",
-        )
+            return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message=str(exc))
 
 
-class WriteFileTool(BaseTool):
-    """Write content to a file."""
-
-    name = "write_file"
-    description = "Write content to a file. Creates the file and any necessary directories."
+class RecycleBinTool(BaseTool):
+    name = "list_recycle_bin"
+    description = "List items in the Windows Recycle Bin."
+    parameters = []
+    permission_level = PermissionLevel.AUTO
     category = "filesystem"
-    permission_level = PermissionLevel.CONFIRM
-    parameters = [
-        ToolParameter(
-            name="path",
-            description="Path to the file to write (absolute or relative to working directory).",
-            type="string",
-            required=True,
-        ),
-        ToolParameter(
-            name="content",
-            description="Content to write to the file.",
-            type="string",
-            required=True,
-        ),
-        ToolParameter(
-            name="overwrite",
-            description="Whether to overwrite an existing file. Defaults to True.",
-            type="boolean",
-            required=False,
-            default=True,
-        ),
-    ]
 
     async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:
-        path_str = kwargs.get("path", "")
-        content = kwargs.get("content", "")
-        overwrite = kwargs.get("overwrite", True)
-
-        if not path_str:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message="No path provided.",
-            )
-
+        if not IS_WINDOWS:
+            return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message="Windows only")
         try:
-            _fs_read, fs_write_file, _fs_list, _fs_search = _get_fs_service()
-            res = fs_write_file(path_str, content, working_directory=context.working_directory, overwrite=overwrite)
-        except FileExistsError:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"File already exists: {path_str}. Set overwrite=True to replace it.",
+            import subprocess
+            output = subprocess.check_output(
+                ["cmd", "/c", "dir", "/s", "/b", "/a", "$Recycle.Bin"],
+                shell=True, timeout=10, text=True
             )
+            items = []
+            for line in output.splitlines():
+                if line.strip():
+                    items.append({"path": line.strip()})
+            return ToolResult(tool_name=self.name, status=ToolStatus.SUCCESS, output={"items": items[:100]},
+                              summary=f"Found {len(items)} items in Recycle Bin")
         except Exception as exc:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"Failed to write file: {exc}",
-            )
-
-        return ToolResult(
-            tool_name=self.name,
-            status=ToolStatus.SUCCESS,
-            output={
-                "path": res.get("path"),
-                "size_bytes": res.get("size_bytes"),
-                "overwrite": overwrite,
-            },
-            summary=f"Written {res.get('size_bytes', 0)} bytes to {path_str}",
-        )
+            return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message=str(exc))
 
 
-class ListDirectoryTool(BaseTool):
-    """List files and directories."""
-
-    name = "list_directory"
-    description = "List files and directories at the specified path."
+class EmptyRecycleBinTool(BaseTool):
+    name = "empty_recycle_bin"
+    description = "Empty the Windows Recycle Bin. Requires confirmation."
+    parameters = []
+    permission_level = PermissionLevel.RESTRICTED
     category = "filesystem"
-    parameters = [
-        ToolParameter(
-            name="path",
-            description="Directory path to list (defaults to working directory).",
-            type="string",
-            required=False,
-            default=".",
-        ),
-        ToolParameter(
-            name="recursive",
-            description="Whether to list recursively.",
-            type="boolean",
-            required=False,
-            default=False,
-        ),
-        ToolParameter(
-            name="pattern",
-            description="Glob pattern to filter (e.g., '*.py', '*.txt').",
-            type="string",
-            required=False,
-        ),
-    ]
 
     async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:
-        path_str = kwargs.get("path", ".")
-        recursive = kwargs.get("recursive", False)
-        pattern = kwargs.get("pattern")
-
+        if not IS_WINDOWS:
+            return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message="Windows only")
         try:
-            _fs_read, _fs_write, fs_list_directory, _fs_search = _get_fs_service()
-            res = fs_list_directory(path_str, working_directory=context.working_directory, recursive=recursive, pattern=pattern)
+            import subprocess
+            subprocess.run(["cmd", "/c", "rd", "/s", "/q", "%systemdrive%\\$Recycle.Bin"],
+                           shell=True, timeout=30, capture_output=True)
+            return ToolResult(tool_name=self.name, status=ToolStatus.SUCCESS, summary="Recycle Bin emptied")
         except Exception as exc:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=str(exc),
-            )
-
-        return ToolResult(
-            tool_name=self.name,
-            status=ToolStatus.SUCCESS,
-            output={
-                "path": res.get("path"),
-                "entries": res.get("entries"),
-                "total_entries": res.get("total_entries"),
-                "directories": sum(1 for e in res.get("entries", []) if e["type"] == "directory"),
-                "files": sum(1 for e in res.get("entries", []) if e["type"] == "file"),
-            },
-            summary=f"Listed {res.get('total_entries', 0)} entries in {path_str}",
-        )
-
-
-class SearchFilesTool(BaseTool):
-    """Search files using regex patterns."""
-
-    name = "search_files"
-    description = "Search for text patterns in files using regular expressions."
-    category = "filesystem"
-    parameters = [
-        ToolParameter(
-            name="pattern",
-            description="Regular expression pattern to search for.",
-            type="string",
-            required=True,
-        ),
-        ToolParameter(
-            name="path",
-            description="Directory to search in (defaults to working directory).",
-            type="string",
-            required=False,
-            default=".",
-        ),
-        ToolParameter(
-            name="file_pattern",
-            description="Glob pattern to filter files (e.g., '*.py', '*.ts').",
-            type="string",
-            required=False,
-        ),
-        ToolParameter(
-            name="max_results",
-            description="Maximum number of results to return.",
-            type="number",
-            required=False,
-            default=50,
-        ),
-    ]
-
-    async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:
-        pattern_str = kwargs.get("pattern", "")
-        path_str = kwargs.get("path", ".")
-        file_pattern = kwargs.get("file_pattern")
-        max_results = kwargs.get("max_results", 50)
-
-        if not pattern_str:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message="No search pattern provided.",
-            )
-
-        try:
-            _fs_read, _fs_write, _fs_list, fs_search_files = _get_fs_service()
-            res = fs_search_files(pattern_str, path_str=path_str, working_directory=context.working_directory, file_pattern=file_pattern, max_results=max_results)
-        except FileNotFoundError:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"Directory not found: {path_str}",
-            )
-        except ValueError as exc:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"Invalid regex pattern: {exc}",
-            )
-        except Exception as exc:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error_message=f"Search failed: {exc}",
-            )
-
-        return ToolResult(
-            tool_name=self.name,
-            status=ToolStatus.SUCCESS,
-            output={
-                "pattern": res.get("pattern"),
-                "search_path": res.get("search_path"),
-                "results": res.get("results"),
-                "total_matches": res.get("total_matches", 0),
-            },
-            summary=f"Found {res.get('total_matches', 0)} matches for '{pattern_str}'",
-        )
+            return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message=str(exc))

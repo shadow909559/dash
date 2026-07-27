@@ -1,16 +1,41 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/authStore";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
-import Dashboard from "@/pages/Dashboard";
-import Chat from "@/pages/Chat";
-import Memory from "@/pages/Memory";
-import Projects from "@/pages/Projects";
-import Automation from "@/pages/Automation";
-import Settings from "@/pages/Settings";
 import Login from "@/pages/Login";
 import AnimatedBackground from "@/components/AnimatedBackground";
+
+// Lazy load all heavy pages to reduce initial bundle size and improve startup time
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Chat = lazy(() => import("@/pages/Chat"));
+const Memory = lazy(() => import("@/pages/Memory"));
+const Projects = lazy(() => import("@/pages/Projects"));
+const Automation = lazy(() => import("@/pages/Automation"));
+const Settings = lazy(() => import("@/pages/Settings"));
+
+// Loading fallback for lazy loaded pages - lightweight to avoid impact
+const PageLoader = () => (
+  <div
+    style={{
+      height: "100%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    }}
+  >
+    <div
+      style={{
+        width: 30,
+        height: 30,
+        borderRadius: "50%",
+        border: "3px solid var(--border-glass)",
+        borderTopColor: "var(--accent-primary)",
+        animation: "spin 0.8s linear infinite",
+      }}
+    />
+  </div>
+);
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -19,7 +44,9 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <div className="main-content">
         <Header />
-        <div className="page-content">{children}</div>
+        <div className="page-content">
+          <Suspense fallback={<PageLoader />}>{children}</Suspense>
+        </div>
       </div>
     </div>
   );

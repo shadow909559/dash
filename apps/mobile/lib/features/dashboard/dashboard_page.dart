@@ -8,6 +8,7 @@ import '../../core/theme/dash_theme.dart';
 import '../../core/widgets/glassmorphism.dart';
 import '../../core/widgets/ai_core.dart';
 import '../../core/widgets/animated_background.dart';
+import 'system_monitor_service.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // PRIVATE UI COMPONENTS
@@ -84,12 +85,38 @@ class _MetricRow extends StatelessWidget {
       ClipRRect(
         borderRadius: BorderRadius.circular(4),
         child: LinearProgressIndicator(
-          value: progress, minHeight: 4,
+          value: progress.clamp(0.0, 1.0), minHeight: 4,
           backgroundColor: DashColors.glassFrost,
           valueColor: AlwaysStoppedAnimation<Color>(color),
         ),
       ),
     ]);
+  }
+}
+
+class _LiveMetricWidget extends ConsumerWidget {
+  final String label;
+  final String Function(SystemSnapshot? snap) valueBuilder;
+  final double Function(SystemSnapshot? snap) progressBuilder;
+  final Color color;
+
+  const _LiveMetricWidget({
+    required this.label,
+    required this.valueBuilder,
+    required this.progressBuilder,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(systemMonitorProvider);
+    final snap = state.snapshot;
+    return _MetricRow(
+      label: label,
+      value: valueBuilder(snap),
+      progress: progressBuilder(snap),
+      color: color,
+    );
   }
 }
 
@@ -110,10 +137,18 @@ class _DashboardPageState extends ConsumerState<DashboardPage> with SingleTicker
   void initState() {
     super.initState();
     _glowController = AnimationController(duration: const Duration(seconds: 4), vsync: this)..repeat(reverse: true);
+    // Connect to system monitor on init
+    Future.microtask(() {
+      ref.read(systemMonitorProvider.notifier).connect();
+    });
   }
 
   @override
-  void dispose() { _glowController.dispose(); super.dispose(); }
+  void dispose() {
+    _glowController.dispose();
+    ref.read(systemMonitorProvider.notifier).disconnect();
+    super.dispose();
+  }
 
   Color _pulseColor() {
     final t = _glowController.value;
@@ -142,34 +177,69 @@ class _DashboardPageState extends ConsumerState<DashboardPage> with SingleTicker
   }
 
   Widget _buildHeader() {
+    final state = ref.watch(systemMonitorProvider);
+    final isLive = state.status == SystemMonitorStatus.connected;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('AI Command Center',
-        style: DashTypography.headlineMedium.copyWith(color: DashColors.pureWhite, fontWeight: FontWeight.w700),
-      ).animate().fadeIn(duration: 400.ms).slideX(begin: -20, end: 0, duration: 400.ms),
+      Row(children: [
+        Expanded(
+          child: Text('AI Command Center',
+            style: DashTypography.headlineMedium.copyWith(color: DashColors.pureWhite, fontWeight: FontWeight.w700),
+          ).animate().fadeIn(duration: 400.ms).slideX(begin: -20, end: 0, duration: 400.ms),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: (isLive ? DashColors.energyGreen : DashColors.warningAmber).withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: (isLive ? DashColors.energyGreen : DashColors.warningAmber).withValues(alpha: 0.3)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 6, height: 6, decoration: BoxDecoration(
+              color: isLive ? DashColors.energyGreen : DashColors.warningAmber,
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: (isLive ? DashColors.energyGreen : DashColors.warningAmber).withValues(alpha: 0.5), blurRadius: 4)],
+            )),
+            const SizedBox(width: 4),
+            Text(isLive ? 'LIVE' : 'Connecting...',
+              style: TextStyle(color: isLive ? DashColors.energyGreen : DashColors.warningAmber, fontSize: 10, fontWeight: FontWeight.w600),
+            ),
+          ]),
+        ),
+      ]),
       const SizedBox(height: 8),
-      Text('Welcome back. All systems operational.',
+      Text('Welcome back. Systems ${isLive ? "operational" : "connecting..."}.',
         style: DashTypography.bodyLarge.copyWith(color: DashColors.textGray),
       ).animate().fadeIn(duration: 400.ms, delay: 200.ms).slideX(begin: -20, end: 0, duration: 400.ms, delay: 200.ms),
     ]);
   }
 
   Widget _buildAICoreStatus() {
+    final state = ref.watch(systemMonitorProvider);
+    final snap = state.snapshot;
+    final cpuPct = snap?.cpuPercent ?? 0;
+    final ramPct = snap?.ramPercent ?? 0;
+    final cpuTemp = snap?.cpuTemp;
+
     return GlassPanel(padding: const EdgeInsets.all(24), child: Row(children: [
       const AICoreWithStatus(state: AIState.idle, size: 80, statusText: 'AI CORE'),
       const SizedBox(width: 24),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Neural Interface Active',
-          style: DashTypography.titleMedium.copyWith(color: DashColors.pureWhite, fontWeight: FontWeight.w600),
+        const Text('Neural Interface Active',
+          style: TextStyle(color: DashColors.softWhite, fontSize: 15, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 4),
-        const Text('Processing power: 100% | Memory: 87% | Latency: 12ms',
-          style: TextStyle(color: DashColors.textGray, fontSize: 12),
+        Text(
+          'CPU: ${cpuPct.toStringAsFixed(0)}% | RAM: ${ramPct.toStringAsFixed(0)}%${cpuTemp != null ? " | ${cpuTemp.toStringAsFixed(1)}°C" : ""}',
+          style: const TextStyle(color: DashColors.textGray, fontSize: 12),
         ),
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 4, children: [
-          const _StatusBadge(label: 'Online', color: DashColors.energyGreen),
-          const _StatusBadge(label: 'Low Latency', color: DashColors.electricBlue),
-          const _StatusBadge(label: 'Secured', color: DashColors.purpleGlow),
+          _StatusBadge(
+            label: state.status == SystemMonitorStatus.connected ? 'Online' : 'Connecting',
+            color: state.status == SystemMonitorStatus.connected ? DashColors.energyGreen : DashColors.warningAmber,
+          ),
+          _StatusBadge(label: 'Real-time', color: DashColors.electricBlue),
+          _StatusBadge(label: 'Secured', color: DashColors.purpleGlow),
         ]),
       ])),
     ]));
@@ -207,18 +277,119 @@ class _DashboardPageState extends ConsumerState<DashboardPage> with SingleTicker
   }
 
   Widget _buildSystemStatus() {
+    final state = ref.watch(systemMonitorProvider);
+    final snap = state.snapshot;
+
     return GlassPanel(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text('System Status',
         style: TextStyle(color: DashColors.softWhite, fontSize: 15, fontWeight: FontWeight.w600),
       ),
       const SizedBox(height: 16),
-      const _MetricRow(label: 'CPU Usage', value: '23%', progress: 0.23, color: DashColors.energyGreen),
+      _LiveMetricWidget(
+        label: 'CPU Usage',
+        valueBuilder: (snap) {
+          final pct = snap?.cpuPercent;
+          return pct != null ? '${pct.toStringAsFixed(0)}%' : '--%';
+        },
+        progressBuilder: (snap) => (snap?.cpuPercent ?? 0) / 100,
+        color: DashColors.energyGreen,
+      ),
       const SizedBox(height: 12),
-      const _MetricRow(label: 'Memory', value: '5.2 / 8 GB', progress: 0.65, color: DashColors.electricBlue),
+      _LiveMetricWidget(
+        label: 'Memory',
+        valueBuilder: (snap) {
+          final used = snap?.ramUsedGb;
+          final total = snap?.ramTotalGb;
+          if (used != null && total != null) {
+            return '${used.toStringAsFixed(1)} / ${total.toStringAsFixed(1)} GB';
+          }
+          return '-- / -- GB';
+        },
+        progressBuilder: (snap) => (snap?.ramPercent ?? 0) / 100,
+        color: DashColors.electricBlue,
+      ),
       const SizedBox(height: 12),
-      const _MetricRow(label: 'AI Model Load', value: 'Active', progress: 1.0, color: DashColors.purpleGlow),
+      _LiveMetricWidget(
+        label: 'CPU Details',
+        valueBuilder: (snap) {
+          final freq = snap?.cpuFreq;
+          final temp = snap?.cpuTemp;
+          if (freq != null && temp != null) {
+            return '${freq.toStringAsFixed(0)} MHz / ${temp.toStringAsFixed(1)}°C';
+          } else if (freq != null) {
+            return '${freq.toStringAsFixed(0)} MHz';
+          }
+          return snap?.cpu['brand']?.toString() ?? 'Active';
+        },
+        progressBuilder: (_) => 1.0,
+        color: DashColors.purpleGlow,
+      ),
       const SizedBox(height: 12),
-      const _MetricRow(label: 'Network', value: 'Connected', progress: 0.85, color: DashColors.skyBlue),
+      _LiveMetricWidget(
+        label: 'Network',
+        valueBuilder: (snap) {
+          final down = snap?.downloadSpeedMbps;
+          final up = snap?.uploadSpeedMbps;
+          final ip = snap?.ipAddress;
+          if (down != null && up != null) {
+            return '⬇ ${down.toStringAsFixed(1)} ⬆ ${up.toStringAsFixed(1)} Mbps';
+          }
+          return ip ?? 'Connected';
+        },
+        progressBuilder: (_) => 0.85,
+        color: DashColors.skyBlue,
+      ),
+      const SizedBox(height: 12),
+      _LiveMetricWidget(
+        label: 'Storage',
+        valueBuilder: (snap) {
+          final used = snap?.storageUsedGb;
+          final total = snap?.storageTotalGb;
+          if (used != null && total != null) {
+            return '${used.toStringAsFixed(0)} / ${total.toStringAsFixed(0)} GB';
+          }
+          return '-- / -- GB';
+        },
+        progressBuilder: (snap) {
+          final used = snap?.storageUsedGb ?? 0;
+          final total = snap?.storageTotalGb ?? 1;
+          return total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
+        },
+        color: DashColors.energyGreen,
+      ),
+      if (snap?.gpu != null && snap!.gpu.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        _LiveMetricWidget(
+          label: 'GPU',
+          valueBuilder: (snap) {
+            final gpu = snap?.gpu.firstOrNull;
+            if (gpu == null) return 'N/A';
+            final name = gpu['name']?.toString() ?? 'GPU';
+            final usage = gpu['usage_percent']?.toDouble();
+            return usage != null ? '$name ${usage.toStringAsFixed(0)}%' : name;
+          },
+          progressBuilder: (snap) {
+            final usage = snap?.gpu.firstOrNull?['usage_percent']?.toDouble() ?? 0;
+            return usage / 100;
+          },
+          color: DashColors.purpleGlow,
+        ),
+      ],
+      if (snap?.batteryPercent != null) ...[
+        const SizedBox(height: 12),
+        _LiveMetricWidget(
+          label: 'Battery',
+          valueBuilder: (snap) {
+            final pct = snap?.batteryPercent;
+            final charging = snap?.batteryCharging;
+            if (pct == null) return 'N/A';
+            final icon = charging == true ? '🔌' : '🔋';
+            return '$icon ${pct.toStringAsFixed(0)}%';
+          },
+          progressBuilder: (snap) => (snap?.batteryPercent ?? 0) / 100,
+          color: DashColors.energyGreen,
+        ),
+      ],
     ]));
   }
 
@@ -252,3 +423,4 @@ class _DashboardPageState extends ConsumerState<DashboardPage> with SingleTicker
     ]));
   }
 }
+

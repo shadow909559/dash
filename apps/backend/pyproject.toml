@@ -20,6 +20,8 @@ dependencies = [
     "websockets>=14.0",
     "httpx>=0.28.0",
     "matplotlib>=3.11.1",
+    "psutil>=6.0.0",
+    "py-cpuinfo>=9.0.0",
 ]
 
 [project.optional-dependencies]

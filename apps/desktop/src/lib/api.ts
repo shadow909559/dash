@@ -49,7 +49,7 @@ export const auth = {
     }),
 
   register: (email: string, password: string, username?: string) =>
-  request("/auth/register", {
+  request<{ access_token: string; refresh_token: string; expires_in: number; user: { id: string; email: string } }>("/auth/register", {
     method: "POST",
     body: {
       email,
@@ -169,6 +169,115 @@ export function createWebSocket(): WebSocket {
 
   return ws;
 }
+
+// Desktop Control
+export const desktop = {
+  // Volume
+  getVolume: () => request<{ volume: number; muted: boolean; summary: string }>("/desktop/volume"),
+  setVolume: (level: number) => request<{ volume: number; summary: string }>("/desktop/volume", { method: "POST", body: { level } }),
+  setMute: (muted: boolean) => request<{ summary: string }>("/desktop/volume/mute", { method: "POST", body: { muted } }),
+  volumeUp: (amount = 5) => request<{ summary: string }>(`/desktop/volume/up?amount=${amount}`, { method: "POST" }),
+  volumeDown: (amount = 5) => request<{ summary: string }>(`/desktop/volume/down?amount=${amount}`, { method: "POST" }),
+
+  // Brightness
+  getBrightness: () => request<{ brightness: number; summary: string }>("/desktop/brightness"),
+  setBrightness: (level: number) => request<{ brightness: number; summary: string }>("/desktop/brightness", { method: "POST", body: { level } }),
+
+  // Clipboard
+  clipboardRead: () => request<{ text: string; summary: string }>("/desktop/clipboard"),
+  clipboardWrite: (text: string) => request<{ text: string; summary: string }>("/desktop/clipboard", { method: "POST", body: { text } }),
+  clipboardClear: () => request<{ summary: string }>("/desktop/clipboard", { method: "DELETE" }),
+
+  // Mouse
+  mouseMove: (x: number, y: number) => request<{ status: string }>("/desktop/mouse/move", { method: "POST", body: { x, y } }),
+  mouseClick: (button = "left", x?: number, y?: number) => request<{ status: string }>("/desktop/mouse/click", { method: "POST", body: { button, x, y } }),
+  mouseDoubleClick: () => request<{ status: string }>("/desktop/mouse/double-click", { method: "POST" }),
+  mouseScroll: (clicks = 1) => request<{ status: string }>(`/desktop/mouse/scroll?clicks=${clicks}`, { method: "POST" }),
+  mousePosition: () => request<{ status: string; details: { x: number; y: number } }>("/desktop/mouse/position"),
+
+  // Keyboard
+  keyboardType: (text: string) => request<{ status: string }>("/desktop/keyboard/type", { method: "POST", body: { text } }),
+  keyboardPress: (key: string) => request<{ status: string }>("/desktop/keyboard/press", { method: "POST", body: { key } }),
+  keyboardHotkey: (keys: string[]) => request<{ status: string }>("/desktop/keyboard/hotkey", { method: "POST", body: { keys } }),
+
+  // Power
+  shutdown: (force = false, timeout = 30) => request<{ summary: string }>("/desktop/power/shutdown", { method: "POST", body: { force, timeout } }),
+  restart: (force = false, timeout = 30) => request<{ summary: string }>("/desktop/power/restart", { method: "POST", body: { force, timeout } }),
+  lock: () => request<{ summary: string }>("/desktop/power/lock", { method: "POST" }),
+  sleep: () => request<{ summary: string }>("/desktop/power/sleep", { method: "POST" }),
+  hibernate: () => request<{ summary: string }>("/desktop/power/hibernate", { method: "POST" }),
+  logoff: (force = false) => request<{ summary: string }>(`/desktop/power/logoff?force=${force}`, { method: "POST" }),
+  abortShutdown: () => request<{ summary: string }>("/desktop/power/abort-shutdown", { method: "POST" }),
+
+  // Screenshot
+  screenshot: () => request<{ status: string; details: { image_base64: string; size: number } }>("/desktop/screenshot", { method: "POST" }),
+
+  // Notification
+  notification: (title: string, message: string, duration = 5) =>
+    request<{ summary: string }>("/desktop/notification", { method: "POST", body: { title, message, duration } }),
+};
+
+// Window Manager
+export const windows = {
+  list: () => request<{ status: string; details: { windows: Array<{ hwnd: number; title: string }>; count: number } }>("/windows"),
+  focus: (title: string) => request<{ status: string; details: { summary: string } }>("/windows/focus", { method: "POST", body: { title } }),
+  close: (title: string) => request<{ status: string; details: { summary: string } }>("/windows/close", { method: "POST", body: { title } }),
+  minimize: (title: string) => request<{ status: string; details: { summary: string } }>("/windows/minimize", { method: "POST", body: { title } }),
+  maximize: (title: string) => request<{ status: string; details: { summary: string } }>("/windows/maximize", { method: "POST", body: { title } }),
+  move: (title: string, x: number, y: number) => request<{ status: string }>("/windows/move", { method: "POST", body: { title, x, y } }),
+  resize: (title: string, width: number, height: number) => request<{ status: string }>("/windows/resize", { method: "POST", body: { title, width, height } }),
+  snap: (title: string, position: string) => request<{ status: string }>("/windows/snap", { method: "POST", body: { title, position } }),
+  active: () => request<{ status: string; details: { title: string; rect: Record<string, number> } }>("/windows/active"),
+};
+
+// Files
+export const files = {
+  browse: (path = ".", showHidden = false) =>
+    request<{ path: string; entries: Array<{ name: string; type: string; size: number; path: string }>; count: number }>(
+      `/files/browse?path=${encodeURIComponent(path)}&show_hidden=${showHidden}`
+    ),
+  search: (pattern: string, path = ".", maxResults = 50) =>
+    request<{ pattern: string; path: string; results: Array<{ name: string; path: string; type: string; size: number }>; count: number }>(
+      `/files/search?pattern=${encodeURIComponent(pattern)}&path=${encodeURIComponent(path)}&max_results=${maxResults}`
+    ),
+  preview: (path: string, maxLines = 50) =>
+    request<{ name: string; path: string; content: string; type: string; total_lines?: number }>(
+      `/files/preview?path=${encodeURIComponent(path)}&max_lines=${maxLines}`
+    ),
+  copy: (source: string, destination: string) =>
+    request<{ summary: string }>("/files/copy", { method: "POST", body: { source, destination } }),
+  move: (source: string, destination: string) =>
+    request<{ summary: string }>("/files/move", { method: "POST", body: { source, destination } }),
+  rename: (path: string, newName: string) =>
+    request<{ summary: string }>("/files/rename", { method: "POST", body: { path, new_name: newName } }),
+  delete: (path: string, permanent = false) =>
+    request<{ summary: string }>("/files/delete", { method: "POST", body: { path, permanent } }),
+  recycleBin: () => request<{ results: Array<{ path: string }>; count: number }>("/files/recycle-bin"),
+  emptyRecycleBin: () => request<{ summary: string }>("/files/recycle-bin/empty", { method: "POST" }),
+  specialFolders: () => request<Record<string, string>>("/files/special-folders"),
+  drives: () => request<{ results: Array<{ letter: string; type: string }>; count: number }>("/files/drives"),
+};
+
+// AI OS
+export const aiOs = {
+  execute: (text: string, sessionId = "", userId = "", autoApprove = false) =>
+    request<{ success: boolean; plan_id: string; summary: string; steps_completed: number; steps_failed: number }>("/ai-os/execute", {
+      method: "POST",
+      body: { text, session_id: sessionId, user_id: userId, auto_approve: autoApprove },
+    }),
+  listPlans: (limit = 10) => request<Array<{ plan_id: string; user_query: string; status: string; steps: Array<Record<string, unknown>> }>>(`/ai-os/plans?limit=${limit}`),
+  getPlan: (planId: string) => request<{ plan_id: string; user_query: string; status: string; steps: Array<Record<string, unknown>> }>(`/ai-os/plans/${planId}`),
+  cancelPlan: (planId: string) => request<{ cancelled: boolean }>(`/ai-os/plans/${planId}/cancel`, { method: "POST" }),
+  listProviders: () => request<{ providers: Array<{ name: string; provider: string; model: string; healthy: boolean }> }>("/ai-os/providers"),
+  checkHealth: () => request<Record<string, { healthy: boolean; latency_ms: number }>>("/ai-os/providers/check-health", { method: "POST" }),
+  getPermissions: (userId: string) => request<{ always_allowed: Record<string, string[]>; always_denied: Record<string, string[]> }>(`/ai-os/permissions/${userId}`),
+  allowCommand: (userId: string, category: string, action: string) =>
+    request<{ status: string }>(`/ai-os/permissions/${userId}/allow`, { method: "POST", body: { category, action } }),
+  denyCommand: (userId: string, category: string, action: string) =>
+    request<{ status: string }>(`/ai-os/permissions/${userId}/deny`, { method: "POST", body: { category, action } }),
+  approve: (commandId: string, decision = "allow_once") =>
+    request<{ approved: boolean }>(`/ai-os/approve/${commandId}`, { method: "POST", body: { decision } }),
+};
 
 // Health
 export const health = {

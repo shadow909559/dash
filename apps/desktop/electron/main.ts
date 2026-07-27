@@ -2,40 +2,77 @@ import { app, BrowserWindow, shell, ipcMain, Notification } from "electron";
 import { autoUpdater } from "electron-updater";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { BackendManager } from "./backend_manager";
+import { SystemTray } from "./system_tray";
+import { initSingleInstanceLock, setMainWindow } from "./single_instance";
+import { startMemoryCleanup, stopMemoryCleanup, getMemoryStats, performCleanup } from "./memory_cleanup";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
+const backendManager = new BackendManager();
+let systemTray: SystemTray | null = null;
 
-// Auto-updater configuration
+// ── Single Instance Lock ──────────────────────────────────────────────────
+
+if (!initSingleInstanceLock()) {
+  app.quit();
+}
+
+// ── Production-grade auto-updater for GitHub (shadow909559/dash) ──────────
+
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.setFeedURL({
+  provider: "github",
+  owner: "shadow909559",
+  repo: "dash",
+});
 
-function sendUpdateEvent(eventName: string, data?: any) {
+// Internal state
+let _updateAvailable = false;
+let _updateDownloaded = false;
+let _checkInProgress = false;
+
+function sendUpdateEvent(eventName: string, data?: unknown): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(`updater:${eventName}`, data);
   }
 }
 
-function showDesktopNotification(title: string, body: string) {
-  if (Notification.isSupported()) {
-    new Notification({ title, body }).show();
+function showDesktopNotification(title: string, body: string): void {
+  try {
+    if (Notification.isSupported()) {
+      new Notification({ title, body }).show();
+    }
+  } catch {
+    // Notifications are best-effort, never crash
   }
 }
 
-// Auto-updater event handlers
+// ── autoUpdater event handlers ──────────────────────────────────────────────
+
 autoUpdater.on("checking-for-update", () => {
+  _checkInProgress = true;
   sendUpdateEvent("checking");
 });
 
 autoUpdater.on("update-available", (info) => {
-  sendUpdateEvent("available", info);
-  showDesktopNotification("Update Available", "A new version of DASH is available for download.");
+  _checkInProgress = false;
+  _updateAvailable = true;
+  sendUpdateEvent("available", {
+    version: info.version,
+    releaseDate: info.releaseDate,
+    releaseNotes: info.releaseNotes,
+  });
+  showDesktopNotification("Update Available", `DASH ${info.version} is available for download.`);
 });
 
-autoUpdater.on("update-not-available", (info) => {
-  sendUpdateEvent("not-available", info);
+autoUpdater.on("update-not-available", () => {
+  _checkInProgress = false;
+  _updateAvailable = false;
+  sendUpdateEvent("notAvailable");
 });
 
 autoUpdater.on("download-progress", (progressObj) => {
@@ -43,21 +80,160 @@ autoUpdater.on("download-progress", (progressObj) => {
     percent: progressObj.percent,
     transferred: progressObj.transferred,
     total: progressObj.total,
-    bytesPerSecond: progressObj.bytesPerSecond
+    bytesPerSecond: progressObj.bytesPerSecond,
+    delta: progressObj.delta,
   });
 });
 
 autoUpdater.on("update-downloaded", (info) => {
-  sendUpdateEvent("downloaded", info);
+  _updateDownloaded = true;
+  sendUpdateEvent("downloaded", {
+    version: info.version,
+    releaseDate: info.releaseDate,
+    releaseNotes: info.releaseNotes,
+  });
   showDesktopNotification("Update Ready", "DASH update has been downloaded. Restart to install.");
 });
 
 autoUpdater.on("error", (err) => {
-  console.error("Auto-updater error:", err);
-  sendUpdateEvent("error", err.message);
+  _checkInProgress = false;
+  const message = (err && typeof err === "object" && "message" in err)
+    ? (err as Error).message
+    : String(err ?? "Unknown error");
+
+  let userMessage = message;
+  if (/404|not found/i.test(message)) {
+    userMessage = "No releases found for this repository.";
+  } else if (/timeout|timed out|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN/i.test(message)) {
+    userMessage = "Could not reach GitHub. Please check your internet connection and try again.";
+  } else if (/unauthorized|403/i.test(message)) {
+    userMessage = "Access denied. Make sure the repository is accessible.";
+  } else if (/no valid/i.test(message)) {
+    userMessage = "No published releases available for your platform.";
+  } else if (/checksum|integrity|corrupt|signature/i.test(message)) {
+    userMessage = "Download appears corrupted. Please try again.";
+  }
+
+  console.error("[autoUpdater]", message);
+  sendUpdateEvent("error", userMessage);
 });
 
-function createWindow() {
+// ── IPC handlers ────────────────────────────────────────────────────────────
+
+ipcMain.handle("updater:status", () => {
+  return {
+    checkInProgress: _checkInProgress,
+    updateAvailable: _updateAvailable,
+    updateDownloaded: _updateDownloaded,
+    version: app.getVersion(),
+  };
+});
+
+ipcMain.handle("updater:check", async () => {
+  if (_checkInProgress) return { ok: false, reason: "ALREADY_CHECKING" };
+  if (isDev) {
+    sendUpdateEvent("error", "Auto-updater is disabled in development mode.");
+    return { ok: false, reason: "DEV_MODE" };
+  }
+  try {
+    await autoUpdater.checkForUpdates();
+    return { ok: true };
+  } catch (err: unknown) {
+    const message = (err && typeof err === "object" && "message" in err)
+      ? (err as Error).message
+      : String(err ?? "Unknown error");
+    sendUpdateEvent("error", message);
+    return { ok: false, reason: message };
+  }
+});
+
+ipcMain.handle("updater:download", async () => {
+  if (!_updateAvailable) {
+    sendUpdateEvent("error", "No update available to download.");
+    return { ok: false, reason: "NO_UPDATE" };
+  }
+  if (_updateDownloaded) {
+    sendUpdateEvent("downloaded", { version: app.getVersion() });
+    return { ok: false, reason: "ALREADY_DOWNLOADED" };
+  }
+  try {
+    await autoUpdater.downloadUpdate();
+    return { ok: true };
+  } catch (err: unknown) {
+    const message = (err && typeof err === "object" && "message" in err)
+      ? (err as Error).message
+      : String(err ?? "Unknown error");
+    sendUpdateEvent("error", message);
+    return { ok: false, reason: message };
+  }
+});
+
+ipcMain.handle("updater:install", () => {
+  if (!_updateDownloaded) {
+    sendUpdateEvent("error", "No update has been downloaded yet.");
+    return { ok: false, reason: "NOT_DOWNLOADED" };
+  }
+  try {
+    autoUpdater.quitAndInstall();
+    return { ok: true };
+  } catch (err: unknown) {
+    const message = (err && typeof err === "object" && "message" in err)
+      ? (err as Error).message
+      : String(err ?? "Unknown error");
+    sendUpdateEvent("error", message);
+    return { ok: false, reason: message };
+  }
+});
+
+// Backend management IPC
+ipcMain.handle("backend:status", () => {
+  return {
+    running: backendManager.isRunning(),
+    port: backendManager.getPort(),
+  };
+});
+
+ipcMain.handle("backend:restart", async () => {
+  await backendManager.stop();
+  await backendManager.start();
+  return { ok: true };
+});
+
+// Memory management IPC
+ipcMain.handle("memory:stats", () => {
+  return getMemoryStats();
+});
+
+ipcMain.handle("memory:cleanup", () => {
+  performCleanup();
+  return { ok: true };
+});
+
+// System tray IPC
+ipcMain.handle("tray:minimize-to-tray", () => {
+  if (mainWindow) {
+    mainWindow.hide();
+  }
+  return { ok: true };
+});
+
+ipcMain.handle("tray:restore", () => {
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  return { ok: true };
+});
+
+// IPC cleanup on window close
+ipcMain.handle("app:quit", () => {
+  app.quit();
+  return { ok: true };
+});
+
+// ── Window creation ─────────────────────────────────────────────────────────
+
+function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -67,17 +243,41 @@ function createWindow() {
     title: "DASH",
     backgroundColor: "#0a0a0f",
     webPreferences: {
-      preload: isDev 
+      preload: isDev
         ? path.join(__dirname, "preload.js")
         : path.join(app.getAppPath(), "dist-electron", "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Phase 12: Reduce memory by disabling unused features
+      backgroundThrottling: true,
+      spellcheck: false,
+      disableDialogs: true,
     },
+  });
+
+  // Phase 12: Disable GPU acceleration if explicit env var is set
+  // This saves ~200-400MB GPU memory on integrated GPUs
+  if (process.env.DASH_DISABLE_GPU === "1") {
+    app.disableHardwareAcceleration();
+  }
+
+  // Phase 12: Memory optimization - flush unused memory when window is hidden
+  mainWindow.on("hide", () => {
+    performCleanup();
   });
 
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
+  });
+
+  // Minimize to tray instead of closing
+  mainWindow.on("close", (event) => {
+    if (!(app as any).isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
+      showDesktopNotification("DASH", "DASH is still running in the system tray.");
+    }
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -89,46 +289,37 @@ function createWindow() {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
-    // In production, the dist folder is in the same directory as dist-electron
     mainWindow.loadFile(path.join(app.getAppPath(), "dist", "index.html"));
   }
+
+  setMainWindow(mainWindow);
+
+  // Create system tray
+  systemTray = new SystemTray(mainWindow);
 }
 
-// IPC handlers for updater control
-ipcMain.handle("updater:check-for-updates", () => {
-  if (!isDev) {
-    autoUpdater.checkForUpdates().catch(err => {
-      console.error("Failed to check for updates:", err);
-    });
+// ── App lifecycle ───────────────────────────────────────────────────────────
+
+app.whenReady().then(async () => {
+  // Start the Python backend
+  try {
+    await backendManager.start();
+    console.log("[Main] Backend started successfully");
+  } catch (err) {
+    console.error("[Main] Failed to start backend:", err);
   }
-});
 
-ipcMain.handle("updater:start-download", () => {
-  autoUpdater.downloadUpdate().catch(err => {
-    console.error("Failed to download update:", err);
-  });
-});
-
-ipcMain.handle("updater:quit-and-install", () => {
-  autoUpdater.quitAndInstall();
-});
-
-ipcMain.handle("updater:set-auto-download", (_, value: boolean) => {
-  autoUpdater.autoDownload = value;
-});
-
-ipcMain.handle("updater:set-auto-install-on-quit", (_, value: boolean) => {
-  autoUpdater.autoInstallOnAppQuit = value;
-});
-
-app.whenReady().then(() => {
   createWindow();
-  
-  // Wait 5 seconds before checking for updates on startup
+
+  // Start periodic memory cleanup
+  startMemoryCleanup();
+  console.log("[Main] Memory cleanup scheduler started");
+
+  // Wait 5 seconds after startup, then check for updates (production only)
   if (!isDev) {
     setTimeout(() => {
-      autoUpdater.checkForUpdates().catch(err => {
-        console.log("GitHub unavailable, will retry later:", err.message);
+      autoUpdater.checkForUpdates().catch((err: Error) => {
+        console.log("[autoUpdater] Initial check failed (will retry later):", err.message);
       });
     }, 5000);
   }
@@ -142,6 +333,17 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    app.quit();
+    // Don't quit - minimize to tray instead
   }
 });
+
+app.on("before-quit", async () => {
+  (app as any).isQuitting = true;
+  stopMemoryCleanup();
+  if (systemTray) {
+    systemTray.destroy();
+  }
+  // Gracefully stop the backend
+  await backendManager.stop();
+});
+

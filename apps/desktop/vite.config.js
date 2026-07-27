@@ -9,11 +9,14 @@ export default defineConfig({
         electron([
             {
                 entry: "electron/main.ts",
+                onstart(options) {
+                    options.startup();
+                },
                 vite: {
                     build: {
                         outDir: "dist-electron",
                         rollupOptions: {
-                            external: ["electron"],
+                            external: ["electron", "electron-updater"],
                         },
                     },
                 },

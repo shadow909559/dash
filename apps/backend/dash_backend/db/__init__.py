@@ -28,4 +28,3 @@ from dash_backend.db.models import (  # noqa: F401
 from dash_backend.automation.models import Automation, AutomationExecution  # noqa: F401
 from dash_backend.agents.models import Agent  # noqa: F401
 from dash_backend.executive.models import Goal, ExecutiveTask, ExecutionHistory, Approval  # noqa: F401
-from dash_backend.rag.models import Document, DocumentChunk  # noqa: F401
