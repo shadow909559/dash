@@ -1,0 +1,132 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Database
+*.db
+
+# Environment
+.env
+*.env
+
+# IDE
+.idea/
+.vscode/
+
+# Flutter
+build/
+.dart_tool/
+
+# Large binaries
+node_modules/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Tools
+tools/piper/
+
+# Mobile temp files
+apps/mobile/_conv_flow*
+apps/mobile/screenshot_home.png
+apps/mobile/ui_dump.xml
+
+# Build artifacts
+apps/backend/dist/
+apps/desktop/release/
+apps/desktop/dist/
+apps/mobile/app/build/
+*.apk
+*.aab
+*.ipa
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Crash logs
+hs_err_pid*
+replay_pid*
+
+# OS
+.DS_Store
+Thumbs.db
+# Flutter
+**/.dart_tool/
+**/build/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+
+# Flutter generated
+**/android/.gradle/
+**/ios/Flutter/ephemeral/
+**/linux/flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+**/windows/flutter/ephemeral/
+
+# Generated IDE files
+**/*.iml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+node_modules/
+
+# Local desktop backup
+apps/desktop_backup_v1/
+
+# Electron
+apps/desktop/release/
+apps/desktop/dist/
+apps/desktop/dist-electron/
+
+# Flutter
+apps/mobile/windows/flutter/ephemeral/
+apps/mobile/build/
+apps/mobile/.dart_tool/
+apps/mobile/windows/runner/Debug/
+apps/mobile/windows/runner/Release/
+
+*.tsbuildinfo
+
+# ── Build artifacts & binaries (never commit; see docs/RepositoryHygiene.md) ──
+apps/backend/dist/
+apps/backend/build/
+*.exe
+!tools/**/*.exe
+
+# Local vector store / caches / runtime data
+chroma/
+cache/
+data/
+memory/
+models/
+logs/
+
+# Env files (all variants) — keep templates only
+.env.*
+!.env.example
+*.env
+!*.env.example
+
+# Structure dumps & one-off logs
+structure*.txt
+*_structure.txt
+backend_*.log
+backend_stdout*.log
+backend_stderr*.log
+frontend_dev.log
+tsc_*.txt
+*_err.log
+*_out.log
+# Tool artifacts
+.kilo/
+audit_logs/
+.trae/

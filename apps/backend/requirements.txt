@@ -1,0 +1,25 @@
+# GENERATED from pyproject.toml [project.dependencies] — do not edit here.
+# To change runtime dependencies, edit pyproject.toml and mirror the change.
+# Local development should use:  pip install -e ".[dev]"
+# Used by Dockerfile for the container install.
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+sqlalchemy>=2.0.36
+alembic>=1.14.0
+asyncpg>=0.30.0
+psycopg[binary]>=3.1,<4.0
+redis>=5.2.0
+python-dotenv>=1.0.1
+websockets>=14.0,<16.0
+httpx>=0.28.0
+supabase>=2.31.0,<3.0.0
+python-multipart>=0.0.9
+psutil>=6.0.0
+py-cpuinfo>=9.0.0
+mss>=10.0.0
+Pillow>=10.0.0
+pyperclip>=1.8.0
+pyautogui>=0.9.54

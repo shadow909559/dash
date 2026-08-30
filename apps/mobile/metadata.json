@@ -1,0 +1,6 @@
+{
+  "name": "DASH",
+  "description": "DASH Personal AI Operating System mobile companion with interactive 3D Orb, AI Chat, Voice Assistant, PC Control, Agents, Approvals, Memory, and System Monitoring.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

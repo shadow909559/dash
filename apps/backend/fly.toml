@@ -1,0 +1,39 @@
+# fly.toml — DASH Backend on Fly.io (FREE FOREVER)
+# Free tier: 3 VMs, 160GB bandwidth, always-on, no expiry
+# https://fly.io/docs/reference/configuration/
+
+app = "dash-backend"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DASH_ENV = "production"
+  HOST = "0.0.0.0"
+  PORT = "8000"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false    # Always on — never sleep
+  auto_start_machines = true
+  min_machines_running = 1      # Keep alive
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 250
+    soft_limit = 200
+
+# 256MB RAM, shared CPU (free tier)
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# Health check
+  [[services.http_checks]]
+    interval = "10s"
+    timeout = "5s"
+    method = "GET"
+    path = "/health"
