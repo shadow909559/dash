@@ -100,6 +100,7 @@ export const DASHHeader: React.FC<DASHHeaderProps> = () => {
     <header
       role="banner"
       aria-label="DASH status bar"
+      className="dash-jarvis-header"
       style={{
         height: 48,
         width: "100%",
@@ -107,8 +108,7 @@ export const DASHHeader: React.FC<DASHHeaderProps> = () => {
         alignItems: "center",
         justifyContent: "space-between",
         padding: "0 16px",
-        backgroundColor: "var(--dash-surface)",
-        borderBottom: showBanner ? "none" : "1px solid var(--dash-border)",
+        borderBottom: showBanner ? "none" : undefined,
         WebkitAppRegion: "drag",
         userSelect: "none",
         zIndex: 40,
@@ -172,11 +172,12 @@ export const DASHHeader: React.FC<DASHHeaderProps> = () => {
           >
             <div
               style={{
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                backgroundColor: getStatusColor(systemStatus),
-                boxShadow: systemStatus === "online" ? "0 0 6px rgba(16, 185, 129, 0.4)" : "none",
+              width: 7,
+              height: 7,
+              borderRadius: "50%",
+              backgroundColor: getStatusColor(systemStatus),
+              boxShadow: systemStatus === "online" ? "0 0 8px rgba(34, 197, 94, 0.5)" : "0 0 8px rgba(239, 68, 68, 0.4)",
+              animation: systemStatus === "online" ? "jarvis-status-pulse 2s ease-in-out infinite" : "none",
               }}
             />
             <span>Core</span>

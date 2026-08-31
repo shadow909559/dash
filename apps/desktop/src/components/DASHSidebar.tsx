@@ -101,8 +101,9 @@ export const DASHSidebar: React.FC<DASHSidebarProps> = ({ isExpanded, onToggle }
               justifyContent: isExpanded ? "flex-start" : "center",
               borderRadius: "var(--dash-radius-sm)",
               color: isActive ? "var(--dash-text)" : "var(--dash-text-secondary)",
-              backgroundColor: isActive ? "var(--dash-surface-active)" : "transparent",
-              border: `1px solid ${isActive ? "var(--dash-border-accent)" : "transparent"}`,
+              backgroundColor: isActive ? "rgba(63, 169, 245, 0.08)" : "transparent",
+              border: `1px solid ${isActive ? "rgba(63, 169, 245, 0.25)" : "transparent"}`,
+              boxShadow: isActive ? "0 0 12px rgba(63, 169, 245, 0.12), inset 0 0 8px rgba(63, 169, 245, 0.06)" : "none",
               textDecoration: "none",
               fontSize: 13,
               fontWeight: isActive ? 500 : 400,
@@ -157,10 +158,10 @@ export const DASHSidebar: React.FC<DASHSidebarProps> = ({ isExpanded, onToggle }
     <aside
       role="navigation"
       aria-label="DASH navigation"
+      className="dash-jarvis-sidebar"
       style={{
         width: isExpanded ? 240 : 64,
         height: "100%",
-        backgroundColor: "var(--dash-surface)",
         borderRight: "1px solid var(--dash-border)",
         display: "flex",
         flexDirection: "column",
@@ -193,6 +194,7 @@ export const DASHSidebar: React.FC<DASHSidebarProps> = ({ isExpanded, onToggle }
         >
           {/* DASH Hexagon/Circle Logo */}
           <div
+            className="dash-jarvis-logo"
             style={{
               width: 28,
               height: 28,
@@ -201,7 +203,6 @@ export const DASHSidebar: React.FC<DASHSidebarProps> = ({ isExpanded, onToggle }
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              boxShadow: "0 0 12px var(--dash-accent-glow)",
               flexShrink: 0,
             }}
           >

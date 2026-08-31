@@ -55,23 +55,26 @@ function PageSkeleton() {
       aria-label="Loading page"
     >
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+        {/* JARVIS-style spinning ring loader */}
         <div
-          className="animate-pulse-glow"
           style={{
-            width: 40,
-            height: 40,
+            width: 44,
+            height: 44,
             borderRadius: "50%",
-            background: "var(--ultron-surface)",
-            border: "2px solid var(--ultron-border)",
-            boxShadow: "0 0 20px var(--ultron-glow)",
+            border: "2.5px solid transparent",
+            borderTop: "2.5px solid #3fa9f5",
+            borderRight: "2.5px solid rgba(63,169,245,0.3)",
+            animation: "bd-ring-spin 2s linear infinite",
+            boxShadow: "0 0 15px rgba(63,169,245,0.2)",
           }}
         />
         <span
           style={{
             fontSize: 11,
             color: "var(--dash-text-muted)",
-            fontFamily: "'JetBrains Mono', monospace",
-            letterSpacing: "0.1em",
+            fontFamily: "'Orbitron', 'JetBrains Mono', monospace",
+            letterSpacing: "0.15em",
+            textTransform: "uppercase",
           }}
         >
           LOADING
@@ -165,16 +168,16 @@ export function App() {
               {/* Top Navigation & Status Header */}
               <DASHHeader sidebarExpanded={sidebarExpanded} />
 
-              {/* Main Content Viewport */}
+              {/* Main Content Viewport — JARVIS grid background */}
               <main
                 id="main-content"
                 aria-label="Main content"
+                className="dash-jarvis-page"
                 style={{
                   minWidth: 0,
                   minHeight: 0,
                   height: "100%",
                   overflow: "hidden",
-                  backgroundColor: "var(--dash-bg)",
                 }}
               >
                 <Routes>
