@@ -656,7 +656,7 @@ function VoiceTextInput({ onSend }: { onSend: (text: string) => void }) {
           border: "none",
           color: "var(--dash-text)",
           fontSize: 13,
-          outline: "none",
+          /* a11y: removed outline:none — global :focus-visible handles focus */
           width: 180,
           fontFamily: "inherit",
         }}

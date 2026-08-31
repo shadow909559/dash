@@ -661,7 +661,7 @@ const ttsRef = useRef<DASHSpeechSynthesis | null>(null);
               WebkitBackdropFilter: "blur(24px)",
               color: "rgba(255, 255, 255, 0.95)",
               fontSize: 15,
-              outline: "none",
+              /* a11y: removed outline:none — global :focus-visible handles focus */
               transition: "all 0.3s ease",
             }}
           />

@@ -203,6 +203,8 @@ export const CodingModePanel: React.FC<CodingModePanelProps> = ({ className = ''
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             onClick={() => setIsExpanded(!isExpanded)}
+            aria-label={isExpanded ? 'Collapse coding panel' : 'Expand coding panel'}
+            aria-expanded={isExpanded}
             style={{
               background: 'rgba(255, 0, 255, 0.1)',
               border: '1px solid rgba(255, 0, 255, 0.3)',
@@ -227,6 +229,7 @@ export const CodingModePanel: React.FC<CodingModePanelProps> = ({ className = ''
           </button>
           <button
             onClick={() => setIsOpen(false)}
+            aria-label="Close coding panel"
             style={{
               background: 'rgba(255, 50, 50, 0.1)',
               border: '1px solid rgba(255, 50, 50, 0.3)',

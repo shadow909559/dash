@@ -247,7 +247,7 @@ export const DesktopControlPage: React.FC = () => {
             <div style={{ textAlign: "center", padding: 20, color: "var(--dash-text-muted)", fontSize: 12 }}>Empty directory</div>
           ) : (
             filesList.map((f, i) => (
-              <div key={i} onClick={() => { if (f.type === "directory") browsePath(`${currentPath}/${f.name}`); }}
+              <div key={i} role="button" tabIndex={0} onClick={() => { if (f.type === "directory") browsePath(`${currentPath}/${f.name}`); }} onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && f.type === 'directory') { e.preventDefault(); browsePath(`${currentPath}/${f.name}`); } }}
                 style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 10px", borderRadius: "var(--dash-radius-sm)", cursor: f.type === "directory" ? "pointer" : "default", background: "transparent", transition: "background var(--dash-transition-fast)" }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "var(--dash-bg-subtle)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
@@ -268,7 +268,7 @@ export const DesktopControlPage: React.FC = () => {
 
       {/* Screenshot Overlay */}
       {showScreenshot && screenshot && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(8px)" }} onClick={() => setShowScreenshot(false)}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(8px)" }} onClick={() => setShowScreenshot(false)} onKeyDown={(e) => { if (e.key === 'Escape') setShowScreenshot(false); }} role="dialog" aria-label="Screenshot preview" tabIndex={-1}>
           <div style={{ position: "relative" }}>
             <img src={`data:image/png;base64,${screenshot}`} alt="Screenshot" style={{ maxWidth: "90vw", maxHeight: "85vh", borderRadius: "var(--dash-radius-lg)", border: "1px solid var(--dash-border-accent)", boxShadow: "0 0 60px rgba(77,148,255,0.15)" }} />
             <button onClick={() => setShowScreenshot(false)} style={{ position: "absolute", top: 12, right: 12, width: 32, height: 32, borderRadius: "var(--dash-radius-sm)", background: "rgba(0,0,0,0.6)", border: "1px solid var(--dash-border)", color: "var(--dash-text)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><X size={16} /></button>

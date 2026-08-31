@@ -251,7 +251,7 @@ export function CommandPalette({ isOpen: controlledIsOpen, onClose }: CommandPal
               flex: 1,
               background: "none",
               border: "none",
-              outline: "none",
+              /* a11y: removed outline:none — global :focus-visible handles focus */
               color: "var(--dash-text)",
               fontSize: 14,
               fontFamily: "Inter, sans-serif",

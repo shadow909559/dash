@@ -103,7 +103,7 @@ export const KnowledgePage: React.FC = () => {
                 border: "none",
                 color: "var(--dash-text)",
                 fontSize: 13,
-                outline: "none",
+                /* a11y: removed outline:none — global :focus-visible handles focus */
               }}
             />
           </div>

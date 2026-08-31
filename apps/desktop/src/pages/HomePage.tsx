@@ -274,7 +274,7 @@ export const HomePage: React.FC = () => {
         </div>
 
         {/* Orb */}
-        <div onClick={toggleVoice} style={{ position: "relative" }}>
+        <div onClick={toggleVoice} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleVoice(); } }} role="button" tabIndex={0} aria-label="Toggle voice input" style={{ position: "relative" }}>
           <Orb />
         </div>
 
@@ -390,7 +390,7 @@ export const HomePage: React.FC = () => {
               flex: 1,
               background: "none",
               border: "none",
-              outline: "none",
+              /* a11y: removed outline:none — global :focus-visible handles focus */
               color: "var(--dash-text)",
               fontSize: 13,
               fontFamily: "Inter, sans-serif",

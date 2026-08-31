@@ -195,6 +195,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           </div>
           <button
             onClick={fetchData}
+            aria-label="Refresh agent data"
             style={{
               background: "none",
               border: "none",
@@ -217,6 +218,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       >
         <button
           onClick={() => setShowProviders(!showProviders)}
+          aria-label="Toggle provider list"
+          aria-expanded={showProviders}
           style={{
             width: "100%",
             display: "flex",

@@ -449,7 +449,7 @@ export const ObsidianPage: React.FC = () => {
                     fontSize: 13,
                     fontFamily: "'JetBrains Mono', monospace",
                     resize: "vertical",
-                    outline: "none",
+                    /* a11y: removed outline:none — global :focus-visible handles focus */
                   }}
                 />
                 <button

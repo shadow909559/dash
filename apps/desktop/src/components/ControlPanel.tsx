@@ -58,6 +58,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             if (settings.soundEnabled) soundFx.playClick();
             onClose();
           }}
+          aria-label="Close settings panel"
           className="text-white/50 hover:text-white p-1 rounded-sm hover:bg-white/10 transition-colors"
         >
           <X className="w-4 h-4" />

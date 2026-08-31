@@ -630,7 +630,7 @@ export const ChatPage: React.FC = () => {
               flex: 1,
               background: "transparent",
               border: "none",
-              outline: "none",
+              /* a11y: removed outline:none — global :focus-visible handles focus */
               color: "var(--dash-text)",
               fontSize: 13.5,
             }}

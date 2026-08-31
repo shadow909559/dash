@@ -522,3 +522,24 @@ button, [role="button"], a {
 .dash-stagger > *:nth-child(6) { animation-delay: 0.3s; }
 .dash-stagger > *:nth-child(7) { animation-delay: 0.35s; }
 .dash-stagger > *:nth-child(8) { animation-delay: 0.4s; }
+
+/* ── Accessibility helpers ────────────────────────────────────────────── */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Ensure all interactive targets meet 24×24px minimum (WCAG 2.5.8) */
+button,
+[role="button"],
+a[role="button"] {
+  min-height: 24px;
+  min-width: 24px;
+}

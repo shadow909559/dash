@@ -200,7 +200,9 @@ export function App() {
                 </Routes>
               </main>
             </div>
-          </div>
+          {/* Screen reader announcements */}
+          <div id="sr-announcements" aria-live="polite" aria-atomic="true" className="visually-hidden" />
+        </div>
         </Router>
       </NotificationProvider>
     </ErrorBoundary>
