@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Top-level API router."""
 
 from fastapi import APIRouter
@@ -31,6 +32,9 @@ from dash_backend.api.routes.status import router as status_router
 from dash_backend.api.routes.obsidian import router as obsidian_router
 from dash_backend.api.routes.remote_control import router as remote_control_router
 from dash_backend.neural.router import router as neural_router
+from dash_backend.api.routes.cloud_relay import router as cloud_relay_router
+from dash_backend.api.routes.ollama_proxy import router as ollama_proxy_router
+from dash_backend.api.routes.ec2_control import router as ec2_control_router
 
 
 api_router = APIRouter()
@@ -191,4 +195,22 @@ api_router.include_router(
 api_router.include_router(
     neural_router,
     tags=["brain"],
+)
+
+# Cloud relay — hybrid architecture (Android ↔ Cloud ↔ PC)
+api_router.include_router(
+    cloud_relay_router,
+    tags=["cloud-relay"],
+)
+
+# EC2 instance control (start/stop from Android)
+api_router.include_router(
+    ec2_control_router,
+    tags=["ec2-control"],
+)
+
+# Ollama proxy � Android chat with AI through backend
+api_router.include_router(
+    ollama_proxy_router,
+    tags=["ollama-proxy"],
 )

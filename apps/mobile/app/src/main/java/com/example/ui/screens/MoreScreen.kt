@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -840,7 +841,8 @@ enum class MoreSubScreen {
     APP_LAUNCHER,
     DEVICE_STATUS,
     REMOTE_CONTROL,
-    NOTIFICATION_HISTORY
+    NOTIFICATION_HISTORY,
+    OLLAMA_CHAT
 }
 
 @Composable
@@ -1012,6 +1014,16 @@ fun MoreScreen(
 
         item {
             MoreRow(
+                title = "Wake PC",
+                subtitle = "Power, WoL & auto-connect",
+                icon = Icons.Default.Computer,
+                accentColor = DashErrorRed,
+                onClick = { hm.perform(HapticPattern.TAP); onNavigateSub(MoreSubScreen.REMOTE_CONTROL) }
+            )
+        }
+
+        item {
+            MoreRow(
                 title = "Device Status",
                 subtitle = "Health & connection",
                 icon = Icons.Default.PermDeviceInformation,
@@ -1163,6 +1175,16 @@ fun MoreScreen(
                 icon = Icons.Default.Tune,
                 accentColor = DashCyanPrimary,
                 onClick = { hm.perform(HapticPattern.TAP); onNavigateSub(MoreSubScreen.AI_PROVIDERS) }
+            )
+        }
+
+        item {
+            MoreRow(
+                title = "Ollama Chat",
+                subtitle = "Direct AI chat with your PC",
+                icon = Icons.Default.SmartToy,
+                accentColor = DashCyanPrimary,
+                onClick = { hm.perform(HapticPattern.TAP); onNavigateSub(MoreSubScreen.OLLAMA_CHAT) }
             )
         }
 

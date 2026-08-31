@@ -40,6 +40,7 @@ import com.example.ui.screens.MoreScreen
 import com.example.ui.screens.MoreSubScreen
 import com.example.ui.screens.VoiceScreen
 import com.example.ui.screens.subscreens.AiProvidersSubScreen
+import com.example.ui.screens.subscreens.OllamaChatScreen
 import com.example.ui.screens.subscreens.AppLauncherSubScreen
 import com.example.ui.screens.subscreens.ApprovalsSubScreen
 import com.example.ui.screens.subscreens.CloudAwsSubScreen
@@ -281,6 +282,7 @@ fun DashApp() {
                                 MoreSubScreen.WINDOW_MANAGER -> navController.navigate("window_manager")
                                 MoreSubScreen.APP_LAUNCHER -> navController.navigate("app_launcher")
                                 MoreSubScreen.DEVICE_STATUS -> navController.navigate("device_status")
+                                MoreSubScreen.OLLAMA_CHAT -> navController.navigate("ollama_chat")
                                 else -> {}
                             }
                         }
@@ -502,6 +504,18 @@ fun DashApp() {
                 ) {
                     DeviceStatusSubScreen(
                         viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(
+                    "ollama_chat",
+                    enterTransition = { subEnter() },
+                    exitTransition = { subExit() },
+                    popEnterTransition = { subEnter() },
+                    popExitTransition = { subExit() }
+                ) {
+                    OllamaChatScreen(
                         onBack = { navController.popBackStack() }
                     )
                 }

@@ -1,4 +1,9 @@
 import { app, BrowserWindow, shell, ipcMain, Notification, powerMonitor } from "electron";
+// Force disable GPU to prevent renderer crashes
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch("disable-gpu");
+app.commandLine.appendSwitch("disable-gpu-compositing");
+app.commandLine.appendSwitch("disable-gpu-sandbox");
 import { autoUpdater } from "electron-updater";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,13 +29,11 @@ if (!initSingleInstanceLock()) {
 
 // ── Production-grade auto-updater for GitHub (shadow909559/dash) ──────────
 
+// Auto-updater disabled to prevent net::ERR crashes
+// Re-enable when deploying to GitHub releases
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
-autoUpdater.setFeedURL({
-  provider: "github",
-  owner: "shadow909559",
-  repo: "dash",
-});
+// Do not set feed URL - prevents network check crash
 
 // Internal state
 let _updateAvailable = false;
@@ -293,8 +296,7 @@ function createOrbWindow(): BrowserWindow {
     maxHeight: 560,
     resizable: false,
     alwaysOnTop: true,
-    frame: false,
-    transparent: true,
+    frame: true,
     skipTaskbar: true,
     hasShadow: false,
     backgroundColor: "#00000000",
@@ -454,18 +456,14 @@ function createWindow(): void {
   height: 800,
   minWidth: 800,
   minHeight: 600,
-  show: false,
+  show: true,
   title: "DASH",
 
 // Premium frameless DASH window with native controls
   frame: false,
   titleBarStyle: "hiddenInset",
 
-  // Keep the glass UI visually clean — transparent + rounded for the premium orb
-  transparent: true,
   backgroundColor: "#050608",
-  vibrancy: "under-window",
-  roundedCorners: true,
 
   webPreferences: {
       preload: isDev
@@ -480,14 +478,10 @@ function createWindow(): void {
       disableDialogs: true,
       // Content Security Policy for security
       webSecurity: true,
+      // Disable WebGL to prevent GPU crashes on some systems
+      webgl: false,
     },
   });
-
-  // Phase 12: Disable GPU acceleration if explicit env var is fixed
-  // This saves ~200-400MB GPU memory on integrated GPUs
-  if (process.env.DASH_DISABLE_GPU === "1") {
-    app.disableHardwareAcceleration();
-  }
 
 // Phase 12: Memory optimization - flush unused memory when window is minimized
   mainWindow.on("hide", () => {
@@ -528,7 +522,16 @@ function createWindow(): void {
 
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
+    mainWindow?.focus();
   });
+
+  // Fallback: force show after 3 seconds even if ready-to-show never fires
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  }, 3000);
 
   // Tell renderer of window state changes
   mainWindow.on("maximize", () => {
