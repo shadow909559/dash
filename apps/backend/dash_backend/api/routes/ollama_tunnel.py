@@ -9,6 +9,7 @@ the current URL from DynamoDB so it always knows where to connect.
 """
 
 from __future__ import annotations
+import asyncio
 
 import json
 from typing import Any, Optional
@@ -53,12 +54,13 @@ async def tunnel_status() -> dict[str, Any]:
     # Try to load from DynamoDB if not set
     if not _tunnel_url:
         try:
-            import boto3
-            dynamodb = boto3.resource("dynamodb", region_name="ap-south-1")
-            table = dynamodb.Table("dash-device-states")
-            resp = table.get_item(Key={"device_id": "shadow"})
-            item = resp.get("Item", {})
-            _tunnel_url = item.get("tunnel_url", "")
+            def _load_from_dynamo():
+                import boto3
+                dynamodb = boto3.resource("dynamodb", region_name="ap-south-1")
+                table = dynamodb.Table("dash-device-states")
+                resp = table.get_item(Key={"device_id": "shadow"})
+                return resp.get("Item", {}).get("tunnel_url", "")
+            _tunnel_url = await asyncio.to_thread(_load_from_dynamo)
         except Exception:
             pass
 
@@ -132,18 +134,20 @@ async def set_tunnel_url_endpoint(url: str) -> dict[str, Any]:
 
     # Save to DynamoDB
     try:
-        import boto3
-        dynamodb = boto3.resource("dynamodb", region_name="ap-south-1")
-        table = dynamodb.Table("dash-device-states")
-        from datetime import datetime, timezone
-        table.update_item(
-            Key={"device_id": "shadow"},
-            UpdateExpression="SET tunnel_url = :url, updated_at = :now",
-            ExpressionAttributeValues={
-                ":url": url,
-                ":now": datetime.now(timezone.utc).isoformat(),
-            },
-        )
+        def _save_to_dynamo():
+            import boto3
+            from datetime import datetime, timezone
+            dynamodb = boto3.resource("dynamodb", region_name="ap-south-1")
+            table = dynamodb.Table("dash-device-states")
+            table.update_item(
+                Key={"device_id": "shadow"},
+                UpdateExpression="SET tunnel_url = :url, updated_at = :now",
+                ExpressionAttributeValues={
+                    ":url": url,
+                    ":now": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+        await asyncio.to_thread(_save_to_dynamo)
     except Exception as e:
         logger.warning(f"Failed to save tunnel URL to DynamoDB: {e}")
 

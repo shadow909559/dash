@@ -5,6 +5,7 @@ When PC is off: Android talks directly to EC2 cloud relay
 """
 
 from __future__ import annotations
+import asyncio
 
 import json
 import os
@@ -54,7 +55,7 @@ def _aws_cmd(args: list[str]) -> dict[str, Any]:
 @router.get("/status")
 async def ec2_status() -> dict[str, Any]:
     """Get EC2 instance status."""
-    result = _aws_cmd([
+    result = await asyncio.to_thread(_aws_cmd, [
         "ec2", "describe-instances",
         "--instance-ids", EC2_INSTANCE_ID,
         "--query", "Reservations[*].Instances[*].[InstanceId,State.Name,PublicIpAddress,InstanceType]",
@@ -92,7 +93,7 @@ async def ec2_start() -> dict[str, Any]:
     if status.get("state") == "pending":
         return {"ok": True, "message": "Already starting"}
 
-    result = _aws_cmd(["ec2", "start-instances", "--instance-ids", EC2_INSTANCE_ID])
+    result = await asyncio.to_thread(_aws_cmd, ["ec2", "start-instances", "--instance-ids", EC2_INSTANCE_ID])
     if "error" in result:
         return {"ok": False, "error": result["error"]}
 
@@ -112,7 +113,7 @@ async def ec2_stop() -> dict[str, Any]:
     if status.get("state") == "stopping":
         return {"ok": True, "message": "Already stopping"}
 
-    result = _aws_cmd(["ec2", "stop-instances", "--instance-ids", EC2_INSTANCE_ID])
+    result = await asyncio.to_thread(_aws_cmd, ["ec2", "stop-instances", "--instance-ids", EC2_INSTANCE_ID])
     if "error" in result:
         return {"ok": False, "error": result["error"]}
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import asyncio
 from typing import Any, Dict, Optional
 
 from dash_backend.logging_config import get_logger
@@ -70,8 +71,10 @@ class AWSConfig:
             return
 
         try:
-            table = dynamodb.Table(DYNAMODB_CONFIG)
-            resp = table.scan()
+            def _scan_config():
+                table = dynamodb.Table(DYNAMODB_CONFIG)
+                return table.scan()
+            resp = await asyncio.to_thread(_scan_config)
             for item in resp.get("Items", []):
                 self._config_cache[item["key"]] = item["value"]
             logger.info(f"Loaded {len(self._config_cache)} config entries from DynamoDB")
@@ -93,12 +96,14 @@ class AWSConfig:
         dynamodb = self._get_dynamodb()
         if dynamodb:
             try:
-                table = dynamodb.Table(DYNAMODB_CONFIG)
-                table.put_item(Item={
-                    "key": key,
-                    "value": value,
-                    "description": description,
-                })
+                def _put_config():
+                    table = dynamodb.Table(DYNAMODB_CONFIG)
+                    table.put_item(Item={
+                        "key": key,
+                        "value": value,
+                        "description": description,
+                    })
+                await asyncio.to_thread(_put_config)
             except Exception as e:
                 logger.error(f"Failed to write config: {e}")
 
