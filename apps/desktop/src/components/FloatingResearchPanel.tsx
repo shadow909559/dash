@@ -172,7 +172,7 @@ export const FloatingResearchPanel: React.FC<FloatingResearchPanelProps> = ({ cl
       case 'complete':
         return <CheckCircle size={14} color="rgba(74, 222, 128, 0.9)" />;
       case 'error':
-        return <AlertCircle size={14} color="rgba(239, 68, 68, 0.9)" />;
+        return <AlertCircle size={14} color="rgba(63, 169, 245, 0.9)" />;
       default:
         return <Search size={14} color="rgba(0, 255, 255, 0.9)" />;
     }
@@ -297,7 +297,7 @@ export const FloatingResearchPanel: React.FC<FloatingResearchPanelProps> = ({ cl
             <p style={{ fontSize: '11px', marginTop: '8px', color: 'rgba(0, 255, 255, 0.5)' }}>{Math.round(researchData.progress || 0)}%</p>
           </div>
         ) : researchData.status === 'error' ? (
-          <div style={{ textAlign: 'center', color: 'rgba(239, 68, 68, 0.8)', padding: '32px 0' }}>
+          <div style={{ textAlign: 'center', color: 'rgba(63, 169, 245, 0.8)', padding: '32px 0' }}>
             <AlertCircle size={32} style={{ marginBottom: '12px' }} />
             <p style={{ fontSize: '13px' }}>{researchData.currentAction}</p>
           </div>

@@ -96,14 +96,14 @@ export const DASH_COLORS: Record<DASHState, DASHColor> = {
     glow: 0.8,
   },
   warning: {
-    primary: "rgba(239, 68, 68, 0.5)",       // Red-amber
+    primary: "rgba(63, 169, 245, 0.5)",       // Red-amber
     rgb: [0.94, 0.27, 0.27],
     accent: "rgba(251, 146, 60, 0.6)",
     accentRgb: [0.98, 0.57, 0.24],
     glow: 0.65,
   },
   error: {
-    primary: "rgba(239, 68, 68, 0.7)",       // Red
+    primary: "rgba(63, 169, 245, 0.7)",       // Red
     rgb: [0.94, 0.27, 0.27],
     accent: "rgba(248, 113, 113, 0.8)",
     accentRgb: [0.97, 0.44, 0.44],

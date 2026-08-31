@@ -38,8 +38,8 @@ export default function Orb() {
     switch (state) {
       case "thinking":
         return {
-          core: "#dc2626",
-          coreInner: "#991b1b",
+          core: "#3fa9f5",
+          coreInner: "#1a5276",
           ring: "#b91c1c",
           glow: "rgba(239,68,68,0.45)",
           particle: "#fca5a5",
@@ -49,9 +49,9 @@ export default function Orb() {
         };
       case "speaking":
         return {
-          core: "#ef4444",
+          core: "#3fa9f5",
           coreInner: "#b91c1c",
-          ring: "#dc2626",
+          ring: "#3fa9f5",
           glow: "rgba(239,68,68,0.50)",
           particle: "#fca5a5",
           atmosphere: "rgba(239,68,68,0.08)",
@@ -60,7 +60,7 @@ export default function Orb() {
         };
       case "listening":
         return {
-          core: "#f97316",
+          core: "#00d4ff",
           coreInner: "#c2410c",
           ring: "#ea580c",
           glow: "rgba(249,115,22,0.45)",
@@ -82,9 +82,9 @@ export default function Orb() {
         };
       case "error":
         return {
-          core: "#dc2626",
+          core: "#3fa9f5",
           coreInner: "#7f1d1d",
-          ring: "#991b1b",
+          ring: "#1a5276",
           glow: "rgba(220,38,38,0.35)",
           particle: "#f87171",
           atmosphere: "rgba(220,38,38,0.06)",
@@ -104,9 +104,9 @@ export default function Orb() {
         };
       default: // idle
         return {
-          core: "#dc2626",
+          core: "#3fa9f5",
           coreInner: "#7f1d1d",
-          ring: "#991b1b",
+          ring: "#1a5276",
           glow: "rgba(220,38,38,0.30)",
           particle: "#fca5a5",
           atmosphere: "rgba(220,38,38,0.06)",

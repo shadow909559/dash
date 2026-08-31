@@ -6,47 +6,47 @@
   box-sizing: border-box;
 }
 :root {
-  /* DASH Evil Crimson — Production Design Tokens */
-  --dash-bg: #060608;
-  --dash-bg-subtle: #0a0a0e;
-  --dash-surface: #0e0e13;
-  --dash-surface-hover: #141418;
-  --dash-surface-active: #1a1a20;
-  --dash-elevated: #121217;
-  --dash-elevated-hover: #18181e;
+  /* DASH JARVIS — Cyan/Blue Design Tokens */
+  --dash-bg: #0b0e14;
+  --dash-bg-subtle: #0e1118;
+  --dash-surface: #12161f;
+  --dash-surface-hover: #181d28;
+  --dash-surface-active: #1e2533;
+  --dash-elevated: #141820;
+  --dash-elevated-hover: #1a2030;
 
   /* Borders */
-  --dash-border: rgba(255, 255, 255, 0.08);
-  --dash-border-hover: rgba(255, 255, 255, 0.16);
-  --dash-border-subtle: rgba(255, 255, 255, 0.04);
-  --dash-border-accent: rgba(220, 38, 38, 0.45);
+  --dash-border: rgba(63, 169, 245, 0.10);
+  --dash-border-hover: rgba(63, 169, 245, 0.22);
+  --dash-border-subtle: rgba(255, 255, 255, 0.05);
+  --dash-border-accent: rgba(63, 169, 245, 0.40);
 
-  /* Primary — Crimson */
-  --dash-accent: #dc2626;
-  --dash-accent-hover: #ef4444;
-  --dash-accent-glow: rgba(220, 38, 38, 0.25);
-  --dash-accent-intense: rgba(220, 38, 38, 0.40);
+  /* Primary — JARVIS Cyan */
+  --dash-accent: #3fa9f5;
+  --dash-accent-hover: #5ab8f5;
+  --dash-accent-glow: rgba(63, 169, 245, 0.25);
+  --dash-accent-intense: rgba(63, 169, 245, 0.40);
 
-  /* Secondary — Dark Violet */
-  --dash-accent-secondary: #9333ea;
-  --dash-accent-secondary-glow: rgba(147, 51, 234, 0.25);
+  /* Secondary — Deep Blue */
+  --dash-accent-secondary: #2f8fd6;
+  --dash-accent-secondary-glow: rgba(47, 143, 214, 0.25);
 
-  /* Tertiary — Ember Orange */
-  --dash-cyan: #f97316;
-  --dash-cyan-glow: rgba(249, 115, 22, 0.20);
+  /* Tertiary — Electric Cyan */
+  --dash-cyan: #00d4ff;
+  --dash-cyan-glow: rgba(0, 212, 255, 0.20);
 
-  /* Ultron Core — Deep Crimson Energy */
-  --ultron-core: #dc2626;
-  --ultron-core-bright: #ef4444;
-  --ultron-core-deep: #991b1b;
-  --ultron-energy: rgba(220, 38, 38, 0.35);
-  --ultron-glow: rgba(239, 68, 68, 0.25);
-  --ultron-glow-intense: rgba(239, 68, 68, 0.45);
-  --ultron-ring: rgba(185, 28, 28, 0.50);
-  --ultron-surface: rgba(220, 38, 38, 0.06);
-  --ultron-surface-hover: rgba(220, 38, 38, 0.10);
-  --ultron-border: rgba(220, 38, 38, 0.25);
-  --ultron-text: #fca5a5;
+  /* JARVIS Core — Cyan Energy */
+  --ultron-core: #3fa9f5;
+  --ultron-core-bright: #5ab8f5;
+  --ultron-core-deep: #1a5276;
+  --ultron-energy: rgba(63, 169, 245, 0.30);
+  --ultron-glow: rgba(63, 169, 245, 0.25);
+  --ultron-glow-intense: rgba(63, 169, 245, 0.45);
+  --ultron-ring: rgba(47, 143, 214, 0.50);
+  --ultron-surface: rgba(63, 169, 245, 0.06);
+  --ultron-surface-hover: rgba(63, 169, 245, 0.10);
+  --ultron-border: rgba(63, 169, 245, 0.20);
+  --ultron-text: #b3daf7;
 
   /* Functional / Semantic */
   --dash-success: #22c55e;
@@ -54,16 +54,16 @@
   --dash-success-glow: rgba(34, 197, 94, 0.20);
   --dash-warning: #eab308;
   --dash-warning-bg: rgba(234, 179, 8, 0.12);
-  --dash-danger: #dc2626;
-  --dash-danger-bg: rgba(220, 38, 38, 0.12);
-  --dash-danger-glow: rgba(220, 38, 38, 0.20);
-  --dash-info: #f97316;
+  --dash-danger: #ef4444;
+  --dash-danger-bg: rgba(63, 169, 245, 0.12);
+  --dash-danger-glow: rgba(63, 169, 245, 0.20);
+  --dash-info: #3fa9f5;
 
   /* Typography */
-  --dash-text: #f5f5f5;
-  --dash-text-secondary: #a1a1aa;
-  --dash-text-muted: #63636e;
-  --dash-text-inverse: #060608;
+  --dash-text: #f2f6fa;
+  --dash-text-secondary: #9ab4cc;
+  --dash-text-muted: #5a6f85;
+  --dash-text-inverse: #0b0e14;
 
   /* Spacing */
   --dash-space-xs: 4px;
@@ -85,8 +85,8 @@
   --dash-shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.40);
   --dash-shadow-md: 0 4px 14px -1px rgba(0, 0, 0, 0.50), 0 2px 6px -1px rgba(0, 0, 0, 0.30);
   --dash-shadow-lg: 0 12px 30px -3px rgba(0, 0, 0, 0.60), 0 4px 8px -2px rgba(0, 0, 0, 0.40);
-  --dash-shadow-glow: 0 0 24px rgba(220, 38, 38, 0.20);
-  --dash-shadow-glow-accent: 0 0 30px rgba(220, 38, 38, 0.25), 0 0 60px rgba(220, 38, 38, 0.08);
+  --dash-shadow-glow: 0 0 24px rgba(63, 169, 245, 0.20);
+  --dash-shadow-glow-accent: 0 0 30px rgba(63, 169, 245, 0.25), 0 0 60px rgba(63, 169, 245, 0.08);
 
   /* Transitions */
   --dash-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -94,14 +94,14 @@
   --dash-transition-smooth: 300ms cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Glass */
-  --dash-glass-bg: rgba(14, 14, 19, 0.75);
-  --dash-glass-border: rgba(255, 255, 255, 0.08);
+  --dash-glass-bg: rgba(11, 14, 20, 0.80);
+  --dash-glass-border: rgba(63, 169, 245, 0.10);
   --dash-glass-blur: blur(20px);
 
   /* Gradients */
-  --dash-gradient-hero: linear-gradient(135deg, rgba(220, 38, 38, 0.08), rgba(147, 51, 234, 0.05), transparent 60%);
-  --dash-gradient-surface: linear-gradient(180deg, rgba(255,255,255,0.015) 0%, transparent 100%);
-  --dash-gradient-border: linear-gradient(135deg, rgba(220, 38, 38, 0.3), rgba(147, 51, 234, 0.2), rgba(249, 115, 22, 0.15));
+  --dash-gradient-hero: linear-gradient(135deg, rgba(63, 169, 245, 0.08), rgba(47, 143, 214, 0.05), transparent 60%);
+  --dash-gradient-surface: linear-gradient(180deg, rgba(63,169,245,0.02) 0%, transparent 100%);
+  --dash-gradient-border: linear-gradient(135deg, rgba(63, 169, 245, 0.3), rgba(47, 143, 214, 0.2), rgba(0, 212, 255, 0.15));
 }
 
 html, body {
@@ -110,6 +110,11 @@ html, body {
   margin: 0;
   padding: 0;
   background-color: var(--dash-bg);
+  /* JARVIS grid overlay — matches boot screen */
+  background-image:
+    linear-gradient(rgba(63,169,245,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63,169,245,0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
   color: var(--dash-text);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -263,7 +268,7 @@ button, [role="button"], a {
 .dash-badge-danger {
   background: var(--dash-danger-bg);
   color: var(--dash-danger);
-  border: 1px solid rgba(220, 38, 38, 0.25);
+  border: 1px solid rgba(63, 169, 245, 0.25);
 }
 .dash-badge-neutral {
   background: rgba(255, 255, 255, 0.04);
@@ -301,11 +306,11 @@ button, [role="button"], a {
 }
 @keyframes glowPulse {
   0%, 100% { box-shadow: 0 0 8px var(--dash-accent-glow), inset 0 0 4px var(--dash-accent-glow); }
-  50% { box-shadow: 0 0 20px var(--dash-accent-glow), 0 0 40px rgba(220, 38, 38, 0.08), inset 0 0 8px var(--dash-accent-glow); }
+  50% { box-shadow: 0 0 20px var(--dash-accent-glow), 0 0 40px rgba(63, 169, 245, 0.08), inset 0 0 8px var(--dash-accent-glow); }
 }
 @keyframes borderGlow {
-  0%, 100% { border-color: rgba(220, 38, 38, 0.15); }
-  50% { border-color: rgba(220, 38, 38, 0.35); }
+  0%, 100% { border-color: rgba(63, 169, 245, 0.15); }
+  50% { border-color: rgba(63, 169, 245, 0.35); }
 }
 @keyframes statusPulse {
   0%, 100% { opacity: 0.6; transform: scale(1); }
@@ -330,8 +335,8 @@ button, [role="button"], a {
 /* HUD Grid */
 .dash-hud-grid {
   background-image:
-    linear-gradient(rgba(220, 38, 38, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(220, 38, 38, 0.025) 1px, transparent 1px);
+    linear-gradient(rgba(63, 169, 245, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63, 169, 245, 0.025) 1px, transparent 1px);
   background-size: 40px 40px;
   animation: gridScroll 80s linear infinite;
 }
@@ -379,7 +384,7 @@ button, [role="button"], a {
   transition: all var(--dash-transition-fast);
 }
 .dash-status-pill--online { background: rgba(34, 197, 94, 0.08); color: var(--dash-success); border-color: rgba(34, 197, 94, 0.20); }
-.dash-status-pill--offline { background: rgba(220, 38, 38, 0.08); color: var(--dash-danger); border-color: rgba(220, 38, 38, 0.20); }
+.dash-status-pill--offline { background: rgba(63, 169, 245, 0.08); color: var(--dash-danger); border-color: rgba(63, 169, 245, 0.20); }
 .dash-status-pill--connecting { background: rgba(234, 179, 8, 0.08); color: var(--dash-warning); border-color: rgba(234, 179, 8, 0.20); }
 
 .dash-section-title {
@@ -414,7 +419,7 @@ button, [role="button"], a {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow: inset 0 0 20px rgba(220, 38, 38, 0.04);
+  box-shadow: inset 0 0 20px rgba(63, 169, 245, 0.04);
   pointer-events: none;
   transition: box-shadow 0.3s;
   opacity: 0;

@@ -299,7 +299,7 @@ export const DASHHeader: React.FC<DASHHeaderProps> = () => {
               transition: "all var(--dash-transition-fast)",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.2)";
+              e.currentTarget.style.backgroundColor = "rgba(63, 169, 245, 0.2)";
               e.currentTarget.style.color = "var(--dash-danger)";
             }}
             onMouseLeave={(e) => {
@@ -325,11 +325,11 @@ export const DASHHeader: React.FC<DASHHeaderProps> = () => {
             padding: "6px 16px",
             backgroundColor:
               websocketStatus === "disconnected"
-                ? "rgba(220, 38, 38, 0.10)"
+                ? "rgba(63, 169, 245, 0.10)"
                 : "rgba(234, 179, 8, 0.08)",
             borderBottom: `1px solid ${
               websocketStatus === "disconnected"
-                ? "rgba(220, 38, 38, 0.25)"
+                ? "rgba(63, 169, 245, 0.25)"
                 : "rgba(234, 179, 8, 0.20)"
             }`,
             width: "100%",
@@ -374,10 +374,10 @@ export const DASHHeader: React.FC<DASHHeaderProps> = () => {
               style={{
                 padding: "3px 10px",
                 borderRadius: "var(--dash-radius-sm)",
-                border: "1px solid rgba(220, 38, 38, 0.3)",
+                border: "1px solid rgba(63, 169, 245, 0.3)",
                 background: retrying
-                  ? "rgba(220, 38, 38, 0.05)"
-                  : "rgba(220, 38, 38, 0.12)",
+                  ? "rgba(63, 169, 245, 0.05)"
+                  : "rgba(63, 169, 245, 0.12)",
                 color: retrying
                   ? "var(--dash-text-muted)"
                   : "var(--dash-danger)",

@@ -68,7 +68,7 @@ const STATUS_COLORS: Record<string, string> = {
   thinking: "rgba(59, 130, 246, 0.8)",
   executing: "rgba(234, 179, 8, 0.8)",
   speaking: "rgba(34, 197, 94, 0.8)",
-  error: "rgba(239, 68, 68, 0.8)",
+  error: "rgba(63, 169, 245, 0.8)",
   offline: "rgba(100, 116, 139, 0.4)",
 };
 
@@ -77,7 +77,7 @@ const ROLE_COLORS: Record<string, string> = {
   coder: "rgba(59, 130, 246, 0.7)",
   researcher: "rgba(34, 197, 94, 0.7)",
   planner: "rgba(234, 179, 8, 0.7)",
-  executor: "rgba(239, 68, 68, 0.7)",
+  executor: "rgba(63, 169, 245, 0.7)",
   browser: "rgba(6, 182, 212, 0.7)",
   file_manager: "rgba(168, 85, 247, 0.7)",
   devops: "rgba(20, 184, 166, 0.7)",
@@ -293,8 +293,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                         fontSize: 9,
                         background: p.has_api_key
                           ? "rgba(34, 197, 94, 0.15)"
-                          : "rgba(239, 68, 68, 0.15)",
-                        color: p.has_api_key ? "#22c55e" : "#ef4444",
+                          : "rgba(63, 169, 245, 0.15)",
+                        color: p.has_api_key ? "#22c55e" : "#3fa9f5",
                         padding: "1px 5px",
                         borderRadius: 4,
                       }}
@@ -435,7 +435,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                   <span>{agent.provider}</span>
                   <span>✓{agent.tasks_completed}</span>
                   {agent.tasks_failed > 0 && (
-                    <span style={{ color: "#ef4444" }}>
+                    <span style={{ color: "#3fa9f5" }}>
                       ✗{agent.tasks_failed}
                     </span>
                   )}

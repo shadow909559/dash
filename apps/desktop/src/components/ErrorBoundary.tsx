@@ -49,7 +49,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               width: 80,
               height: 80,
               borderRadius: "50%",
-              background: "radial-gradient(circle, rgba(239, 68, 68, 0.3), rgba(239, 68, 68, 0.1))",
+              background: "radial-gradient(circle, rgba(63, 169, 245, 0.3), rgba(63, 169, 245, 0.1))",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",

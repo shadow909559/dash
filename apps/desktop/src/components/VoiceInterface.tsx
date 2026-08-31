@@ -724,8 +724,8 @@ const ttsRef = useRef<DASHSpeechSynthesis | null>(null);
               height: 52,
               borderRadius: "50%",
               flexShrink: 0,
-              background: "radial-gradient(circle, rgba(239, 68, 68, 0.22), rgba(239, 68, 68, 0.06))",
-              border: "2px solid rgba(239, 68, 68, 0.4)",
+              background: "radial-gradient(circle, rgba(63, 169, 245, 0.22), rgba(63, 169, 245, 0.06))",
+              border: "2px solid rgba(63, 169, 245, 0.4)",
               backdropFilter: "blur(30px)",
               WebkitBackdropFilter: "blur(30px)",
               display: "flex",
@@ -735,7 +735,7 @@ const ttsRef = useRef<DASHSpeechSynthesis | null>(null);
               transition: "all 0.3s ease",
             }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3fa9f5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>

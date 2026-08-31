@@ -171,7 +171,7 @@ export const BrowserPage: React.FC = () => {
             padding={14}
             style={{
               borderLeft: "3px solid var(--dash-danger)",
-              background: "rgba(239, 68, 68, 0.06)",
+              background: "rgba(63, 169, 245, 0.06)",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

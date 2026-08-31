@@ -474,8 +474,8 @@ function createWindow(): void {
       disableDialogs: true,
       // Content Security Policy for security
       webSecurity: true,
-      // Disable WebGL to prevent GPU crashes on some systems
-      webgl: true,
+      // Disable WebGL — GPU is disabled so WebGL would crash the renderer
+      webgl: false,
     },
   });
 

@@ -311,7 +311,7 @@ export default function VoicePage() {
               width: 6,
               height: 6,
               borderRadius: "50%",
-              background: wsConnected ? "#10b981" : "#ef4444",
+              background: wsConnected ? "#10b981" : "#3fa9f5",
               boxShadow: wsConnected
                 ? "0 0 8px rgba(16,185,129,0.6)"
                 : "0 0 8px rgba(239,68,68,0.6)",
@@ -470,7 +470,7 @@ export default function VoicePage() {
             borderRadius: "50%",
             border: "1px solid var(--dash-border)",
             background: "var(--dash-surface)",
-            color: isMuted ? "#ef4444" : "var(--dash-text-muted)",
+            color: isMuted ? "#3fa9f5" : "var(--dash-text-muted)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -752,8 +752,8 @@ function FullVoiceOrb({ state }: { state: string }) {
           };
         case "error":
           return {
-            core: "#ef4444",
-            ring: "#dc2626",
+            core: "#3fa9f5",
+            ring: "#3fa9f5",
             glow: "rgba(239,68,68,0.45)",
             particle: "#f87171",
             atmosphere: "rgba(239,68,68,0.08)",

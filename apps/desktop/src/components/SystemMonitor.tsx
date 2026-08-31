@@ -56,11 +56,11 @@ export const SystemMonitor: React.FC<SystemMonitorProps> = ({ className = '' }) 
   const getMetricColor = (value: number) => {
     if (value < 50) return 'rgba(74, 222, 128, 0.9)';
     if (value < 75) return 'rgba(255, 165, 0, 0.9)';
-    return 'rgba(239, 68, 68, 0.9)';
+    return 'rgba(63, 169, 245, 0.9)';
   };
 
   const getStatusColor = (status: boolean) => {
-    return status ? 'rgba(74, 222, 128, 0.9)' : 'rgba(239, 68, 68, 0.9)';
+    return status ? 'rgba(74, 222, 128, 0.9)' : 'rgba(63, 169, 245, 0.9)';
   };
 
   return (

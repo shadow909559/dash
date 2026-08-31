@@ -63,11 +63,11 @@ export const HomePage: React.FC = () => {
 
   const getStateColor = () => {
     if (websocketStatus === "disconnected") return "#6b7280";
-    if (isProcessing) return "#dc2626";
-    if (dashState === "listening") return "#f97316";
-    if (dashState === "speaking") return "#ef4444";
-    if (aiProviderStatus === "error") return "#dc2626";
-    return "#dc2626";
+    if (isProcessing) return "#3fa9f5";
+    if (dashState === "listening") return "#00d4ff";
+    if (dashState === "speaking") return "#3fa9f5";
+    if (aiProviderStatus === "error") return "#3fa9f5";
+    return "#3fa9f5";
   };
 
   const handleSend = useCallback(() => {

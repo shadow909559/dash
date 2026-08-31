@@ -155,7 +155,7 @@ export const MemoryPage: React.FC = () => {
             padding={12}
             style={{
               borderLeft: "3px solid var(--dash-danger)",
-              background: "rgba(239, 68, 68, 0.06)",
+              background: "rgba(63, 169, 245, 0.06)",
             }}
           >
             <span style={{ fontSize: 12, color: "var(--dash-danger)" }}>
