@@ -124,7 +124,8 @@ async def cloud_status() -> dict[str, Any]:
     """Check if the cloud backend on EC2 is reachable."""
     import httpx
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
+        timeout = httpx.Timeout(connect=2.0, read=2.0, write=2.0, pool=2.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.get(f"{CLOUD_BACKEND_URL}/health")
             return {
                 "reachable": resp.status_code == 200,
