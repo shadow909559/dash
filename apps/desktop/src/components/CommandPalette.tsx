@@ -220,7 +220,7 @@ export function CommandPalette({ isOpen: controlledIsOpen, onClose }: CommandPal
           background: "var(--dash-surface)",
           border: "1px solid var(--dash-border-accent)",
           borderRadius: "var(--dash-radius-lg)",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.5), 0 0 40px rgba(220,38,38,0.08)",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.5), 0 0 40px rgba(63,169,245,0.08)",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",

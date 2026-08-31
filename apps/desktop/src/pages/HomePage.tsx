@@ -124,7 +124,7 @@ export const HomePage: React.FC = () => {
           right: 0,
           height: 1,
           background:
-            "linear-gradient(90deg, transparent, rgba(220,38,38,0.15), transparent)",
+            "linear-gradient(90deg, transparent, rgba(63,169,245,0.15), transparent)",
           animation: "scanLine 8s linear infinite",
           pointerEvents: "none",
         }}

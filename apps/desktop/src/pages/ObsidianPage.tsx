@@ -214,8 +214,8 @@ export const ObsidianPage: React.FC = () => {
               style={{
                 padding: "10px 14px",
                 borderRadius: "var(--dash-radius-md)",
-                backgroundColor: "rgba(239,68,68,0.1)",
-                border: "1px solid rgba(239,68,68,0.3)",
+                backgroundColor: "rgba(63,169,245,0.1)",
+                border: "1px solid rgba(63,169,245,0.3)",
                 color: "var(--dash-danger)",
                 fontSize: 12,
                 marginBottom: 12,
@@ -500,8 +500,8 @@ export const ObsidianPage: React.FC = () => {
                     onClick={() => deleteNote(selectedNote.path)}
                     className="dash-btn-ghost"
                     style={{
-                      border: "1px solid rgba(239,68,68,0.3)",
-                      background: "rgba(239,68,68,0.1)",
+                      border: "1px solid rgba(63,169,245,0.3)",
+                      background: "rgba(63,169,245,0.1)",
                       color: "var(--dash-danger)",
                     }}
                   >

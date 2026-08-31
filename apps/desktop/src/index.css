@@ -54,7 +54,7 @@
   --dash-success-glow: rgba(34, 197, 94, 0.20);
   --dash-warning: #eab308;
   --dash-warning-bg: rgba(234, 179, 8, 0.12);
-  --dash-danger: #ef4444;
+  --dash-danger: #3fa9f5;
   --dash-danger-bg: rgba(63, 169, 245, 0.12);
   --dash-danger-glow: rgba(63, 169, 245, 0.20);
   --dash-info: #3fa9f5;
@@ -586,10 +586,11 @@ a[role="button"] {
 .dash-jarvis-header {
   background-color: var(--dash-surface);
   background-image:
-    linear-gradient(rgba(63,169,245,0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63,169,245,0.02) 1px, transparent 1px);
+    linear-gradient(rgba(63,169,245,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63,169,245,0.03) 1px, transparent 1px);
   background-size: 50px 50px;
-  border-bottom: 1px solid rgba(63, 169, 245, 0.15);
+  border-bottom: 1px solid rgba(63, 169, 245, 0.30);
+  box-shadow: 0 1px 8px rgba(63, 169, 245, 0.08);
 }
 
 /* Status dot glow */
@@ -609,7 +610,7 @@ a[role="button"] {
 }
 .dash-jarvis-status-dot--error {
   background: var(--dash-danger);
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 6px rgba(63, 169, 245, 0.4);
 }
 @keyframes jarvis-status-pulse {
   0%, 100% { opacity: 1; }

@@ -6,7 +6,7 @@ import React from "react";
  */
 export function PageShell({
   children,
-  glowColor = "rgba(220, 38, 38, 0.06)",
+  glowColor = "rgba(63, 169, 245, 0.06)",
   className = "",
   style = {},
 }: {
@@ -49,7 +49,7 @@ export function PageShell({
           right: 0,
           height: 1,
           background:
-            "linear-gradient(90deg, transparent, rgba(220,38,38,0.12), transparent)",
+            "linear-gradient(90deg, transparent, rgba(63,169,245,0.12), transparent)",
           animation: "scanLine 8s linear infinite",
           pointerEvents: "none",
           zIndex: 1,

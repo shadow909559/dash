@@ -41,9 +41,9 @@ export default function Orb() {
           core: "#3fa9f5",
           coreInner: "#1a5276",
           ring: "#b91c1c",
-          glow: "rgba(239,68,68,0.45)",
+          glow: "rgba(63,169,245,0.45)",
           particle: "#fca5a5",
-          atmosphere: "rgba(220,38,38,0.10)",
+          atmosphere: "rgba(63,169,245,0.10)",
           ringCount: 5,
           ringSpeed: 2.5,
         };
@@ -52,9 +52,9 @@ export default function Orb() {
           core: "#3fa9f5",
           coreInner: "#b91c1c",
           ring: "#3fa9f5",
-          glow: "rgba(239,68,68,0.50)",
+          glow: "rgba(63,169,245,0.50)",
           particle: "#fca5a5",
-          atmosphere: "rgba(239,68,68,0.08)",
+          atmosphere: "rgba(63,169,245,0.08)",
           ringCount: 4,
           ringSpeed: 1.8,
         };
@@ -85,9 +85,9 @@ export default function Orb() {
           core: "#3fa9f5",
           coreInner: "#7f1d1d",
           ring: "#1a5276",
-          glow: "rgba(220,38,38,0.35)",
+          glow: "rgba(63,169,245,0.35)",
           particle: "#f87171",
-          atmosphere: "rgba(220,38,38,0.06)",
+          atmosphere: "rgba(63,169,245,0.06)",
           ringCount: 3,
           ringSpeed: 0.8,
         };
@@ -107,9 +107,9 @@ export default function Orb() {
           core: "#3fa9f5",
           coreInner: "#7f1d1d",
           ring: "#1a5276",
-          glow: "rgba(220,38,38,0.30)",
+          glow: "rgba(63,169,245,0.30)",
           particle: "#fca5a5",
-          atmosphere: "rgba(220,38,38,0.06)",
+          atmosphere: "rgba(63,169,245,0.06)",
           ringCount: 3,
           ringSpeed: 0.4,
         };
@@ -234,7 +234,7 @@ export default function Orb() {
         const rr = maxRadius * (0.25 + r * 0.15);
         ctx.beginPath();
         ctx.arc(cx, cy, rr, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(220,38,38,${0.06 + 0.03 * Math.sin(t + r)})`;
+        ctx.strokeStyle = `rgba(63,169,245,${0.06 + 0.03 * Math.sin(t + r)})`;
         ctx.lineWidth = 0.8;
         ctx.stroke();
       }
@@ -338,7 +338,7 @@ export default function Orb() {
       style={{
         cursor: "pointer",
         display: "block",
-        filter: "drop-shadow(0 0 30px rgba(220,38,38,0.15))",
+        filter: "drop-shadow(0 0 30px rgba(63,169,245,0.15))",
       }}
     />
   );

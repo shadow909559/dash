@@ -87,7 +87,7 @@ export const SystemMonitorPage: React.FC = () => {
       <span className="animate-status-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: status === "ok" ? "var(--dash-success)" : status === "error" ? "var(--dash-danger)" : "var(--dash-text-muted)", display: "inline-block", flexShrink: 0 }} />
       <span style={{ fontSize: 12, fontWeight: 500, color: "var(--dash-text)", flex: 1 }}>{name}</span>
       {detail && <span style={{ fontSize: 10, color: "var(--dash-text-muted)", fontFamily: "JetBrains Mono, monospace" }}>{detail}</span>}
-      <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: status === "ok" ? "rgba(34,197,94,0.12)" : status === "error" ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.06)", color: status === "ok" ? "var(--dash-success)" : status === "error" ? "var(--dash-danger)" : "var(--dash-text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+      <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: status === "ok" ? "rgba(34,197,94,0.12)" : status === "error" ? "rgba(63,169,245,0.12)" : "rgba(255,255,255,0.06)", color: status === "ok" ? "var(--dash-success)" : status === "error" ? "var(--dash-danger)" : "var(--dash-text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
         {status === "ok" ? "ONLINE" : status === "error" ? "ERROR" : "UNKNOWN"}
       </span>
     </div>

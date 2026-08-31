@@ -21,7 +21,7 @@ const typeColors = {
   system: "rgba(0, 255, 255, 0.9)",
   ai: "rgba(168, 85, 247, 0.9)",
   user: "rgba(74, 222, 128, 0.9)",
-  error: "rgba(239, 68, 68, 0.9)",
+  error: "rgba(63, 169, 245, 0.9)",
   tool: "rgba(251, 191, 36, 0.9)",
 };
 

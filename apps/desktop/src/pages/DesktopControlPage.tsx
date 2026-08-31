@@ -151,7 +151,7 @@ export const DesktopControlPage: React.FC = () => {
             style={{ width: "100%", accentColor: "var(--dash-accent)", height: 4 }} />
           <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
             <button onClick={async () => { await desktop.setMute(!muted); setMuted(!muted); }}
-              style={{ flex: 1, padding: "5px 8px", borderRadius: "var(--dash-radius-sm)", border: `1px solid ${muted ? "rgba(239,68,68,0.3)" : "var(--dash-border)"}`, background: muted ? "rgba(239,68,68,0.1)" : "var(--dash-surface)", color: muted ? "#3fa9f5" : "var(--dash-text-secondary)", cursor: "pointer", fontSize: 11 }}>
+              style={{ flex: 1, padding: "5px 8px", borderRadius: "var(--dash-radius-sm)", border: `1px solid ${muted ? "rgba(63,169,245,0.3)" : "var(--dash-border)"}`, background: muted ? "rgba(63,169,245,0.1)" : "var(--dash-surface)", color: muted ? "#3fa9f5" : "var(--dash-text-secondary)", cursor: "pointer", fontSize: 11 }}>
               {muted ? "Unmute" : "Mute"}
             </button>
             <button onClick={async () => { await desktop.volumeUp(); refreshVolume(); }}

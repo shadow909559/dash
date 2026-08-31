@@ -314,7 +314,7 @@ export default function VoicePage() {
               background: wsConnected ? "#10b981" : "#3fa9f5",
               boxShadow: wsConnected
                 ? "0 0 8px rgba(16,185,129,0.6)"
-                : "0 0 8px rgba(239,68,68,0.6)",
+                : "0 0 8px rgba(63,169,245,0.6)",
             }}
           />
           <span
@@ -754,9 +754,9 @@ function FullVoiceOrb({ state }: { state: string }) {
           return {
             core: "#3fa9f5",
             ring: "#3fa9f5",
-            glow: "rgba(239,68,68,0.45)",
+            glow: "rgba(63,169,245,0.45)",
             particle: "#f87171",
-            atmosphere: "rgba(239,68,68,0.08)",
+            atmosphere: "rgba(63,169,245,0.08)",
           };
         case "disconnected":
           return {

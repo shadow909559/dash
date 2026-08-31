@@ -322,7 +322,7 @@ export const ApprovalsPage: React.FC = () => {
                       background:
                         a.status === "approved" || a.status === "APPROVED"
                           ? "rgba(34,197,94,0.12)"
-                          : "rgba(239,68,68,0.12)",
+                          : "rgba(63,169,245,0.12)",
                       color:
                         a.status === "approved" || a.status === "APPROVED"
                           ? "var(--dash-success)"
@@ -330,7 +330,7 @@ export const ApprovalsPage: React.FC = () => {
                       border: `1px solid ${
                         a.status === "approved" || a.status === "APPROVED"
                           ? "rgba(34,197,94,0.25)"
-                          : "rgba(239,68,68,0.25)"
+                          : "rgba(63,169,245,0.25)"
                       }`,
                     }}
                   >
