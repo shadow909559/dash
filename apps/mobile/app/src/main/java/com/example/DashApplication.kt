@@ -2,6 +2,9 @@ package com.example
 
 import android.app.Application
 import android.util.Log
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.example.data.config.AppConfig
 import com.example.data.security.SecurityManager
 import com.example.data.connection.AutoConnectManager
@@ -36,6 +39,13 @@ class DashApplication : Application() {
         ConversationMode.init(this)
         WebSocketManager.init(this)
         AutoConnectManager.start(this)
+
+        // Register with cloud relay (for hybrid WoL + status)
+        GlobalScope.launch(Dispatchers.IO) {
+            try {
+                AutoConnectManager.registerWithCloudRelay()
+            } catch (_: Exception) {}
+        }
 
         // Foreground service is started from MainActivity after app is in foreground
         // (Android 12+ requires foreground context to start foreground services)

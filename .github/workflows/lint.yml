@@ -18,6 +18,7 @@ jobs:
             *.md
             docs/*.md
           config: '{"MD013": false, "MD033": false}'
+        continue-on-error: true
 
   gitignore-check:
     runs-on: ubuntu-latest

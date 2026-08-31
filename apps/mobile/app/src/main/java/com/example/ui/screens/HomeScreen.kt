@@ -12,10 +12,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +39,7 @@ import com.example.ui.components.*
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.DashViewModel
 import com.example.data.model.OrbState
+import com.example.data.connection.AutoConnectManager
 import com.example.ui.theme.dashColors
 
 
@@ -229,6 +234,120 @@ fun HomeScreen(
                 FeatureCard("Agents", "🤖", Modifier.weight(1f)) { onNavigate("ai_providers") }
                 FeatureCard("Projects", "📂", Modifier.weight(1f)) { onNavigate("projects") }
                 FeatureCard("Planner", "📋", Modifier.weight(1f)) { onNavigate("planner") }
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(16.dp)) }
+
+        // ── Cloud Relay PC Status & WoL ──
+        item {
+            val pcStatus by AutoConnectManager.pcStatus.collectAsState()
+            val autoStatus by AutoConnectManager.lastStatus.collectAsState()
+            val tunnelUrl by AutoConnectManager.tunnelUrl.collectAsState()
+            val isPcOnline = pcStatus == "online"
+            val isPcOffline = pcStatus == "offline" || pcStatus == "not_registered"
+
+            SectionHeader(
+                title = "PC STATUS",
+                icon = if (isPcOnline) "\u2705" else if (isPcOffline) "\u274c" else "\u23f3",
+                accentColor = if (isPcOnline) DashSuccessGreen else if (isPcOffline) DashErrorRed else DashWarningAmber
+            )
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                borderColor = (if (isPcOnline) DashSuccessGreen else if (isPcOffline) DashErrorRed else DashWarningAmber).copy(alpha = 0.2f)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Status row
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(10.dp).clip(CircleShape).background(
+                                if (isPcOnline) DashSuccessGreen else if (isPcOffline) DashErrorRed else DashWarningAmber
+                            ))
+                            Spacer(Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Shadow",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = dashColors().textPrimary
+                                )
+                                Text(
+                                    text = autoStatus,
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = dashColors().textMuted
+                                )
+                            }
+                        }
+                        Text(
+                            text = pcStatus.uppercase(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            color = if (isPcOnline) DashSuccessGreen else if (isPcOffline) DashErrorRed else DashWarningAmber
+                        )
+                    }
+
+                    // Tunnel info
+                    if (!tunnelUrl.isNullOrBlank()) {
+                        Text(
+                            text = "Tunnel: $tunnelUrl",
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = DashCyanPrimary
+                        )
+                    }
+
+                    // Wake PC button when offline
+                    if (isPcOffline) {
+                        val scope = rememberCoroutineScope()
+                        val context = LocalContext.current
+                        var wolMessage by remember { mutableStateOf<String?>(null) }
+                        var wolSuccess by remember { mutableStateOf(false) }
+
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    wolMessage = "Sending WoL..."
+                                    wolSuccess = false
+                                    try {
+                                        AutoConnectManager.triggerWoLFromUI(context)
+                                        wolMessage = "WoL sent — waiting for PC to boot..."
+                                        wolSuccess = true
+                                    } catch (e: Exception) {
+                                        wolMessage = "Failed: ${e.message}"
+                                        wolSuccess = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = DashCyanPrimary)
+                        ) {
+                            Icon(Icons.Default.Power, null, Modifier.size(16.dp), tint = Color.White)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Wake PC Now", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+
+                        if (wolMessage != null) {
+                            Text(
+                                wolMessage!!,
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = if (wolSuccess) DashSuccessGreen else DashErrorRed
+                            )
+                        }
+                    }
+                }
             }
         }
 

@@ -458,11 +458,7 @@ function createWindow(): void {
   minHeight: 600,
   show: true,
   title: "DASH",
-
-// Premium frameless DASH window with native controls
-  frame: false,
-  titleBarStyle: "hiddenInset",
-
+  frame: true,
   backgroundColor: "#050608",
 
   webPreferences: {
@@ -479,7 +475,7 @@ function createWindow(): void {
       // Content Security Policy for security
       webSecurity: true,
       // Disable WebGL to prevent GPU crashes on some systems
-      webgl: false,
+      webgl: true,
     },
   });
 

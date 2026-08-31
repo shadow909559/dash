@@ -59,16 +59,27 @@ fun RemoteControlSubScreen(
     var startSuccess by remember { mutableStateOf(false) }
     var systemStatus by remember { mutableStateOf<com.example.data.api.RemoteSystemStatusResponse?>(null) }
     var isLoadingStatus by remember { mutableStateOf(false) }
+    
+    // EC2 cloud relay controls
+    var ec2Status by remember { mutableStateOf<com.example.data.api.Ec2StatusResponse?>(null) }
+    var isLoadingEc2 by remember { mutableStateOf(false) }
+    var ec2Message by remember { mutableStateOf<String?>(null) }
+    var ec2Success by remember { mutableStateOf(false) }
 
     val isConnected = connectionState == WebSocketManager.ConnectionState.Authenticated
 
     // Load status on entry
     LaunchedEffect(Unit) {
         isLoadingStatus = true
+        isLoadingEc2 = true
         try {
             systemStatus = DashApiService.getRemoteSystemStatus()
         } catch (_: Exception) {}
         isLoadingStatus = false
+        try {
+            ec2Status = com.example.data.api.Ec2ControlApi.get().getStatus()
+        } catch (_: Exception) {}
+        isLoadingEc2 = false
     }
 
     Column(

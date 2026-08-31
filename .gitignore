@@ -130,3 +130,5 @@ tsc_*.txt
 .kilo/
 audit_logs/
 .trae/
+.vercel
+.env*

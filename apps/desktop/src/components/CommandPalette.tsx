@@ -89,8 +89,18 @@ function matchScore(query: string, item: PaletteItem): number {
   return -1; // no match
 }
 
-export function CommandPalette() {
-  const [isOpen, setIsOpen] = useState(false);
+interface CommandPaletteProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export function CommandPalette({ isOpen: controlledIsOpen, onClose }: CommandPaletteProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalOpen;
+  const setIsOpen = (v: boolean | ((prev: boolean) => boolean)) => {
+    if (onClose && !v) onClose();
+    if (controlledIsOpen === undefined) setInternalOpen(v);
+  };
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
