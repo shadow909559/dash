@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { HashRouter as Router, Routes, Route } from "react-router-dom";
+import BootScreen from "@/components/BootScreen";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NotificationProvider } from "@/components/NotificationProvider";
 import { DASHSidebar } from "@/components/DASHSidebar";
@@ -81,6 +82,7 @@ function PageSkeleton() {
 }
 
 export function App() {
+  const [booting, setBooting] = useState(true);
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
 
   useEffect(() => {
@@ -121,6 +123,7 @@ export function App() {
 
   return (
     <ErrorBoundary>
+      {booting && <BootScreen onComplete={() => setBooting(false)} duration={4000} />}
       <NotificationProvider>
         <Router>
           {/* Accessibility: skip link for keyboard users */}

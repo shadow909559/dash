@@ -1,0 +1,260 @@
+/* ── DASH Boot Screen ─────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&display=swap');
+
+.dash-boot {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  z-index: 9999;
+  background: radial-gradient(ellipse at center, #161b26 0%, #0b0e14 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Orbitron', sans-serif;
+}
+
+/* ── Grid overlay ─────────────────────────────────────────────────── */
+.dash-boot__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+}
+
+/* ── Badge center point (all layers anchored here) ────────────────── */
+.dash-boot__badge {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  width: 0;
+  height: 0;
+}
+
+/* ── Outer glow halo ──────────────────────────────────────────────── */
+.dash-boot__glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 270px;
+  height: 270px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(63,169,245,0.5) 0%, rgba(63,169,245,0) 70%);
+  filter: blur(35px);
+  animation: dash-glow-pulse 3s ease-in-out infinite;
+}
+
+@keyframes dash-glow-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.55; }
+}
+
+/* ── Main ring (conic gradient rotating) ──────────────────────────── */
+.dash-boot__ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 185px;
+  height: 185px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  animation: dash-ring-spin 4s linear infinite;
+}
+
+/* The ring: dark center + rotating conic border */
+.dash-boot__ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  padding: 2.5px;
+  background: conic-gradient(from 0deg, #eafcff, #2f8fd6, transparent, transparent, #2f8fd6, #eafcff);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* Dark center fill */
+.dash-boot__ring::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: #0d0f16;
+}
+
+@keyframes dash-ring-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* ── Center text ──────────────────────────────────────────────────── */
+.dash-boot__text {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 4px;
+  color: #f2f6fa;
+  text-shadow: 0 0 20px rgba(63,169,245,0.3);
+  animation: dash-text-flicker 0.4s ease-out forwards;
+}
+
+@keyframes dash-text-flicker {
+  0% { opacity: 0; }
+  20% { opacity: 0.8; }
+  40% { opacity: 0.3; }
+  60% { opacity: 0.9; }
+  80% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+/* ── Orbiting accent arc ──────────────────────────────────────────── */
+.dash-boot__accent-orbit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 250px;
+  height: 250px;
+  transform: translate(-50%, -50%);
+  animation: dash-accent-orbit 9s linear infinite;
+}
+
+.dash-boot__accent-arc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: rgba(255,255,255,0.85);
+  border-right-color: rgba(255,255,255,0.35);
+  filter: drop-shadow(0 0 6px rgba(255,255,255,0.3));
+}
+
+@keyframes dash-accent-orbit {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* ── Tick marks ───────────────────────────────────────────────────── */
+.dash-boot__ticks-orbit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 300px;
+  height: 300px;
+  transform: translate(-50%, -50%);
+  animation: dash-ticks-orbit 12s linear infinite;
+}
+
+.dash-boot__tick {
+  position: absolute;
+  font-family: monospace;
+  font-size: 11px;
+  color: rgba(255,255,255,0.7);
+  letter-spacing: 1px;
+}
+
+.dash-boot__tick--left {
+  left: 15%;
+  top: 65%;
+  transform: rotate(45deg);
+}
+
+.dash-boot__tick--right {
+  right: 15%;
+  top: 65%;
+  transform: rotate(-45deg);
+}
+
+@keyframes dash-ticks-orbit {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* ── Particles ────────────────────────────────────────────────────── */
+.dash-boot__particle {
+  position: absolute;
+  border-radius: 50%;
+  background: #eafcff;
+  pointer-events: none;
+  animation: dash-particle-twinkle ease-in-out infinite alternate;
+}
+
+@keyframes dash-particle-twinkle {
+  0% {
+    opacity: var(--p-base, 0.4);
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: calc(var(--p-base, 0.4) * 0.3);
+    transform: translate(2px, -3px) scale(0.6);
+  }
+}
+
+/* ── Bottom dock ──────────────────────────────────────────────────── */
+.dash-boot__dock {
+  position: absolute;
+  bottom: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+}
+
+.dash-boot__dock-icon-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.dash-boot__dock-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255,255,255,0.15);
+  margin: 0 7px;
+}
+
+.dash-boot__dock-icon {
+  width: 20px;
+  height: 20px;
+  color: rgba(255,255,255,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Pagination dots ──────────────────────────────────────────────── */
+.dash-boot__pagination {
+  position: absolute;
+  bottom: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.dash-boot__dot {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.8);
+}
+
+.dash-boot__dot--inactive {
+  width: 5px;
+  opacity: 0.35;
+}
+
+.dash-boot__dot--active {
+  width: 14px;
+  opacity: 0.8;
+}
