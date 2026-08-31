@@ -288,7 +288,7 @@ private fun HapticToggleCard() {
                         ) {
                             Icon(
                                 Icons.Default.Vibration,
-                                contentDescription = null,
+                                contentDescription = "Vibrate",
                                 tint = DashCyanPrimary,
                                 modifier = Modifier.size(14.dp)
                             )
@@ -447,7 +447,7 @@ private fun WakeWordToggleCard() {
                 ) {
                     Icon(
                         Icons.Default.Edit,
-                        contentDescription = null,
+                        contentDescription = "Edit",
                         tint = DashPurpleSecondary,
                         modifier = Modifier.size(16.dp)
                     )
@@ -675,7 +675,7 @@ private fun NotifCategoryFilterCard(viewModel: DashViewModel) {
                 ) {
                     Icon(
                         Icons.Default.Notifications,
-                        contentDescription = null,
+                        contentDescription = "Notifications",
                         tint = dashColors().errorRed,
                         modifier = Modifier.size(18.dp)
                     )

@@ -198,7 +198,7 @@ fun AppLauncherSubScreen(
             error != null -> {
                 Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Search, null, tint = DashErrorRed, modifier = Modifier.size(48.dp))
+                        Icon(Icons.Default.Search, contentDescription = "Search error", tint = DashErrorRed, modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("Error", color = DashErrorRed, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(4.dp))
@@ -265,7 +265,7 @@ fun AppLauncherSubScreen(
             apps.isEmpty() -> {
                 Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Apps, null, tint = dashColors().textMuted, modifier = Modifier.size(48.dp))
+                        Icon(Icons.Default.Apps, contentDescription = "No apps found", tint = dashColors().textMuted, modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("No applications found", color = dashColors().textMuted)
                     }
@@ -340,7 +340,7 @@ private fun AppCard(app: AppInfo, onLaunch: () -> Unit) {
                 modifier = Modifier.size(38.dp).clip(CircleShape).background(DashPurpleSecondary.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Apps, null, tint = DashPurpleSecondary, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Apps, contentDescription = "Category", tint = DashPurpleSecondary, modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {

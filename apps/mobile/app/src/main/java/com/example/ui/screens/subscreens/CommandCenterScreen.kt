@@ -164,7 +164,7 @@ private fun KeyboardTab(scope: kotlinx.coroutines.CoroutineScope) {
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = DashCyanPrimary)
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.Send, null, Modifier.size(16.dp))
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send command", Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Type on Desktop", color = Color.White, fontWeight = FontWeight.Bold)
                     }
@@ -422,7 +422,7 @@ private fun FilesTab(scope: kotlinx.coroutines.CoroutineScope) {
                     }
                 ) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(icon, null, Modifier.size(20.dp), tint = if (type == "folder") DashApprovalAmber else dashColors().textSecondary)
+                        Icon(icon, contentDescription = type, Modifier.size(20.dp), tint = if (type == "folder") DashApprovalAmber else dashColors().textSecondary)
                         Spacer(Modifier.width(10.dp))
                         Text(name, fontSize = 13.sp, color = dashColors().textPrimary, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (type != "folder") {
@@ -432,7 +432,7 @@ private fun FilesTab(scope: kotlinx.coroutines.CoroutineScope) {
                                     catch (e: Exception) { statusMessage = "Error: ${e.message}" }
                                 }
                             }) {
-                                Icon(Icons.Default.Delete, null, Modifier.size(14.dp).padding(4.dp), tint = DashErrorRed)
+                                Icon(Icons.Default.Delete, contentDescription = "Delete", Modifier.size(14.dp).padding(4.dp), tint = DashErrorRed)
                             }
                         }
                     }
@@ -518,7 +518,7 @@ private fun AppsTab(scope: kotlinx.coroutines.CoroutineScope) {
 
                 GlassCard(Modifier.fillMaxWidth(), cornerRadius = 10.dp) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Apps, null, Modifier.size(20.dp), tint = DashCyanPrimary)
+                        Icon(Icons.Default.Apps, contentDescription = "Applications", Modifier.size(20.dp), tint = DashCyanPrimary)
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(name, fontSize = 13.sp, color = dashColors().textPrimary)
@@ -674,7 +674,7 @@ private fun TasksTab(scope: kotlinx.coroutines.CoroutineScope) {
                             Spacer(Modifier.width(8.dp))
                             Text("Executing...", color = Color.White)
                         } else {
-                            Icon(Icons.Default.Send, null, Modifier.size(16.dp))
+                            Icon(Icons.Default.Send, contentDescription = "Send", Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("Execute Task", color = Color.White, fontWeight = FontWeight.Bold)
                         }
@@ -721,7 +721,7 @@ private fun TasksTab(scope: kotlinx.coroutines.CoroutineScope) {
                             }
                         ) {
                             Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.PlayArrow, null, Modifier.size(14.dp), tint = DashCyanPrimary)
+                                Icon(Icons.Default.PlayArrow, contentDescription = "Run", Modifier.size(14.dp), tint = DashCyanPrimary)
                                 Spacer(Modifier.width(8.dp))
                                 Text(task, fontSize = 11.sp, color = dashColors().textSecondary, maxLines = 2)
                             }

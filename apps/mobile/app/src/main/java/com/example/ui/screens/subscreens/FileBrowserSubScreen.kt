@@ -165,7 +165,7 @@ fun FileBrowserSubScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.NavigateNext,
                             null,
-                            tint = dashColors().textMuted.copy(alpha = 0.5f),
+                            tint = dashColors().textMuted.copy(alpha = 0.8f),
                             modifier = Modifier.size(12.dp)
                         )
                         Box(
@@ -235,7 +235,7 @@ fun FileBrowserSubScreen(
             error != null -> {
                 Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Search, null, tint = DashErrorRed, modifier = Modifier.size(48.dp))
+                        Icon(Icons.Default.Search, contentDescription = "Search error", tint = DashErrorRed, modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("Access Denied or Error", color = DashErrorRed, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(4.dp))
@@ -246,7 +246,7 @@ fun FileBrowserSubScreen(
             files.isEmpty() -> {
                 Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Folder, null, tint = dashColors().textMuted, modifier = Modifier.size(48.dp))
+                        Icon(Icons.Default.Folder, contentDescription = "Empty folder", tint = dashColors().textMuted, modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("No files found", color = dashColors().textMuted)
                     }
@@ -369,7 +369,7 @@ private fun FileItemCard(file: FileItem, onClick: () -> Unit) {
                 }
             }
             if (isDir) {
-                Icon(Icons.AutoMirrored.Filled.NavigateNext, "Open", tint = dashColors().textMuted, modifier = Modifier.size(18.dp))
+                Icon(Icons.AutoMirrored.Filled.NavigateNext, contentDescription = "Open item", tint = dashColors().textMuted, modifier = Modifier.size(18.dp))
             }
         }
     }

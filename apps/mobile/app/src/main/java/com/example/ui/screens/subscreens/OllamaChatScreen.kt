@@ -415,7 +415,7 @@ private fun WelcomeCard(isRunning: Boolean, modelCount: Int) {
     ) {
         Icon(
             imageVector = Icons.Default.SmartToy,
-            contentDescription = null,
+            contentDescription = "AI model",
             tint = DashCyanPrimary,
             modifier = Modifier.size(40.dp)
         )
@@ -502,7 +502,7 @@ private fun ModelChip(
             Spacer(modifier = Modifier.width(4.dp))
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = null,
+                contentDescription = "Selected",
                 tint = DashCyanPrimary,
                 modifier = Modifier.size(12.dp)
             )

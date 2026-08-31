@@ -152,7 +152,7 @@ fun NotificationHistorySubScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
                         Icons.Default.Notifications,
-                        contentDescription = null,
+                        contentDescription = "Notifications",
                         tint = colors.textMuted,
                         modifier = Modifier.size(48.dp)
                     )
@@ -164,7 +164,7 @@ fun NotificationHistorySubScreen(
                     )
                     Text(
                         "Desktop notifications will appear here",
-                        color = colors.textMuted.copy(alpha = 0.6f),
+                        color = colors.textMuted.copy(alpha = 0.85f),
                         fontSize = 12.sp
                     )
                 }
@@ -240,7 +240,7 @@ private fun SwipeableNotificationItem(
                 ) {
                     Icon(
                         Icons.Outlined.MarkEmailRead,
-                        contentDescription = null,
+                        contentDescription = "Mark as read",
                         tint = colors.successGreen,
                         modifier = Modifier.size(20.dp)
                     )
@@ -273,7 +273,7 @@ private fun SwipeableNotificationItem(
                     )
                     Icon(
                         Icons.Outlined.Archive,
-                        contentDescription = null,
+                        contentDescription = "Archive",
                         tint = colors.errorRed,
                         modifier = Modifier.size(20.dp)
                     )
@@ -364,7 +364,7 @@ private fun SwipeableNotificationItem(
                     // Swipe hint
                     Text(
                         text = "swipe ← →",
-                        color = colors.textMuted.copy(alpha = 0.4f),
+                        color = colors.textMuted.copy(alpha = 0.75f),
                         fontSize = 9.sp,
                         modifier = Modifier.padding(start = 8.dp, top = 2.dp)
                     )

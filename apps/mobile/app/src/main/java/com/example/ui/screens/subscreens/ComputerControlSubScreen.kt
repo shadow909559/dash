@@ -277,7 +277,7 @@ fun ComputerControlSubScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = Icons.Default.Terminal,
-                                    contentDescription = null,
+                                    contentDescription = "Terminal",
                                     tint = DashCyanPrimary,
                                     modifier = Modifier.size(16.dp)
                                 )
