@@ -35,6 +35,7 @@ from dash_backend.neural.router import router as neural_router
 from dash_backend.api.routes.cloud_relay import router as cloud_relay_router
 from dash_backend.api.routes.ollama_proxy import router as ollama_proxy_router
 from dash_backend.api.routes.ec2_control import router as ec2_control_router
+from dash_backend.api.routes.ollama_tunnel import router as ollama_tunnel_router
 
 
 api_router = APIRouter()
@@ -213,4 +214,10 @@ api_router.include_router(
 api_router.include_router(
     ollama_proxy_router,
     tags=["ollama-proxy"],
+)
+
+# Ollama tunnel proxy (Cloudflare tunnel for remote access)
+api_router.include_router(
+    ollama_tunnel_router,
+    tags=["ollama-tunnel"],
 )
