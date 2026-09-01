@@ -561,22 +561,23 @@ a[role="button"] {
 .dash-jarvis-sidebar {
   background-color: var(--dash-surface);
   background-image:
-    linear-gradient(rgba(63,169,245,0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63,169,245,0.06) 1px, transparent 1px);
+    linear-gradient(rgba(63,169,245,0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63,169,245,0.08) 1px, transparent 1px);
   background-size: 50px 50px;
+  border-right: 1px solid rgba(63, 169, 245, 0.20);
 }
 
 /* Active nav item glow — cyan energy pulse */
 .dash-jarvis-nav-active {
-  background: rgba(63, 169, 245, 0.12) !important;
-  border: 1px solid rgba(63, 169, 245, 0.35) !important;
-  box-shadow: 0 0 16px rgba(63, 169, 245, 0.20), inset 0 0 10px rgba(63, 169, 245, 0.08);
+  background: rgba(63, 169, 245, 0.18) !important;
+  border: 1px solid rgba(63, 169, 245, 0.45) !important;
+  box-shadow: 0 0 20px rgba(63, 169, 245, 0.30), inset 0 0 12px rgba(63, 169, 245, 0.12);
 }
 
 /* Pulsing glow ring for logo */
 @keyframes jarvis-logo-pulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(63, 169, 245, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(63, 169, 245, 0.5), 0 0 40px rgba(63, 169, 245, 0.15); }
+  0%, 100% { box-shadow: 0 0 14px rgba(63, 169, 245, 0.5), 0 0 28px rgba(63, 169, 245, 0.2); }
+  50% { box-shadow: 0 0 24px rgba(63, 169, 245, 0.7), 0 0 48px rgba(63, 169, 245, 0.3); }
 }
 .dash-jarvis-logo {
   animation: jarvis-logo-pulse 3s ease-in-out infinite;
@@ -589,8 +590,8 @@ a[role="button"] {
     linear-gradient(rgba(63,169,245,0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(63,169,245,0.06) 1px, transparent 1px);
   background-size: 50px 50px;
-  border-bottom: 1px solid rgba(63, 169, 245, 0.35);
-  box-shadow: 0 1px 12px rgba(63, 169, 245, 0.15);
+  border-bottom: 2px solid rgba(63, 169, 245, 0.50);
+  box-shadow: 0 2px 16px rgba(63, 169, 245, 0.25), 0 1px 0 rgba(63, 169, 245, 0.40);
 }
 
 /* Status dot glow */
