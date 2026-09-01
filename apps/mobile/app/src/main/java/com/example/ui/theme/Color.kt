@@ -3,17 +3,17 @@ package com.example.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // ═══════════════════════════════════════════════════════════════
-// DASH ULTRON — Premium Dark Theme with Crimson accents
+// DASH JARVIS — Premium Dark Theme with Cyan/Blue accents
 // ═══════════════════════════════════════════════════════════════
 
-// ── Background Layers (deepest to lightest) ──
-val DashBackground      = Color(0xFF050507)
-val DashSurface         = Color(0xFF0A0A0F)
-val DashSurfaceLowest   = Color(0xFF0D0D14)
-val DashSurfaceContainerLow = Color(0xFF111118)
-val DashSurfaceContainer = Color(0xFF16161F)
-val DashSurfaceContainerHigh = Color(0xFF1C1C28)
-val DashSurfaceContainerHighest = Color(0xFF222230)
+// ── Background Layers (deepest to lightest) — JARVIS spec ──
+val DashBackground      = Color(0xFF0B0E14)
+val DashSurface         = Color(0xFF12161F)
+val DashSurfaceLowest   = Color(0xFF0D0F16)
+val DashSurfaceContainerLow = Color(0xFF161B26)
+val DashSurfaceContainer = Color(0xFF1A1F2E)
+val DashSurfaceContainerHigh = Color(0xFF1E2533)
+val DashSurfaceContainerHighest = Color(0xFF242D3E)
 
 // ── Text Hierarchy ──
 val DashTextPrimary     = Color(0xFFF0F0F5)
@@ -21,18 +21,18 @@ val DashTextSecondary   = Color(0xFF9090A8)
 val DashTextMuted       = Color(0xFF5A5A72)
 val DashTextDisabled    = Color(0xFF3A3A4A)
 
-// ── Primary: Crimson Red (evil/dark energy) ──
-val DashPrimary         = Color(0xFFDC2626)
-val DashPrimaryLight    = Color(0xFFEF4444)
-val DashPrimaryContainer = Color(0xFF2A0A0A)
-val DashPrimaryFixed    = Color(0xFFFF4444)
+// ── Primary: JARVIS Cyan/Blue (energy core) ──
+val DashPrimary         = Color(0xFF3FA9F5)
+val DashPrimaryLight    = Color(0xFF5AB8F5)
+val DashPrimaryContainer = Color(0xFF0A1A2A)
+val DashPrimaryFixed    = Color(0xFF3FA9F5)
 
-// ── Accent: Electric Cyan (hacker matrix) ──
-val DashCyanPrimary     = Color(0xFF06B6D4)
-val DashCyanLight       = Color(0xFF22D3EE)
-val DashCyanDark        = Color(0xFF0891B2)
+// ── Accent: Electric Cyan (JARVIS energy) ──
+val DashCyanPrimary     = Color(0xFF00D4FF)
+val DashCyanLight       = Color(0xFF00E5FF)
+val DashCyanDark        = Color(0xFF2F8FD6)
 val DashCyanFixed       = Color(0xFF00F5FF)
-val DashCyanGlow        = Color(0x4006B6D4)
+val DashCyanGlow        = Color(0x403FA9F5)
 
 // ── Tertiary: Purple (luxury) ──
 val DashPurplePrimary   = Color(0xFF8B5CF6)
@@ -54,12 +54,12 @@ val DashErrorContainer  = Color(0xFF1F0A0A)
 // ── Border & Divider ──
 val DashBorderGlass     = Color(0x18FFFFFF)
 val DashBorderSubtle    = Color(0x10FFFFFF)
-val DashBorderCrimson   = Color(0x30DC2626)
-val DashBorderCyan      = Color(0x3006B6D4)
+val DashBorderCrimson   = Color(0x303FA9F5)
+val DashBorderCyan      = Color(0x303FA9F5)
 
-// ── Glow & Shadow (for premium effects) ──
-val DashGlowCrimson     = Color(0x25DC2626)
-val DashGlowCyan        = Color(0x2006B6D4)
+// ── Glow & Shadow (for JARVIS effects) ──
+val DashGlowCrimson     = Color(0x253FA9F5)
+val DashGlowCyan        = Color(0x203FA9F5)
 val DashGlowPurple      = Color(0x208B5CF6)
 
 // ── Overlay ──

@@ -40,22 +40,22 @@ data class DashColorScheme(
 )
 
 val DarkDashColors = DashColorScheme(
-    background = Color(0xFF0B0D17),
-    surface = Color(0xFF111322),
-    surfaceContainer = Color(0xFF161930),
-    surfaceContainerLow = Color(0xFF12142A),
-    textPrimary = Color(0xFFE8ECF4),
-    textSecondary = Color(0xFF8B92A8),
-    textMuted = Color(0xFF555B73),
-    borderGlass = Color(0xFF1E2140),
-    borderSubtle = Color(0xFF14162C),
-    primary = Color(0xFF1A1F3D),
-    cyanPrimary = Color(0xFF00E5FF),
-    purplePrimary = Color(0xFF7C4DFF),
-    successGreen = Color(0xFF00E676),
-    errorRed = Color(0xFFFF1744),
-    warningAmber = Color(0xFFFFD740),
-    approvalAmber = Color(0xFFFFB300),
+    background = Color(0xFF0B0E14),
+    surface = Color(0xFF12161F),
+    surfaceContainer = Color(0xFF1A1F2E),
+    surfaceContainerLow = Color(0xFF161B26),
+    textPrimary = Color(0xFFF2F6FA),
+    textSecondary = Color(0xFF9AB4CC),
+    textMuted = Color(0xFF5A6F85),
+    borderGlass = Color(0xFF1E2533),
+    borderSubtle = Color(0xFF141820),
+    primary = Color(0xFF3FA9F5),
+    cyanPrimary = Color(0xFF3FA9F5),
+    purplePrimary = Color(0xFF2F8FD6),
+    successGreen = Color(0xFF22C55E),
+    errorRed = Color(0xFFEF4444),
+    warningAmber = Color(0xFFEAB308),
+    approvalAmber = Color(0xFFEAB308),
 )
 
 val LightDashColors = DashColorScheme(
