@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:web": "tsc -b && vite build --config vite.config.web.ts",
     "preview": "vite preview",
     "dist": "npm run build && electron-builder",
     "package": "npm run build && electron-builder --dir",
