@@ -54,9 +54,9 @@
   --dash-success-glow: rgba(34, 197, 94, 0.20);
   --dash-warning: #eab308;
   --dash-warning-bg: rgba(234, 179, 8, 0.12);
-  --dash-danger: #3fa9f5;
-  --dash-danger-bg: rgba(63, 169, 245, 0.12);
-  --dash-danger-glow: rgba(63, 169, 245, 0.20);
+  --dash-danger: #ef4444;
+  --dash-danger-bg: rgba(239, 68, 68, 0.12);
+  --dash-danger-glow: rgba(239, 68, 68, 0.20);
   --dash-info: #3fa9f5;
 
   /* Typography */
@@ -110,10 +110,10 @@ html, body {
   margin: 0;
   padding: 0;
   background-color: var(--dash-bg);
-  /* JARVIS grid overlay — matches boot screen */
+  /* JARVIS grid overlay — matches boot screen 7% spec */
   background-image:
-    linear-gradient(rgba(63,169,245,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63,169,245,0.03) 1px, transparent 1px);
+    linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px);
   background-size: 50px 50px;
   color: var(--dash-text);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -335,9 +335,9 @@ button, [role="button"], a {
 /* HUD Grid */
 .dash-hud-grid {
   background-image:
-    linear-gradient(rgba(63, 169, 245, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63, 169, 245, 0.025) 1px, transparent 1px);
-  background-size: 40px 40px;
+    linear-gradient(rgba(63, 169, 245, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63, 169, 245, 0.05) 1px, transparent 1px);
+  background-size: 50px 50px;
   animation: gridScroll 80s linear infinite;
 }
 
@@ -561,16 +561,16 @@ a[role="button"] {
 .dash-jarvis-sidebar {
   background-color: var(--dash-surface);
   background-image:
-    linear-gradient(rgba(63,169,245,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63,169,245,0.03) 1px, transparent 1px);
+    linear-gradient(rgba(63,169,245,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63,169,245,0.06) 1px, transparent 1px);
   background-size: 50px 50px;
 }
 
 /* Active nav item glow — cyan energy pulse */
 .dash-jarvis-nav-active {
-  background: rgba(63, 169, 245, 0.08) !important;
-  border: 1px solid rgba(63, 169, 245, 0.25) !important;
-  box-shadow: 0 0 12px rgba(63, 169, 245, 0.12), inset 0 0 8px rgba(63, 169, 245, 0.06);
+  background: rgba(63, 169, 245, 0.12) !important;
+  border: 1px solid rgba(63, 169, 245, 0.35) !important;
+  box-shadow: 0 0 16px rgba(63, 169, 245, 0.20), inset 0 0 10px rgba(63, 169, 245, 0.08);
 }
 
 /* Pulsing glow ring for logo */
@@ -586,11 +586,11 @@ a[role="button"] {
 .dash-jarvis-header {
   background-color: var(--dash-surface);
   background-image:
-    linear-gradient(rgba(63,169,245,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63,169,245,0.03) 1px, transparent 1px);
+    linear-gradient(rgba(63,169,245,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63,169,245,0.06) 1px, transparent 1px);
   background-size: 50px 50px;
-  border-bottom: 1px solid rgba(63, 169, 245, 0.30);
-  box-shadow: 0 1px 8px rgba(63, 169, 245, 0.08);
+  border-bottom: 1px solid rgba(63, 169, 245, 0.35);
+  box-shadow: 0 1px 12px rgba(63, 169, 245, 0.15);
 }
 
 /* Status dot glow */
@@ -617,12 +617,12 @@ a[role="button"] {
   50% { opacity: 0.6; }
 }
 
-/* Page background with grid */
+/* Page background with grid — matches boot screen spec */
 .dash-jarvis-page {
   background-color: var(--dash-bg);
   background-image:
-    linear-gradient(rgba(63,169,245,0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63,169,245,0.025) 1px, transparent 1px);
+    linear-gradient(rgba(63,169,245,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63,169,245,0.05) 1px, transparent 1px);
   background-size: 50px 50px;
 }
 

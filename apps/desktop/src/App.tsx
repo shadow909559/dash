@@ -18,7 +18,6 @@ const ObsidianPage = lazy(() => import("@/pages/ObsidianPage"));
 const MemoryPage = lazy(() => import("@/pages/MemoryPage"));
 const KnowledgePage = lazy(() => import("@/pages/KnowledgePage"));
 const ProjectsPage = lazy(() => import("@/pages/ProjectsPage"));
-const CodingPage = lazy(() => import("@/pages/CodingPage"));
 const ResearchPage = lazy(() => import("@/pages/ResearchPage"));
 const BrowserPage = lazy(() => import("@/pages/BrowserPage"));
 const DesktopControlPage = lazy(() => import("@/pages/DesktopControlPage"));
@@ -188,7 +187,6 @@ export function App() {
                   <Route path="/knowledge" element={<Suspense fallback={<PageSkeleton />}><KnowledgePage /></Suspense>} />
                   <Route path="/obsidian" element={<Suspense fallback={<PageSkeleton />}><ObsidianPage /></Suspense>} />
                   <Route path="/projects" element={<Suspense fallback={<PageSkeleton />}><ProjectsPage /></Suspense>} />
-                  <Route path="/coding" element={<Suspense fallback={<PageSkeleton />}><CodingPage /></Suspense>} />
                   <Route path="/research" element={<Suspense fallback={<PageSkeleton />}><ResearchPage /></Suspense>} />
                   <Route path="/browser" element={<Suspense fallback={<PageSkeleton />}><BrowserPage /></Suspense>} />
                   <Route path="/desktop" element={<Suspense fallback={<PageSkeleton />}><DesktopControlPage /></Suspense>} />

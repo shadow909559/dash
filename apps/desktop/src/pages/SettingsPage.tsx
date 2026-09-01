@@ -486,7 +486,7 @@ export const SettingsPage: React.FC = () => {
                   marginBottom: 14,
                 }}
               >
-                DASH uses a dark-first crimson design with red/violet accents.
+                DASH uses a dark-first cyan-blue design with glowing elements.
                 The theme adapts to system state with dynamic Orb animations
                 and status indicators.
               </div>
@@ -513,7 +513,7 @@ export const SettingsPage: React.FC = () => {
                       color: "var(--dash-accent)",
                     }}
                   >
-                    Evil Crimson
+                    JARVIS Cyan
                   </div>
                   <div
                     style={{

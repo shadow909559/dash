@@ -48,7 +48,7 @@ const PRIMARY_NAV_ITEMS: NavItem[] = [
   { id: "knowledge", path: "/knowledge", label: "Knowledge", icon: BookOpen },
   { id: "obsidian", path: "/obsidian", label: "Obsidian", icon: BookOpen },
   { id: "projects", path: "/projects", label: "Projects", icon: FolderKanban },
-  { id: "coding", path: "/coding", label: "Coding", icon: Code2 },
+
   { id: "research", path: "/research", label: "Research", icon: Compass },
   { id: "browser", path: "/browser", label: "Browser", icon: Globe },
   { id: "desktop", path: "/desktop", label: "Desktop", icon: Monitor },

@@ -187,67 +187,6 @@ export const HomePage: React.FC = () => {
         </div>
       </div>
 
-      {/* ─── System HUD Indicators (top-right) ─── */}
-      <div
-        style={{
-          position: "absolute",
-          top: 44,
-          right: 24,
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          zIndex: 10,
-        }}
-      >
-        {[
-          {
-            icon: Monitor,
-            label: "BACKEND",
-            ok: systemStatus === "online",
-          },
-          {
-            icon: Brain,
-            label: "LLM",
-            ok: aiProviderStatus !== "offline" && aiProviderStatus !== "error",
-          },
-          {
-            icon: Wifi,
-            label: "WS",
-            ok: websocketStatus === "connected",
-          },
-          {
-            icon: Activity,
-            label: "TOOLS",
-            ok: aiProviderStatus !== "error",
-          },
-        ].map(({ icon: Icon, label, ok }) => (
-          <div
-            key={label}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 9,
-              fontFamily: "'JetBrains Mono', monospace",
-              color: ok ? "var(--dash-success)" : "var(--dash-danger)",
-              letterSpacing: "0.06em",
-              opacity: 0.7,
-            }}
-          >
-            <Icon size={10} />
-            <span>{label}</span>
-            <div
-              style={{
-                width: 4,
-                height: 4,
-                borderRadius: "50%",
-                background: ok ? "var(--dash-success)" : "var(--dash-danger)",
-              }}
-            />
-          </div>
-        ))}
-      </div>
-
       {/* ─── Center: Orb + Branding ─── */}
       <div
         style={{

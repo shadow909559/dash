@@ -40,9 +40,9 @@ export default function Orb() {
         return {
           core: "#3fa9f5",
           coreInner: "#1a5276",
-          ring: "#b91c1c",
+          ring: "#2f8fd6",
           glow: "rgba(63,169,245,0.45)",
-          particle: "#fca5a5",
+          particle: "#b3daf7",
           atmosphere: "rgba(63,169,245,0.10)",
           ringCount: 5,
           ringSpeed: 2.5,
@@ -50,10 +50,10 @@ export default function Orb() {
       case "speaking":
         return {
           core: "#3fa9f5",
-          coreInner: "#b91c1c",
-          ring: "#3fa9f5",
+          coreInner: "#1a5276",
+          ring: "#5ab8f5",
           glow: "rgba(63,169,245,0.50)",
-          particle: "#fca5a5",
+          particle: "#b3daf7",
           atmosphere: "rgba(63,169,245,0.08)",
           ringCount: 4,
           ringSpeed: 1.8,
@@ -61,18 +61,18 @@ export default function Orb() {
       case "listening":
         return {
           core: "#00d4ff",
-          coreInner: "#c2410c",
-          ring: "#ea580c",
-          glow: "rgba(249,115,22,0.45)",
-          particle: "#fdba74",
-          atmosphere: "rgba(249,115,22,0.08)",
+          coreInner: "#0e4d6e",
+          ring: "#2f8fd6",
+          glow: "rgba(0,212,255,0.45)",
+          particle: "#b3e8ff",
+          atmosphere: "rgba(0,212,255,0.08)",
           ringCount: 4,
           ringSpeed: 1.5,
         };
       case "executing":
         return {
           core: "#eab308",
-          coreInner: "#a16207",
+          coreInner: "#713f12",
           ring: "#ca8a04",
           glow: "rgba(234,179,8,0.40)",
           particle: "#fde047",
@@ -83,10 +83,10 @@ export default function Orb() {
       case "error":
         return {
           core: "#3fa9f5",
-          coreInner: "#7f1d1d",
+          coreInner: "#1a5276",
           ring: "#1a5276",
           glow: "rgba(63,169,245,0.35)",
-          particle: "#f87171",
+          particle: "#93c5fd",
           atmosphere: "rgba(63,169,245,0.06)",
           ringCount: 3,
           ringSpeed: 0.8,
@@ -105,10 +105,10 @@ export default function Orb() {
       default: // idle
         return {
           core: "#3fa9f5",
-          coreInner: "#7f1d1d",
-          ring: "#1a5276",
+          coreInner: "#1a5276",
+          ring: "#2f8fd6",
           glow: "rgba(63,169,245,0.30)",
-          particle: "#fca5a5",
+          particle: "#b3daf7",
           atmosphere: "rgba(63,169,245,0.06)",
           ringCount: 3,
           ringSpeed: 0.4,
