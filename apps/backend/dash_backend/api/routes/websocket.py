@@ -283,6 +283,37 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 pass
             return
 
+        # ── Autonomous agent interception: messages starting with agent: trigger autonomous mode ──
+        agent_prefixes = ("agent:", "autonomous:", "do:", "go:", "execute:")
+        if chat_msg.content.lower().strip().startswith(agent_prefixes):
+            goal_desc = chat_msg.content
+            for prefix in agent_prefixes:
+                if chat_msg.content.lower().strip().startswith(prefix):
+                    goal_desc = chat_msg.content[len(prefix):].strip()
+                    break
+
+            try:
+                from dash_backend.autonomous.agent_core import get_agent_core
+                agent = get_agent_core()
+                goal = await agent.run_goal(
+                    description=goal_desc,
+                    context={"user_id": user_id, "conversation_id": chat_msg.conversation_id},
+                )
+                summary = f"🤖 Autonomous agent started: {goal.description}\nGoal ID: {goal.id}\nI'll work on this autonomously and report back."
+                assistant_content = summary
+                await send_json({"type": "chat.token", "message_id": request_id, "content": summary})
+                await send_json({"type": "chat.done", "message_id": request_id, "conversation_id": chat_msg.conversation_id})
+                try:
+                    async with AsyncSessionLocal() as save_session:
+                        await add_message(save_session, chat_msg.conversation_id, MessageRole.ASSISTANT, assistant_content)
+                except Exception:
+                    pass
+            except Exception as exc:
+                logger.exception("Agent start failed: %s", exc)
+                await send_json({"type": "chat.token", "message_id": request_id, "content": f"Agent failed to start: {exc}"})
+                await send_json({"type": "chat.done", "message_id": request_id, "conversation_id": chat_msg.conversation_id})
+            return
+
         # ── Command interception: detect desktop-control commands ──
         try:
             from dash_backend.services.command_interceptor import try_intercept

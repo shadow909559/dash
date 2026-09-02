@@ -180,11 +180,16 @@ async def lifespan(app: FastAPI):
         from dash_backend.autonomous.reminder_service import get_reminder_service
         from dash_backend.autonomous.system_monitor_agent import get_system_monitor_agent
         from dash_backend.autonomous.idle_detector import get_idle_detector
+        from dash_backend.autonomous.agent_core import get_agent_core
+        from dash_backend.autonomous.proactive import get_proactive_agent
         await get_background_task_manager().start()
         await get_reminder_service().start()
         await get_system_monitor_agent().start()
         await get_idle_detector().start()
-        logger.info("Autonomous agent services started")
+        # Start the proactive agent (runs during idle periods)
+        proactive = get_proactive_agent()
+        await proactive.start()
+        logger.info("Autonomous agent services started (including proactive agent)")
     except Exception:
         logger.exception("Failed to start autonomous agent services")
 

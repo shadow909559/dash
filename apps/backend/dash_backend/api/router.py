@@ -36,6 +36,7 @@ from dash_backend.api.routes.cloud_relay import router as cloud_relay_router
 from dash_backend.api.routes.ollama_proxy import router as ollama_proxy_router
 from dash_backend.api.routes.ec2_control import router as ec2_control_router
 from dash_backend.api.routes.ollama_tunnel import router as ollama_tunnel_router
+from dash_backend.autonomous.api import router as agent_router
 
 
 api_router = APIRouter()
@@ -220,4 +221,10 @@ api_router.include_router(
 api_router.include_router(
     ollama_tunnel_router,
     tags=["ollama-tunnel"],
+)
+
+# Autonomous agent — self-operating AI
+api_router.include_router(
+    agent_router,
+    tags=["agent"],
 )
