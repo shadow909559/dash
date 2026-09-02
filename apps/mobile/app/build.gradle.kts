@@ -23,8 +23,8 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
     // DASH connection defaults — embedded at build time so the app auto-connects on first launch
-    buildConfigField("String", "DASH_SERVER_IP", "\"renaissance-expo-fishing-upgrade.trycloudflare.com\"")
-    buildConfigField("String", "DASH_SERVER_PORT", "\"443\"")
+    buildConfigField("String", "DASH_SERVER_IP", "\"10.45.114.145\"")
+    buildConfigField("String", "DASH_SERVER_PORT", "\"8000\"")
     buildConfigField("String", "DASH_ACCESS_TOKEN", "\"JaYRa-27tH3R6bLoVFmh7TJGX3Kq4FOasFqvjiiCmdJPAbOjaEh8J4E2_wi36VNp\"")
     buildConfigField("String", "DASH_REFRESH_TOKEN", "\"\"")
   }

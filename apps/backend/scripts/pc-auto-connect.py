@@ -33,7 +33,7 @@ except ImportError:
 # ============================================================
 
 # Cloud backend URL (set this to your EC2/Vercel/Supabase URL)
-CLOUD_BACKEND_URL = os.environ.get("DASH_CLOUD_URL", "http://YOUR_EC2_IP:8000")
+CLOUD_BACKEND_URL = os.environ.get("DASH_CLOUD_URL", "http://15.206.185.189:8001")
 
 # Your device token (from DASH identity.json)
 IDENTITY_PATH = Path(os.environ.get("LOCALAPPDATA", "")) / "DASH" / "identity.json"

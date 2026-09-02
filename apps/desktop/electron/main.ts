@@ -1,9 +1,8 @@
 import { app, BrowserWindow, shell, ipcMain, Notification, powerMonitor } from "electron";
-// Force disable GPU to prevent renderer crashes
-app.disableHardwareAcceleration();
-app.commandLine.appendSwitch("disable-gpu");
-app.commandLine.appendSwitch("disable-gpu-compositing");
-app.commandLine.appendSwitch("disable-gpu-sandbox");
+// Use software WebGL (SwiftShader) — keeps the 3D Orb working without GPU crashes
+app.commandLine.appendSwitch("use-gl", "swiftshader");
+app.commandLine.appendSwitch("use-angle", "swiftshader");
+app.commandLine.appendSwitch("enable-webgl");
 import { autoUpdater } from "electron-updater";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -474,8 +473,8 @@ function createWindow(): void {
       disableDialogs: true,
       // Content Security Policy for security
       webSecurity: true,
-      // Disable WebGL — GPU is disabled so WebGL would crash the renderer
-      webgl: false,
+      // Enable WebGL via SwiftShader software renderer
+      webgl: true,
     },
   });
 
@@ -605,7 +604,6 @@ app.whenReady().then(async () => {
   app.setPath('cache', path.join(app.getPath('userData'), 'Cache'));
   // Disable GPU disk cache to prevent creation errors
   app.commandLine.appendSwitch('disable-gpu-disk-cache');
-  app.commandLine.appendSwitch('disable-software-rasterizer');
   
   // Start the Python backend
   try {
