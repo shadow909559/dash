@@ -46,7 +46,7 @@ from dash_backend.api.websocket.protocol import (
 )
 from dash_backend.db.session import AsyncSessionLocal
 from dash_backend.logging_config import get_logger
-from dash_backend.security.local_identity import verify_device_token
+from dash_backend.security.local_identity import verify_device_token, extract_ws_token
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -61,14 +61,6 @@ async def _resolve_owner_user_id() -> str:
     async with AsyncSessionLocal() as session:
         user = await resolve_owner_user(session)
         return str(user.id)
-
-
-def _extract_ws_token(websocket: WebSocket) -> str | None:
-    """Device token from query param (?token=...) or x-dash-token header."""
-    token = websocket.query_params.get("token")
-    if not token:
-        token = websocket.headers.get("x-dash-token")
-    return token
 
 
 async def _stream_logs(websocket: WebSocket, component: str, disconnected_flag) -> None:
@@ -128,7 +120,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     token (query `token` or header `x-dash-token`). Unauthenticated sockets
     are rejected before being accepted. There is no guest fallback.
     """
-    if not verify_device_token(_extract_ws_token(websocket)):
+    if not verify_device_token(extract_ws_token(websocket)):
         client_host = websocket.client.host if websocket.client else "unknown"
         logger.warning("Rejected WebSocket connection from %s: missing/invalid device token", client_host)
         await websocket.close(code=WS_UNAUTHORIZED_CODE)
@@ -597,393 +589,25 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
             # Android command messages
             elif msg_type == "command":
+                from dash_backend.api.routes.commands import execute_command
                 command = raw.get("command")
                 command_id = raw.get("command_id")
                 payload = raw.get("payload", {})
-                logger.info("Received command: %s (id: %s) with payload: %s", command, command_id, payload)
-
                 try:
-                    result = {}
-                    success = True
-
-                    # Handle volume commands
-                    if command == "set_volume":
-                        level = payload.get("level", 50)
-                        from dash_backend.services.media import MediaService
-                        svc = MediaService()
-                        result = await svc.set_volume(level)
-                        logger.info("Set volume to %s: %s", level, result)
-
-                    elif command == "volume_up":
-                        amount = payload.get("amount", 5)
-                        from dash_backend.services.media import MediaService
-                        svc = MediaService()
-                        result = await svc.volume_up(amount)
-                        logger.info("Increased volume by %s: %s", amount, result)
-
-                    elif command == "volume_down":
-                        amount = payload.get("amount", 5)
-                        from dash_backend.services.media import MediaService
-                        svc = MediaService()
-                        result = await svc.volume_down(amount)
-                        logger.info("Decreased volume by %s: %s", amount, result)
-
-                    # Handle brightness commands
-                    elif command == "set_brightness":
-                        level = payload.get("level", 50)
-                        from dash_backend.services.media import MediaService
-                        svc = MediaService()
-                        result = await svc.set_brightness(level)
-                        logger.info("Set brightness to %s: %s", level, result)
-
-                    # Handle window management commands
-                    elif command == "focus_window":
-                        title = payload.get("title", "")
-                        from dash_backend.services.window import WindowService
-                        svc = WindowService()
-                        result = await svc.focus(title)
-                        logger.info("Focused window '%s': %s", title, result)
-
-                    elif command == "close_window":
-                        title = payload.get("title", "")
-                        from dash_backend.services.window import WindowService
-                        svc = WindowService()
-                        result = await svc.close_window(title)
-                        logger.info("Closed window '%s': %s", title, result)
-
-                    elif command == "minimize_window":
-                        title = payload.get("title", "")
-                        from dash_backend.services.window import WindowService
-                        svc = WindowService()
-                        result = await svc.minimize(title)
-                        logger.info("Minimized window '%s': %s", title, result)
-
-                    elif command == "maximize_window":
-                        title = payload.get("title", "")
-                        from dash_backend.services.window import WindowService
-                        svc = WindowService()
-                        result = await svc.maximize(title)
-                        logger.info("Maximized window '%s': %s", title, result)
-
-                    # Handle media control commands
-                    elif command == "media_control":
-                        action = payload.get("action", "play")
-                        from dash_backend.services.media import MediaService
-                        svc = MediaService()
-
-                        if action == "play" or action == "pause":
-                            result = await svc.media_play_pause()
-                        elif action == "next":
-                            result = await svc.media_next()
-                        elif action == "previous":
-                            result = await svc.media_prev()
-                        elif action == "stop":
-                            result = await svc.media_stop()
-                        else:
-                            result = {"summary": f"Unknown media action: {action}"}
-                        logger.info("Media control action '%s': %s", action, result)
-
-                    # Handle application launch
-                    elif command == "launch_app":
-                        app_name = payload.get("app", "")
-                        from dash_backend.services.applications import ApplicationService
-                        svc = ApplicationService()
-                        result = await svc.launch_by_name(app_name)
-                        logger.info("Launched application '%s': %s", app_name, result)
-
-                    # Handle desktop lock
-                    elif command == "lock_desktop":
-                        from dash_backend.services.power import PowerService
-                        svc = PowerService()
-                        result = await svc.lock()
-                        logger.info("Locked desktop: %s", result)
-
-                    elif command == "sleep_desktop":
-                        from dash_backend.services.power import PowerService
-                        svc = PowerService()
-                        result = await svc.sleep()
-                        logger.info("Put desktop to sleep: %s", result)
-
-                    elif command == "restart_desktop":
-                        from dash_backend.services.power import PowerService
-                        svc = PowerService()
-                        result = await svc.restart()
-                        logger.info("Restarting desktop: %s", result)
-
-                    elif command == "shutdown_desktop":
-                        from dash_backend.services.power import PowerService
-                        svc = PowerService()
-                        result = await svc.shutdown()
-                        logger.info("Shutting down desktop: %s", result)
-
-                    # Handle clipboard commands
-                    elif command == "clipboard_read":
-                        from dash_backend.services.clipboard import ClipboardService
-                        svc = ClipboardService()
-                        result = await svc.read()
-                        logger.info("Read clipboard: %s", result)
-
-                    elif command == "clipboard_write":
-                        text = payload.get("text", "")
-                        from dash_backend.services.clipboard import ClipboardService
-                        svc = ClipboardService()
-                        result = await svc.copy(text)
-                        logger.info("Wrote to clipboard: %s", result)
-
-                    elif command == "clipboard_clear":
-                        from dash_backend.services.clipboard import ClipboardService
-                        svc = ClipboardService()
-                        result = await svc.clear()
-                        logger.info("Cleared clipboard: %s", result)
-
-                    # Handle mouse commands
-                    elif command == "mouse_move":
-                        x = payload.get("x", 0)
-                        y = payload.get("y", 0)
-                        from dash_backend.services.mouse import MouseService
-                        svc = MouseService()
-                        result = await svc.move(x, y)
-                        logger.info("Moved mouse to %s,%s: %s", x, y, result)
-
-                    elif command == "mouse_click":
-                        button = payload.get("button", "left")
-                        from dash_backend.services.mouse import MouseService
-                        svc = MouseService()
-                        result = await svc.click(button)
-                        logger.info("Clicked mouse %s: %s", button, result)
-
-                    # Handle keyboard commands
-                    elif command == "keyboard_type":
-                        text = payload.get("text", "")
-                        from dash_backend.services.keyboard import KeyboardService
-                        svc = KeyboardService()
-                        result = await svc.type_text(text)
-                        logger.info("Typed text: %s", result)
-
-                    # Handle window move/resize/snap commands
-                    elif command == "move_window":
-                        title = payload.get("title", "")
-                        x = payload.get("x", 0)
-                        y = payload.get("y", 0)
-                        import ctypes
-                        user32 = ctypes.windll.user32
-                        from dash_backend.tools.window_management_tools import _find_window
-                        hwnd = _find_window(title)
-                        if hwnd is None:
-                            raise RuntimeError(f"Window '{title}' not found")
-                        user32.SetWindowPos(hwnd, 0, x, y, 0, 0, 0x0001 | 0x0004)
-                        result = {"summary": f"Moved window '{title}' to ({x}, {y})"}
-                        logger.info("Moved window: %s", result)
-
-                    elif command == "resize_window":
-                        title = payload.get("title", "")
-                        width = payload.get("width", 800)
-                        height = payload.get("height", 600)
-                        import ctypes
-                        user32 = ctypes.windll.user32
-                        from dash_backend.tools.window_management_tools import _find_window
-                        hwnd = _find_window(title)
-                        if hwnd is None:
-                            raise RuntimeError(f"Window '{title}' not found")
-                        user32.SetWindowPos(hwnd, 0, 0, 0, width, height, 0x0002 | 0x0004)
-                        result = {"summary": f"Resized window '{title}' to {width}x{height}"}
-                        logger.info("Resized window: %s", result)
-
-                    elif command == "snap_window":
-                        title = payload.get("title", "")
-                        position = payload.get("position", "left")
-                        import ctypes
-                        user32 = ctypes.windll.user32
-                        from dash_backend.tools.window_management_tools import _find_window
-                        hwnd = _find_window(title)
-                        if hwnd is None:
-                            raise RuntimeError(f"Window '{title}' not found")
-                        screen_width = user32.GetSystemMetrics(0)
-                        screen_height = user32.GetSystemMetrics(1)
-                        half_w = screen_width // 2
-                        half_h = screen_height // 2
-                        snap_positions = {
-                            "left": (0, 0, half_w, screen_height),
-                            "right": (half_w, 0, half_w, screen_height),
-                            "top-left": (0, 0, half_w, half_h),
-                            "top-right": (half_w, 0, half_w, half_h),
-                            "bottom-left": (0, half_h, half_w, half_h),
-                            "bottom-right": (half_w, half_h, half_w, half_h),
-                            "top": (0, 0, screen_width, half_h),
-                            "bottom": (0, half_h, screen_width, half_h),
-                            "center": (screen_width // 4, screen_height // 4, screen_width // 2, screen_height // 2),
-                            "maximize": (0, 0, screen_width, screen_height),
-                        }
-                        x, y, w, h = snap_positions.get(position, snap_positions["left"])
-                        user32.SetWindowPos(hwnd, 0, x, y, w, h, 0x0004)
-                        result = {"summary": f"Snapped window '{title}' to {position}"}
-                        logger.info("Snapped window: %s", result)
-
-                    # Handle file operations — same allowlist as /files REST
-                    elif command == "copy_file":
-                        source = payload.get("source", "")
-                        destination = payload.get("destination", "")
-                        from pathlib import Path
-                        import shutil
-
-                        from dash_backend.security.path_guard import PathDenied, ensure_writable
-
-                        try:
-                            src = ensure_writable(source)
-                            dst = ensure_writable(destination)
-                            if not src.exists():
-                                raise RuntimeError(f"Source not found: {source}")
-                            dst.parent.mkdir(parents=True, exist_ok=True)
-
-                            def _copy() -> str:
-                                if src.is_dir():
-                                    shutil.copytree(src, dst)
-                                else:
-                                    shutil.copy2(src, dst)
-                                return f"Copied {source} -> {destination}"
-
-                            summary = await asyncio.to_thread(_copy)
-                            result = {"summary": summary}
-                        except PathDenied as exc:
-                            raise RuntimeError(f"Blocked by path policy: {exc}")
-                        logger.info("Copied file: %s", result)
-
-                    elif command == "move_file":
-                        source = payload.get("source", "")
-                        destination = payload.get("destination", "")
-                        from pathlib import Path
-                        import shutil
-
-                        from dash_backend.security.path_guard import PathDenied, ensure_writable
-
-                        try:
-                            src = ensure_writable(source)
-                            dst = ensure_writable(destination)
-                            if not src.exists():
-                                raise RuntimeError(f"Source not found: {source}")
-                            dst.parent.mkdir(parents=True, exist_ok=True)
-                            await asyncio.to_thread(shutil.move, str(src), str(dst))
-                            result = {"summary": f"Moved {source} -> {destination}"}
-                        except PathDenied as exc:
-                            raise RuntimeError(f"Blocked by path policy: {exc}")
-                        logger.info("Moved file: %s", result)
-
-                    elif command == "rename_file":
-                        path = payload.get("path", "")
-                        new_name = payload.get("new_name", "")
-                        from pathlib import Path
-
-                        from dash_backend.security.path_guard import PathDenied, ensure_writable
-
-                        try:
-                            p = ensure_writable(path)
-                            if not p.exists():
-                                raise RuntimeError(f"Not found: {path}")
-                            new_path = p.parent / new_name
-                            # Destination must stay inside an allowed root too.
-                            ensure_writable(str(new_path))
-                            await asyncio.to_thread(p.rename, new_path)
-                            result = {"summary": f"Renamed to {new_name}"}
-                        except PathDenied as exc:
-                            raise RuntimeError(f"Blocked by path policy: {exc}")
-                        logger.info("Renamed file: %s", result)
-
-                    elif command == "delete_file":
-                        path = payload.get("path", "")
-                        permanent = payload.get("permanent", False)
-                        import shutil
-
-                        from dash_backend.security.path_guard import PathDenied, ensure_writable
-
-                        try:
-                            p = ensure_writable(path)
-                        except PathDenied as exc:
-                            raise RuntimeError(f"Blocked by path policy: {exc}")
-                        if not p.exists():
-                            raise RuntimeError(f"Not found: {path}")
-
-                        def _delete() -> str:
-                            if permanent or os.name != "nt":
-                                if p.is_dir():
-                                    shutil.rmtree(p)
-                                else:
-                                    p.unlink()
-                                return f"Deleted {p.name}"
-                            import ctypes
-
-                            FO_DELETE = 3
-                            FOF_ALLOWUNDO = 0x40
-                            buf = ctypes.create_unicode_buffer(str(p) + "\0\0")
-                            ctypes.windll.shell32.SHFileOperationW(
-                                ctypes.byref(ctypes.c_int(0)),
-                                ctypes.byref(ctypes.c_int(FO_DELETE)),
-                                buf,
-                                None,
-                                ctypes.byref(ctypes.c_int(FOF_ALLOWUNDO)),
-                                0,
-                            )
-                            return f"Moved {p.name} to Recycle Bin"
-
-                        summary = await asyncio.to_thread(_delete)
-                        result = {"summary": summary}
-                        logger.info("Deleted file: %s", result)
-
-                    # Handle screenshot
-                    elif command == "take_screenshot":
-                        import base64
-                        import io
-
-                        def _screenshot() -> str:
-                            import pyautogui
-
-                            screenshot = pyautogui.screenshot()
-                            buf = io.BytesIO()
-                            screenshot.save(buf, format="PNG")
-                            return base64.b64encode(buf.getvalue()).decode()
-
-                        img_b64 = await asyncio.to_thread(_screenshot)
-                        result = {"screenshot_base64": img_b64, "summary": "Screenshot captured"}
-                        logger.info("Screenshot captured successfully")
-
-                    # Handle system status request
-                    elif command == "get_system_status":
-                        from dash_backend.services.system.system_info import get_system_info
-                        result = get_system_info()
-                        logger.info("Retrieved system status: %s", result)
-
-                    # Add more command handlers as needed
-                    else:
-                        success = False
-                        error_msg = f"Unknown command: {command}"
-                        logger.warning(error_msg)
-                        await send_json({
-                            "type": "command_result",
-                            "command_id": command_id,
-                            "success": False,
-                            "error": error_msg
-                        })
-                        continue
-
-                    # Convert result to string to match Android's expected format
-                    result_str = json.dumps(result)
-
-                    # Send success response
+                    result = await execute_command(command, payload)
                     await send_json({
                         "type": "command_result",
                         "command_id": command_id,
-                        "success": success,
-                        "result": result_str
+                        "success": True,
+                        "result": json.dumps(result),
                     })
-                    logger.info("Command completed successfully: %s (id: %s)", command, command_id)
-
+                except ValueError as e:
+                    logger.warning("Unknown command: %s", command)
+                    await send_json({"type": "command_result", "command_id": command_id, "success": False, "error": str(e)})
+                    continue
                 except Exception as e:
-                    logger.exception("Error executing command %s: %s", command, str(e))
-                    await send_json({
-                        "type": "command_result",
-                        "command_id": command_id,
-                        "success": False,
-                        "error": str(e)
-                    })
+                    logger.exception("Command %s failed: %s", command, e)
+                    await send_json({"type": "command_result", "command_id": command_id, "success": False, "error": str(e)})
 
             # ── Bidirectional notification: mobile → desktop & other clients ──
             elif msg_type == "notification.send":

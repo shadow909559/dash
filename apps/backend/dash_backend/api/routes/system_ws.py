@@ -32,21 +32,13 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
 from dash_backend.auth.dependencies import get_current_user_id
 from dash_backend.logging_config import get_logger
-from dash_backend.security.local_identity import verify_device_token
+from dash_backend.security.local_identity import verify_device_token, extract_ws_token
 from dash_backend.services.system import SystemMonitor, get_system_monitor
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 WS_UNAUTHORIZED_CODE = 4401
-
-
-def _extract_ws_token(websocket: WebSocket) -> str | None:
-    """Device token from query param (?token=...) or x-dash-token header."""
-    token = websocket.query_params.get("token")
-    if not token:
-        token = websocket.headers.get("x-dash-token")
-    return token
 
 # Active connections with session info
 _active_connections: dict[str, dict[str, Any]] = {}
@@ -86,7 +78,7 @@ async def system_monitor_ws(websocket: WebSocket) -> None:
     token (query `token` or header `x-dash-token`). System telemetry can
     reveal processes/windows/files and must never be served anonymously.
     """
-    if not verify_device_token(_extract_ws_token(websocket)):
+    if not verify_device_token(extract_ws_token(websocket)):
         await websocket.close(code=WS_UNAUTHORIZED_CODE)
         return
 

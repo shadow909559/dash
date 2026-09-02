@@ -240,3 +240,14 @@ def rotate_device_token() -> DeviceIdentity:
             "Device token rotated install_id=%s new_fingerprint=%s", current.install_id, _cached_identity.token_fingerprint
         )
         return _cached_identity
+
+
+def extract_ws_token(websocket) -> str | None:
+    """Device token from WebSocket query param (?token=...) or x-dash-token header.
+
+    Shared by all WebSocket endpoints to avoid duplication.
+    """
+    token = websocket.query_params.get("token")
+    if not token:
+        token = websocket.headers.get("x-dash-token")
+    return token
