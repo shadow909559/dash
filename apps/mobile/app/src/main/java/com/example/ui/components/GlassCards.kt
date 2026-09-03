@@ -364,6 +364,7 @@ enum class NavDestination(val route: String, val label: String) {
     HOME("home", "Home"),
     CHAT("chat", "Chat"),
     VOICE("voice", "Voice"),
+    AGENT("agent", "Agent"),
     ACTIVITY("activity", "Activity"),
     MORE("more", "More"),
 }

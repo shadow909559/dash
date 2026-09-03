@@ -55,6 +55,7 @@ import com.example.ui.screens.subscreens.FileBrowserSubScreen
 import com.example.ui.screens.subscreens.KnowledgeResearchSubScreen
 import com.example.ui.screens.subscreens.MemorySubScreen
 import com.example.ui.screens.subscreens.PlannerSubScreen
+import com.example.ui.screens.subscreens.AgentModeScreen
 import com.example.ui.screens.subscreens.ProjectsSubScreen
 import com.example.ui.screens.subscreens.WindowManagerSubScreen
 import com.example.ui.theme.DashBackground
@@ -109,6 +110,7 @@ fun DashApp() {
         "home" -> NavDestination.HOME
         "chat" -> NavDestination.CHAT
         "voice" -> NavDestination.VOICE
+        "agent" -> NavDestination.AGENT
         "activity" -> NavDestination.ACTIVITY
         "more" -> NavDestination.MORE
         else -> NavDestination.HOME
@@ -359,6 +361,18 @@ fun DashApp() {
                 ) {
                     PlannerSubScreen(
                         viewModel = viewModel,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(
+                    "agent",
+                    enterTransition = { subEnter() },
+                    exitTransition = { subExit() },
+                    popEnterTransition = { subEnter() },
+                    popExitTransition = { subExit() }
+                ) {
+                    AgentModeScreen(
                         onBack = { navController.popBackStack() }
                     )
                 }

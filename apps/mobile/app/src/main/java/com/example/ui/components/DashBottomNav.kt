@@ -35,6 +35,7 @@ private val navItems = listOf(
     NavItem(NavDestination.HOME, Icons.Default.Home),
     NavItem(NavDestination.CHAT, Icons.Default.Chat),
     NavItem(NavDestination.VOICE, Icons.Default.Mic),
+    NavItem(NavDestination.AGENT, Icons.Default.AutoAwesome),
     NavItem(NavDestination.ACTIVITY, Icons.Default.List),
     NavItem(NavDestination.MORE, Icons.Default.MoreHoriz),
 )
