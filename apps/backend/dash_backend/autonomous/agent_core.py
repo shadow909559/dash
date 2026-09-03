@@ -580,10 +580,20 @@ class AgentCore:
         )
 
         try:
+            # Smart provider selection: try cloud first for speed
+            from dash_backend.llm.cloud_fallback import get_provider_selector
+            selector = get_provider_selector()
+            selected = await selector.select_provider()
+            if selected == "openai":
+                logger.info("Using cloud AI (Gemini) for agent think step")
+            else:
+                logger.info("Using local AI (Ollama) for agent think step")
+
             # Use native tool calling but we parse the text response
             response = await asyncio.wait_for(
                 chat_completion_with_native_tool_calls(
-                    messages, tools=tool_defs[:15]
+                    messages, tools=tool_defs[:15],
+                    force_provider=selected,
                 ),
                 timeout=THINK_TIMEOUT,
             )

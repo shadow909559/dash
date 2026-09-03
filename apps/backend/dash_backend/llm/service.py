@@ -558,16 +558,22 @@ async def chat_completion_with_native_tool_calls(
     tools: list[dict[str, Any]],
     tool_choice: str | dict[str, Any] | None = None,
     model: str | None = None,
+    force_provider: str | None = None,
 ) -> NativeAssistantResponse:
 
     """Return native tool_calls for the configured provider.
 
     - ollama  -> POST /api/chat with `tools` (native function calling)
     - openai  -> POST /v1/chat/completions with `tools`
+    
+    Args:
+        force_provider: Override the configured provider ("ollama" or "openai").
+                        Used by cloud_fallback to route to Gemini when available.
     """
     settings = get_settings()
+    provider = (force_provider or settings.ai_provider or "ollama").lower()
 
-    if (settings.ai_provider or "").lower() == "ollama":
+    if provider == "ollama":
         return await _native_tool_calls_ollama(messages, tools, model)
 
     api_key = settings.openai_api_key
