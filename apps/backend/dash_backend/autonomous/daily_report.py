@@ -171,6 +171,8 @@ def _format_report_text(report: dict[str, Any]) -> str:
     elif sys.get("status") == "warning":
         lines.append(f"System needs attention. CPU at {sys.get('cpu_percent', 0)}%, "
                       f"RAM at {sys.get('ram_percent', 0)}%.")
+    elif sys.get("status") == "error":
+        lines.append(f"System health unavailable: {sys.get('error', 'unknown error')}.")
 
     bat = sys.get("battery_percent")
     if bat is not None:
