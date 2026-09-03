@@ -274,6 +274,13 @@ class AgentCore:
                 goal.state = AgentState.THINKING
                 observation = await self._observe(goal)
 
+                # Inject past experiences for similar goals
+                from dash_backend.autonomous.experience import get_experience_cache
+                exp_cache = get_experience_cache()
+                exp_context = exp_cache.format_for_context(goal.description)
+                if exp_context:
+                    observation = f"{exp_context}\n\n{observation}"
+
                 # Inject plan context if available
                 plan = self._plans.get(goal.id)
                 if plan and plan.current_step:
@@ -309,6 +316,15 @@ class AgentCore:
                         await self.remember(goal)
                     except Exception:
                         pass
+                    # Record experience for future goals
+                    try:
+                        from dash_backend.autonomous.experience import get_experience_cache
+                        get_experience_cache().record(
+                            goal.description, goal.steps,
+                            goal.result or "", success=True,
+                        )
+                    except Exception:
+                        pass
                     return
 
                 if action.upper() == "BLOCKED":
@@ -319,6 +335,15 @@ class AgentCore:
                     logger.warning("Agent goal blocked: %s — %s", goal.id, goal.error)
                     try:
                         await self.remember(goal)
+                    except Exception:
+                        pass
+                    # Record failed experience too (so agent knows what NOT to do)
+                    try:
+                        from dash_backend.autonomous.experience import get_experience_cache
+                        get_experience_cache().record(
+                            goal.description, goal.steps,
+                            goal.error or "", success=False,
+                        )
                     except Exception:
                         pass
                     return
@@ -376,6 +401,14 @@ class AgentCore:
             goal.error = f"Reached max iterations ({goal.max_iterations})"
             goal.completed_at = time.time()
             await self._notify("goal.failed", {"goal": goal.to_dict()})
+            try:
+                from dash_backend.autonomous.experience import get_experience_cache
+                get_experience_cache().record(
+                    goal.description, goal.steps,
+                    goal.error, success=False,
+                )
+            except Exception:
+                pass
 
         except asyncio.CancelledError:
             # Only overwrite state if not already PAUSED (pause sets state before cancelling)
