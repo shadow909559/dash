@@ -50,8 +50,15 @@ class ProviderSelector:
         from dash_backend.config import get_settings
         settings = get_settings()
 
-        api_key = settings.openai_api_key
-        base_url = settings.openai_base_url
+        # Prefer Gemini, fall back to Groq, then OpenAI
+        api_key = settings.gemini_api_key or settings.groq_api_key or settings.openai_api_key
+        base_url = (
+            "https://generativelanguage.googleapis.com/v1beta/openai"
+            if settings.gemini_api_key
+            else "https://api.groq.com/openai/v1"
+            if settings.groq_api_key
+            else settings.openai_base_url
+        )
 
         if not api_key:
             self._cloud_health = ProviderHealth(

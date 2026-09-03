@@ -176,8 +176,7 @@ export const DASHHeader: React.FC<DASHHeaderProps> = () => {
               height: 7,
               borderRadius: "50%",
               backgroundColor: getStatusColor(systemStatus),
-              boxShadow: systemStatus === "online" ? "0 0 8px rgba(34, 197, 94, 0.5)" : "0 0 8px rgba(63, 169, 245, 0.4)",
-              animation: systemStatus === "online" ? "jarvis-status-pulse 2s ease-in-out infinite" : "none",
+              boxShadow: "none",
               }}
             />
             <span>Core</span>

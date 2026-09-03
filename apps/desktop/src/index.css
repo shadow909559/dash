@@ -6,36 +6,36 @@
   box-sizing: border-box;
 }
 :root {
-  /* DASH JARVIS — Cyan/Blue Design Tokens */
-  --dash-bg: #0b0e14;
-  --dash-bg-subtle: #0e1118;
-  --dash-surface: #12161f;
-  --dash-surface-hover: #181d28;
-  --dash-surface-active: #1e2533;
-  --dash-elevated: #141820;
-  --dash-elevated-hover: #1a2030;
+  /* DASH ChatGPT/Gemini — Clean Dark Design Tokens */
+  --dash-bg: #212121;
+  --dash-bg-subtle: #171717;
+  --dash-surface: #2f2f2f;
+  --dash-surface-hover: #3a3a3a;
+  --dash-surface-active: #424242;
+  --dash-elevated: #2f2f2f;
+  --dash-elevated-hover: #3a3a3a;
 
   /* Borders */
-  --dash-border: rgba(63, 169, 245, 0.10);
-  --dash-border-hover: rgba(63, 169, 245, 0.22);
+  --dash-border: rgba(255, 255, 255, 0.08);
+  --dash-border-hover: rgba(255, 255, 255, 0.15);
   --dash-border-subtle: rgba(255, 255, 255, 0.05);
-  --dash-border-accent: rgba(63, 169, 245, 0.40);
+  --dash-border-accent: rgba(255, 255, 255, 0.20);
 
-  /* Primary — JARVIS Cyan */
-  --dash-accent: #3fa9f5;
-  --dash-accent-hover: #5ab8f5;
-  --dash-accent-glow: rgba(63, 169, 245, 0.25);
-  --dash-accent-intense: rgba(63, 169, 245, 0.40);
+  /* Primary — Clean White */
+  --dash-accent: #ffffff;
+  --dash-accent-hover: #e8e8e8;
+  --dash-accent-glow: rgba(255, 255, 255, 0.08);
+  --dash-accent-intense: rgba(255, 255, 255, 0.15);
 
-  /* Secondary — Deep Blue */
-  --dash-accent-secondary: #2f8fd6;
-  --dash-accent-secondary-glow: rgba(47, 143, 214, 0.25);
+  /* Secondary — Subtle Gray */
+  --dash-accent-secondary: #b4b4b4;
+  --dash-accent-secondary-glow: rgba(180, 180, 180, 0.10);
 
-  /* Tertiary — Electric Cyan */
-  --dash-cyan: #00d4ff;
-  --dash-cyan-glow: rgba(0, 212, 255, 0.20);
+  /* Tertiary — ChatGPT Green (accent for actions) */
+  --dash-cyan: #10a37f;
+  --dash-cyan-glow: rgba(16, 163, 127, 0.15);
 
-  /* JARVIS Core — Cyan Energy */
+  /* JARVIS Core — kept for boot screen only */
   --ultron-core: #3fa9f5;
   --ultron-core-bright: #5ab8f5;
   --ultron-core-deep: #1a5276;
@@ -60,10 +60,10 @@
   --dash-info: #3fa9f5;
 
   /* Typography */
-  --dash-text: #f2f6fa;
-  --dash-text-secondary: #9ab4cc;
-  --dash-text-muted: #5a6f85;
-  --dash-text-inverse: #0b0e14;
+  --dash-text: #ececec;
+  --dash-text-secondary: #acacac;
+  --dash-text-muted: #666666;
+  --dash-text-inverse: #212121;
 
   /* Spacing */
   --dash-space-xs: 4px;
@@ -82,11 +82,11 @@
   --dash-radius-full: 9999px;
 
   /* Shadows */
-  --dash-shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.40);
-  --dash-shadow-md: 0 4px 14px -1px rgba(0, 0, 0, 0.50), 0 2px 6px -1px rgba(0, 0, 0, 0.30);
-  --dash-shadow-lg: 0 12px 30px -3px rgba(0, 0, 0, 0.60), 0 4px 8px -2px rgba(0, 0, 0, 0.40);
-  --dash-shadow-glow: 0 0 24px rgba(63, 169, 245, 0.20);
-  --dash-shadow-glow-accent: 0 0 30px rgba(63, 169, 245, 0.25), 0 0 60px rgba(63, 169, 245, 0.08);
+  --dash-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.30);
+  --dash-shadow-md: 0 2px 8px -1px rgba(0, 0, 0, 0.40);
+  --dash-shadow-lg: 0 8px 24px -3px rgba(0, 0, 0, 0.50);
+  --dash-shadow-glow: none;
+  --dash-shadow-glow-accent: none;
 
   /* Transitions */
   --dash-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -94,14 +94,14 @@
   --dash-transition-smooth: 300ms cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Glass */
-  --dash-glass-bg: rgba(11, 14, 20, 0.80);
-  --dash-glass-border: rgba(63, 169, 245, 0.10);
-  --dash-glass-blur: blur(20px);
+  --dash-glass-bg: rgba(33, 33, 33, 0.90);
+  --dash-glass-border: rgba(255, 255, 255, 0.08);
+  --dash-glass-blur: blur(12px);
 
-  /* Gradients */
-  --dash-gradient-hero: linear-gradient(135deg, rgba(63, 169, 245, 0.08), rgba(47, 143, 214, 0.05), transparent 60%);
-  --dash-gradient-surface: linear-gradient(180deg, rgba(63,169,245,0.02) 0%, transparent 100%);
-  --dash-gradient-border: linear-gradient(135deg, rgba(63, 169, 245, 0.3), rgba(47, 143, 214, 0.2), rgba(0, 212, 255, 0.15));
+  /* Gradients — clean, minimal */
+  --dash-gradient-hero: linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent 60%);
+  --dash-gradient-surface: linear-gradient(180deg, rgba(255,255,255,0.01) 0%, transparent 100%);
+  --dash-gradient-border: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
 }
 
 html, body {
@@ -110,11 +110,7 @@ html, body {
   margin: 0;
   padding: 0;
   background-color: var(--dash-bg);
-  /* JARVIS grid overlay — matches boot screen 7% spec */
-  background-image:
-    linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px);
-  background-size: 50px 50px;
+  /* Clean ChatGPT-style background — no grid overlay */
   color: var(--dash-text);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -305,12 +301,12 @@ button, [role="button"], a {
   100% { transform: translateY(100vh); }
 }
 @keyframes glowPulse {
-  0%, 100% { box-shadow: 0 0 8px var(--dash-accent-glow), inset 0 0 4px var(--dash-accent-glow); }
-  50% { box-shadow: 0 0 20px var(--dash-accent-glow), 0 0 40px rgba(63, 169, 245, 0.08), inset 0 0 8px var(--dash-accent-glow); }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
 }
 @keyframes borderGlow {
-  0%, 100% { border-color: rgba(63, 169, 245, 0.15); }
-  50% { border-color: rgba(63, 169, 245, 0.35); }
+  0%, 100% { border-color: rgba(255, 255, 255, 0.08); }
+  50% { border-color: rgba(255, 255, 255, 0.15); }
 }
 @keyframes statusPulse {
   0%, 100% { opacity: 0.6; transform: scale(1); }
@@ -419,12 +415,10 @@ button, [role="button"], a {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow: inset 0 0 20px rgba(63, 169, 245, 0.04);
+  box-shadow: none;
   pointer-events: none;
-  transition: box-shadow 0.3s;
   opacity: 0;
 }
-.dash-card-glow:hover::after { opacity: 1; }
 
 .dash-metric-accent { position: relative; padding-left: 12px; }
 .dash-metric-accent::before {
@@ -560,38 +554,25 @@ a[role="button"] {
 /* Sidebar grid background — matches boot screen */
 .dash-jarvis-sidebar {
   background-color: var(--dash-surface);
-  background-image:
-    linear-gradient(rgba(63,169,245,0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63,169,245,0.08) 1px, transparent 1px);
-  background-size: 50px 50px;
-  border-right: 1px solid rgba(63, 169, 245, 0.20);
+  border-right: 1px solid var(--dash-border);
 }
 
 /* Active nav item glow — cyan energy pulse */
 .dash-jarvis-nav-active {
-  background: rgba(63, 169, 245, 0.18) !important;
-  border: 1px solid rgba(63, 169, 245, 0.45) !important;
-  box-shadow: 0 0 20px rgba(63, 169, 245, 0.30), inset 0 0 12px rgba(63, 169, 245, 0.12);
+  background: rgba(255, 255, 255, 0.10) !important;
+  border: none !important;
+  box-shadow: none;
 }
 
-/* Pulsing glow ring for logo */
-@keyframes jarvis-logo-pulse {
-  0%, 100% { box-shadow: 0 0 14px rgba(63, 169, 245, 0.5), 0 0 28px rgba(63, 169, 245, 0.2); }
-  50% { box-shadow: 0 0 24px rgba(63, 169, 245, 0.7), 0 0 48px rgba(63, 169, 245, 0.3); }
-}
+/* Logo — clean, no pulse */
 .dash-jarvis-logo {
-  animation: jarvis-logo-pulse 3s ease-in-out infinite;
+  animation: none;
 }
 
 /* Header glow line — thin cyan accent at bottom */
 .dash-jarvis-header {
   background-color: var(--dash-surface);
-  background-image:
-    linear-gradient(rgba(63,169,245,0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63,169,245,0.06) 1px, transparent 1px);
-  background-size: 50px 50px;
-  border-bottom: 2px solid rgba(63, 169, 245, 0.50);
-  box-shadow: 0 2px 16px rgba(63, 169, 245, 0.25), 0 1px 0 rgba(63, 169, 245, 0.40);
+  border-bottom: 1px solid var(--dash-border);
 }
 
 /* Status dot glow */
@@ -607,28 +588,22 @@ a[role="button"] {
 }
 .dash-jarvis-status-dot--warning {
   background: var(--dash-warning);
-  box-shadow: 0 0 6px rgba(234, 179, 8, 0.4);
 }
 .dash-jarvis-status-dot--error {
   background: var(--dash-danger);
-  box-shadow: 0 0 6px rgba(63, 169, 245, 0.4);
 }
 @keyframes jarvis-status-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
 }
 
-/* Page background with grid — matches boot screen spec */
+/* Page background — clean, no grid */
 .dash-jarvis-page {
   background-color: var(--dash-bg);
-  background-image:
-    linear-gradient(rgba(63,169,245,0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63,169,245,0.05) 1px, transparent 1px);
-  background-size: 50px 50px;
 }
 
-/* Cyan glow card hover */
+/* Card hover — clean */
 .dash-jarvis-card:hover {
-  border-color: rgba(63, 169, 245, 0.2);
-  box-shadow: 0 0 20px rgba(63, 169, 245, 0.08), var(--dash-shadow-sm);
+  border-color: var(--dash-border-hover);
+  box-shadow: var(--dash-shadow-sm);
 }

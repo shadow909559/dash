@@ -412,6 +412,15 @@ async def get_providers_config() -> dict[str, Any]:
             "base_url": "https://api.x.ai/v1",
             "has_api_key": bool(settings.grok_api_key),
         },
+        {
+            "name": "groq",
+            "display_name": "Groq (Ultra-Fast)",
+            "type": "cloud",
+            "enabled": bool(settings.groq_api_key),
+            "model": settings.groq_model,
+            "base_url": "https://api.groq.com/openai/v1",
+            "has_api_key": bool(settings.groq_api_key),
+        },
     ]
     return {
         "providers": providers,
@@ -455,6 +464,11 @@ async def update_provider_config(req: ProviderConfigRequest) -> dict[str, Any]:
             os.environ["DASH_GROK_API_KEY"] = req.api_key
         if req.model:
             os.environ["DASH_GROK_MODEL"] = req.model
+    elif req.provider == "groq":
+        if req.api_key:
+            os.environ["DASH_GROQ_API_KEY"] = req.api_key
+        if req.model:
+            os.environ["DASH_GROQ_MODEL"] = req.model
 
     if req.api_key:
         from dash_backend.services.ai_providers.provider_manager import get_provider_manager
@@ -493,5 +507,13 @@ async def update_provider_config(req: ProviderConfigRequest) -> dict[str, Any]:
                 model=req.model or settings.grok_model,
             )
             pm.register(provider, primary=(settings.ai_provider == "grok"))
+        elif req.provider == "groq":
+            from dash_backend.services.ai_providers.groq_provider import GroqProvider
+
+            provider = GroqProvider(
+                api_key=req.api_key,
+                model=req.model or settings.groq_model,
+            )
+            pm.register(provider, primary=(settings.ai_provider == "groq"))
 
     return {"status": "ok", "provider": req.provider, "configured": bool(req.api_key)}
