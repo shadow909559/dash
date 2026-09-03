@@ -277,7 +277,7 @@ class AgentCore:
                 # Inject past experiences for similar goals
                 from dash_backend.autonomous.experience import get_experience_cache
                 exp_cache = get_experience_cache()
-                exp_context = exp_cache.format_for_context(goal.description)
+                exp_context = await exp_cache.format_for_context(goal.description)
                 if exp_context:
                     observation = f"{exp_context}\n\n{observation}"
 
