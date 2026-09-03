@@ -255,11 +255,12 @@ class AutonomousBrain:
 
     # ── Chat Integration ───────────────────────────────────────────────
 
-    async def handle_chat(self, message: str, user_id: str = "user") -> str:
+    async def handle_chat(self, message: str, user_id: str = "user", voice_mode: bool = False) -> str:
         """Process a chat message through the autonomous brain.
 
         If the message is a complex task, create a goal and let the agent
         execute it.  If it's a simple question, answer directly via LLM.
+        When voice_mode=True, responses are shorter and spoken-friendly.
         Returns the response text.
         """
         # Store in conversation history
@@ -296,11 +297,17 @@ class AutonomousBrain:
             try:
                 from dash_backend.llm.service import build_chat_messages, collect_streamed_response
                 context = self._build_context()
+                spoken_rules = (
+                    " RULES FOR VOICE MODE: Keep replies under 2 sentences. "
+                    "No formatting, no lists, no markdown. Just speak naturally."
+                    if voice_mode else ""
+                )
                 messages = build_chat_messages(
                     system_prompt=(
                         "You are DASH, an AI assistant similar to JARVIS. "
                         "You are running on the user's Windows computer. "
                         "Be concise, helpful, and slightly formal. "
+                        f"{spoken_rules}"
                         f"\n\nSYSTEM STATUS:\n{context}"
                     ),
                     user_message=message,

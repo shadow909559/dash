@@ -309,6 +309,19 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     await add_message(save_session, chat_msg.conversation_id, MessageRole.ASSISTANT, assistant_content)
             except Exception:
                 pass
+            # Auto-TTS: speak the response so DASH talks like JARVIS
+            try:
+                from dash_backend.voice import synthesize_text
+                tts_text = response[:500]  # cap for TTS to avoid long syntheses
+                audio_b64 = await synthesize_text(tts_text, provider_name="piper", user_id=user_id)
+                if audio_b64:
+                    await send_json({
+                        "type": "voice.tts_ready",
+                        "message_id": request_id,
+                        "audio_base64": audio_b64,
+                    })
+            except Exception as exc:
+                logger.debug("Auto-TTS failed for brain response: %s", exc)
         except Exception as exc:
             logger.exception("Brain chat failed: %s", exc)
             await send_json({"type": "chat.token", "message_id": request_id, "content": f"I encountered an issue: {exc}"})
