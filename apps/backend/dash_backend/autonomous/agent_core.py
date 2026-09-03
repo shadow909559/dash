@@ -18,9 +18,8 @@ import json
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, AsyncIterator, Callable
+from typing import Any, Callable
 
 from dash_backend.logging_config import get_logger
 
@@ -29,7 +28,6 @@ logger = get_logger(__name__)
 # ── Limits ────────────────────────────────────────────────────────────────
 MAX_ITERATIONS = 30          # hard cap per goal
 DEFAULT_TIMEOUT = 300.0      # 5 minutes per goal
-MAX_THINK_TOKENS = 2048      # cap per think step
 
 
 class AgentState(Enum):
@@ -160,9 +158,16 @@ class AgentCore:
         self._callbacks: list[Callable] = []
         self._memory: list[dict[str, Any]] = []  # short-term working memory
 
-    def on_step(self, callback: Callable) -> None:
-        """Register a callback for step completion (for streaming to clients)."""
+    def on_step(self, callback: Callable) -> Callable:
+        """Register a callback for step completion. Returns an unsubscribe function."""
         self._callbacks.append(callback)
+
+        def _unsubscribe():
+            try:
+                self._callbacks.remove(callback)
+            except ValueError:
+                pass
+        return _unsubscribe
 
     async def _notify(self, event: str, data: dict) -> None:
         for cb in self._callbacks:
@@ -266,6 +271,10 @@ class AgentCore:
                     goal.completed_at = time.time()
                     await self._notify("goal.completed", goal.to_dict())
                     logger.info("Agent goal completed: %s", goal.id)
+                    try:
+                        await self.remember(goal)
+                    except Exception:
+                        pass
                     return
 
                 if action.upper() == "BLOCKED":
@@ -274,6 +283,10 @@ class AgentCore:
                     goal.completed_at = time.time()
                     await self._notify("goal.failed", goal.to_dict())
                     logger.warning("Agent goal blocked: %s — %s", goal.id, goal.error)
+                    try:
+                        await self.remember(goal)
+                    except Exception:
+                        pass
                     return
 
                 # ── ACT ────────────────────────────────────────────
@@ -322,8 +335,10 @@ class AgentCore:
             await self._notify("goal.failed", goal.to_dict())
 
         except asyncio.CancelledError:
-            goal.state = AgentState.FAILED
-            goal.error = "Cancelled"
+            # Only overwrite state if not already PAUSED (pause sets state before cancelling)
+            if goal.state != AgentState.PAUSED:
+                goal.state = AgentState.FAILED
+                goal.error = "Cancelled"
             goal.completed_at = time.time()
         except Exception as exc:
             logger.exception("Agent loop failed for goal %s", goal.id)

@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from dash_backend.auth.dependencies import get_current_user_id
 from dash_backend.logging_config import get_logger
 from dash_backend.security.local_identity import verify_device_token, extract_ws_token
+from fastapi import HTTPException
 
 logger = get_logger(__name__)
 
@@ -70,7 +71,7 @@ async def get_goal(goal_id: str, user_id: str = __import__("fastapi").Depends(ge
     core = get_agent_core()
     goal = core.get_goal(goal_id)
     if not goal:
-        return {"error": "Goal not found"}, 404
+        raise HTTPException(status_code=404, detail="Goal not found")
     return goal.to_dict()
 
 
@@ -139,7 +140,7 @@ async def agent_ws(websocket: WebSocket) -> None:
             except Exception:
                 _agent_subscribers.pop(subscriber_id, None)
 
-    core.on_step(stream_event)
+    unsubscribe = core.on_step(stream_event)
 
     try:
         while True:
@@ -193,4 +194,5 @@ async def agent_ws(websocket: WebSocket) -> None:
     except Exception as exc:
         logger.debug("Agent WS error: %s", exc)
     finally:
+        unsubscribe()
         _agent_subscribers.pop(subscriber_id, None)
