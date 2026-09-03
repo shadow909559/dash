@@ -283,36 +283,37 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 pass
             return
 
-        # ── Autonomous agent interception: messages starting with agent: trigger autonomous mode ──
+        # ── Autonomous brain: route through the JARVIS orchestrator ──
         agent_prefixes = ("agent:", "autonomous:", "do:", "go:", "execute:")
-        if chat_msg.content.lower().strip().startswith(agent_prefixes):
+        is_agent_msg = chat_msg.content.lower().strip().startswith(agent_prefixes)
+        is_complex = not is_agent_msg  # let the brain decide for non-prefixed messages
+
+        if is_agent_msg:
+            # Strip prefix
             goal_desc = chat_msg.content
             for prefix in agent_prefixes:
                 if chat_msg.content.lower().strip().startswith(prefix):
                     goal_desc = chat_msg.content[len(prefix):].strip()
                     break
+            chat_msg.content = goal_desc
 
+        try:
+            from dash_backend.autonomous.brain import get_brain
+            brain = get_brain()
+            response = await brain.handle_chat(chat_msg.content, user_id)
+            assistant_content = response
+            await send_json({"type": "chat.token", "message_id": request_id, "content": response})
+            await send_json({"type": "chat.done", "message_id": request_id, "conversation_id": chat_msg.conversation_id})
             try:
-                from dash_backend.autonomous.agent_core import get_agent_core
-                agent = get_agent_core()
-                goal = await agent.run_goal(
-                    description=goal_desc,
-                    context={"user_id": user_id, "conversation_id": chat_msg.conversation_id},
-                )
-                summary = f"🤖 Autonomous agent started: {goal.description}\nGoal ID: {goal.id}\nI'll work on this autonomously and report back."
-                assistant_content = summary
-                await send_json({"type": "chat.token", "message_id": request_id, "content": summary})
-                await send_json({"type": "chat.done", "message_id": request_id, "conversation_id": chat_msg.conversation_id})
-                try:
-                    async with AsyncSessionLocal() as save_session:
-                        await add_message(save_session, chat_msg.conversation_id, MessageRole.ASSISTANT, assistant_content)
-                except Exception:
-                    pass
-            except Exception as exc:
-                logger.exception("Agent start failed: %s", exc)
-                await send_json({"type": "chat.token", "message_id": request_id, "content": f"Agent failed to start: {exc}"})
-                await send_json({"type": "chat.done", "message_id": request_id, "conversation_id": chat_msg.conversation_id})
-            return
+                async with AsyncSessionLocal() as save_session:
+                    await add_message(save_session, chat_msg.conversation_id, MessageRole.ASSISTANT, assistant_content)
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.exception("Brain chat failed: %s", exc)
+            await send_json({"type": "chat.token", "message_id": request_id, "content": f"I encountered an issue: {exc}"})
+            await send_json({"type": "chat.done", "message_id": request_id, "conversation_id": chat_msg.conversation_id})
+        return
 
         # ── Command interception: detect desktop-control commands ──
         try:

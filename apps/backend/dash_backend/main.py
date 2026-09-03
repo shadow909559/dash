@@ -189,7 +189,11 @@ async def lifespan(app: FastAPI):
         # Start the proactive agent (runs during idle periods)
         proactive = get_proactive_agent()
         await proactive.start()
-        logger.info("Autonomous agent services started (including proactive agent)")
+        # Start the autonomous brain (JARVIS orchestrator)
+        from dash_backend.autonomous.brain import get_brain
+        brain = get_brain()
+        await brain.start()
+        logger.info("Autonomous agent services started (including brain)")
     except Exception:
         logger.exception("Failed to start autonomous agent services")
 
