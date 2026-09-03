@@ -133,7 +133,24 @@ class AutonomousBrain:
         except Exception as exc:
             logger.debug("Could not load experiences: %s", exc)
 
-        # 5. Report boot status to connected clients
+        # 5. Schedule daily health report at 8am
+        try:
+            from dash_backend.services.system.scheduler import get_system_scheduler
+            from dash_backend.autonomous.daily_report import generate_daily_report, _format_report_text
+
+            async def _run_daily_report() -> None:
+                report = await generate_daily_report()
+                text = _format_report_text(report)
+                await self._notify("daily.report", {"report": report, "text": text})
+                logger.info("Daily report generated and broadcast")
+
+            scheduler = get_system_scheduler()
+            scheduler.add_daily_task("Daily Health Report", _run_daily_report, "08:00")
+            logger.info("Brain: scheduled daily health report at 08:00")
+        except Exception as exc:
+            logger.debug("Could not schedule daily report: %s", exc)
+
+        # 6. Report boot status to connected clients
         await self._notify_boot_status(status)
 
         elapsed = time.time() - t0
