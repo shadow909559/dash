@@ -166,7 +166,7 @@ def try_fast_path(goal_description: str) -> FastPathMatch | None:
 
     Returns a FastPathMatch if confidence is high enough, None otherwise.
     """
-    text = goal_description.strip()
+    text = goal_description.strip().rstrip(".!?;:")
     if not text:
         return None
 
@@ -224,7 +224,10 @@ def _match_from_experience(goal_description: str) -> FastPathMatch | None:
             # Check if goal descriptions are similar
             desc_lower = goal_description.lower()
             exp_lower = exp.goal_description.lower()
-            if desc_lower == exp_lower or desc_lower in exp_lower or exp_lower in desc_lower:
+            # Use word-boundary match to avoid 'lock' matching 'unlock'
+            if (desc_lower == exp_lower
+                    or re.search(r"\b" + re.escape(desc_lower) + r"\b", exp_lower)
+                    or re.search(r"\b" + re.escape(exp_lower) + r"\b", desc_lower)):
                 # Check if only one tool was used
                 successful_tools = [t for t in exp.tool_sequence if t.get("success")]
                 if len(successful_tools) == 1:

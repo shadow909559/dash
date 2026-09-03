@@ -289,11 +289,13 @@ class AgentCore:
                 if step.success:
                     goal.state = AgentState.COMPLETED
                     goal.result = step.tool_result or "Completed via fast-path"
+                    goal.completed_at = time.time()
+                    await self._notify("goal.completed", {"goal": goal.to_dict()})
                 else:
                     goal.state = AgentState.FAILED
                     goal.error = step.tool_result or "Fast-path tool failed"
-                goal.completed_at = time.time()
-                await self._notify("goal.completed", {"goal": goal.to_dict()})
+                    goal.completed_at = time.time()
+                    await self._notify("goal.failed", {"goal": goal.to_dict()})
                 try:
                     from dash_backend.autonomous.experience import get_experience_cache
                     get_experience_cache().record(
