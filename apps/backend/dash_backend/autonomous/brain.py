@@ -537,7 +537,7 @@ class AutonomousBrain:
         try:
             subprocess.run(
                 ["schtasks", "/Run", "/TN", "DASH-Backend"],
-                captureoutput=True, timeout=10,
+                capture_output=True, timeout=10,
             )
         except Exception as exc:
             logger.error("Failed to restart backend: %s", exc)
