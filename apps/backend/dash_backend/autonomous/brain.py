@@ -150,7 +150,15 @@ class AutonomousBrain:
         except Exception as exc:
             logger.debug("Could not schedule daily report: %s", exc)
 
-        # 6. Report boot status to connected clients
+        # 6. Register recurring maintenance tasks
+        try:
+            from dash_backend.autonomous.recurring_tasks import register_recurring_tasks
+            register_recurring_tasks()
+            logger.info("Brain: registered recurring maintenance tasks")
+        except Exception as exc:
+            logger.debug("Could not register recurring tasks: %s", exc)
+
+        # 7. Report boot status to connected clients
         await self._notify_boot_status(status)
 
         elapsed = time.time() - t0
