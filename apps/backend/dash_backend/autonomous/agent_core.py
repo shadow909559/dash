@@ -264,6 +264,48 @@ class AgentCore:
         goal.started_at = time.time()
         await self._notify("goal.started", {"goal": goal.to_dict()})
 
+        # ── FAST PATH: skip LLM for single-tool goals ──────────
+        try:
+            from dash_backend.autonomous.fast_path import try_fast_path
+            fast = try_fast_path(goal.description)
+            if fast:
+                logger.info(
+                    "Fast-path executing: %s → %s",
+                    goal.description[:50], fast.tool_name,
+                )
+                step = AgentStep(
+                    iteration=1,
+                    observation=f"Fast-path match: {fast.reasoning}",
+                    thought=f"Direct execution — no LLM needed. Tool: {fast.tool_name}",
+                    action={"tool": fast.tool_name, "args": fast.tool_args},
+                    tool_name=fast.tool_name,
+                    tool_args=fast.tool_args,
+                )
+                t0 = time.time()
+                result = await self._act(step)
+                step.duration_ms = (time.time() - t0) * 1000
+                goal.steps.append(step)
+
+                if step.success:
+                    goal.state = AgentState.COMPLETED
+                    goal.result = step.tool_result or "Completed via fast-path"
+                else:
+                    goal.state = AgentState.FAILED
+                    goal.error = step.tool_result or "Fast-path tool failed"
+                goal.completed_at = time.time()
+                await self._notify("goal.completed", {"goal": goal.to_dict()})
+                try:
+                    from dash_backend.autonomous.experience import get_experience_cache
+                    get_experience_cache().record(
+                        goal.description, goal.steps,
+                        goal.result or goal.error or "", success=step.success,
+                    )
+                except Exception:
+                    pass
+                return
+        except Exception as exc:
+            logger.debug("Fast-path failed, falling through to LLM: %s", exc)
+
         try:
             while goal.iteration < goal.max_iterations:
                 if goal.state == AgentState.PAUSED:
