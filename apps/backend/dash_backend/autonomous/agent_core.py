@@ -71,6 +71,8 @@ class AgentGoal:
     completed_at: float = 0.0
     max_iterations: int = MAX_ITERATIONS
     timeout: float = DEFAULT_TIMEOUT
+    priority: int = 0  # higher = more urgent
+    goal_memory: list = field(default_factory=list)  # per-goal working memory
 
     @property
     def elapsed(self) -> float:
@@ -153,12 +155,14 @@ class AgentCore:
     reflects on results, and adapts its approach.
     """
 
-    def __init__(self):
+    def __init__(self, max_concurrent_llm: int = 2):
         self._goals: dict[str, AgentGoal] = {}
         self._running_tasks: dict[str, asyncio.Task] = {}
         self._callbacks: list[Callable] = []
-        self._memory: list[dict[str, Any]] = []  # short-term working memory
+        self._memory: list[dict[str, Any]] = []  # shared short-term memory
         self._plans: dict[str, Any] = {}  # goal_id -> TaskPlan
+        self._llm_semaphore = asyncio.Semaphore(max_concurrent_llm)
+        self._max_concurrent_llm = max_concurrent_llm
 
     def on_step(self, callback: Callable) -> Callable:
         """Register a callback for step completion. Returns an unsubscribe function."""
@@ -219,6 +223,7 @@ class AgentCore:
         context: dict[str, Any] | None = None,
         max_iterations: int = MAX_ITERATIONS,
         timeout: float = DEFAULT_TIMEOUT,
+        priority: int = 0,
     ) -> AgentGoal:
         """Start executing a goal autonomously. Returns the goal object."""
         goal = AgentGoal(
@@ -226,6 +231,7 @@ class AgentCore:
             context=context or {},
             max_iterations=max_iterations,
             timeout=timeout,
+            priority=priority,
         )
         self._goals[goal.id] = goal
 
@@ -278,8 +284,9 @@ class AgentCore:
                         f"{observation}"
                     )
 
-                # ── THINK ──────────────────────────────────────────
-                thought, action, args = await self._think(goal, observation)
+                # ── THINK (semaphore-limited to avoid overwhelming LLM) ──
+                async with self._llm_semaphore:
+                    thought, action, args = await self._think(goal, observation)
 
                 if action is None:
                     # LLM couldn't produce valid output
@@ -425,9 +432,12 @@ class AgentCore:
                 steps_summary.append(f"[{status}] {s.tool_name}: {s.thought[:100]}")
             parts.append(f"Recent steps: {'; '.join(steps_summary)}")
 
-        # Working memory
-        if self._memory:
-            parts.append(f"Working memory: {json.dumps(self._memory[-5:])[:500]}")
+        # Per-goal working memory
+        if goal.goal_memory:
+            parts.append(f"Goal memory: {json.dumps(goal.goal_memory[-5:])[:500]}")
+        # Shared memory from other goals (for context)
+        elif self._memory:
+            parts.append(f"System memory: {json.dumps(self._memory[-3:])[:300]}")
 
         return "\n".join(parts)
 
@@ -557,8 +567,7 @@ class AgentCore:
     # ── REFLECT ────────────────────────────────────────────────────────
 
     async def _reflect(self, goal: AgentGoal, step: AgentStep) -> None:
-        """Evaluate the step result and update working memory."""
-        # Store in working memory
+        """Evaluate the step result and update per-goal working memory."""
         entry = {
             "step": step.iteration,
             "tool": step.tool_name,
@@ -566,15 +575,20 @@ class AgentCore:
             "thought": step.thought[:200],
             "result_summary": (step.tool_result or "")[:200],
         }
-        self._memory.append(entry)
+        goal.goal_memory.append(entry)
 
-        # Keep working memory bounded
+        # Keep per-goal memory bounded
+        if len(goal.goal_memory) > 30:
+            goal.goal_memory = goal.goal_memory[-20:]
+
+        # Also store in shared memory (last 10 entries from all goals)
+        self._memory.append({"goal": goal.id[:8], **entry})
         if len(self._memory) > 50:
             self._memory = self._memory[-30:]
 
-        # If step failed, add a failure note to memory
+        # If step failed, add a failure note
         if not step.success:
-            self._memory.append({
+            goal.goal_memory.append({
                 "type": "failure",
                 "tool": step.tool_name,
                 "error": (step.tool_result or "")[:200],
@@ -608,6 +622,20 @@ class AgentCore:
     def get_plan(self, goal_id: str) -> dict | None:
         plan = self._plans.get(goal_id)
         return plan.to_dict() if plan else None
+
+    def get_status(self) -> dict[str, Any]:
+        """Return overall agent status including concurrency info."""
+        running = [g for g in self._goals.values() if g.state in (AgentState.THINKING, AgentState.ACTING, AgentState.REFLECTING)]
+        queued = [g for g in self._goals.values() if g.state == AgentState.IDLE]
+        completed = [g for g in self._goals.values() if g.state in (AgentState.COMPLETED, AgentState.FAILED)]
+        return {
+            "total_goals": len(self._goals),
+            "running": len(running),
+            "queued": len(queued),
+            "completed": len(completed),
+            "max_concurrent": self._max_concurrent_llm,
+            "running_goals": [{"id": g.id[:12], "desc": g.description[:60], "state": g.state.value, "priority": g.priority} for g in running],
+        }
 
     def get_working_memory(self) -> list[dict]:
         return list(self._memory)

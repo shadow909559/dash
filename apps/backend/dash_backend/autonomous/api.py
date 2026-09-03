@@ -179,6 +179,10 @@ async def agent_ws(websocket: WebSocket) -> None:
                 goals = core.list_goals()
                 await websocket.send_json({"type": "agent.goals", "goals": goals})
 
+            elif msg_type == "agent.status":
+                status = core.get_status()
+                await websocket.send_json({"type": "agent.status", "status": status})
+
             elif msg_type == "agent.plan":
                 goal_id = msg.get("goal_id", "")
                 plan = core.get_plan(goal_id)
