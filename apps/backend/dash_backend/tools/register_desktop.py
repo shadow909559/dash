@@ -147,6 +147,12 @@ from dash_backend.tools.terminal_tools import (
 )
 
 # Import file tools
+from dash_backend.tools.code_execution_tools import (
+    CodeExecuteTool,
+    CodeReadTool,
+    CodeWriteTool,
+)
+
 from dash_backend.tools.file_tools import (
     ListFavoritesTool,
     PreviewFileTool,
@@ -296,6 +302,10 @@ def register_desktop_tools() -> None:
         EnhancedTypeUnicodeTool,
         ClipboardHistoryTool,
         ClearClipboardHistoryTool,
+        # Code execution tools (3 tools)
+        CodeExecuteTool,
+        CodeReadTool,
+        CodeWriteTool,
     ]
     logger.info("Registering %d desktop tools", len(tool_classes))
     for cls in tool_classes:
