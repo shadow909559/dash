@@ -403,6 +403,15 @@ async def get_providers_config() -> dict[str, Any]:
             "base_url": "https://generativelanguage.googleapis.com/v1beta",
             "has_api_key": bool(settings.gemini_api_key),
         },
+        {
+            "name": "grok",
+            "display_name": "xAI Grok",
+            "type": "cloud",
+            "enabled": bool(settings.grok_api_key),
+            "model": settings.grok_model,
+            "base_url": "https://api.x.ai/v1",
+            "has_api_key": bool(settings.grok_api_key),
+        },
     ]
     return {
         "providers": providers,
@@ -441,6 +450,11 @@ async def update_provider_config(req: ProviderConfigRequest) -> dict[str, Any]:
             os.environ["DASH_GEMINI_API_KEY"] = req.api_key
         if req.model:
             os.environ["DASH_GEMINI_MODEL"] = req.model
+    elif req.provider == "grok":
+        if req.api_key:
+            os.environ["DASH_GROK_API_KEY"] = req.api_key
+        if req.model:
+            os.environ["DASH_GROK_MODEL"] = req.model
 
     if req.api_key:
         from dash_backend.services.ai_providers.provider_manager import get_provider_manager
@@ -471,5 +485,13 @@ async def update_provider_config(req: ProviderConfigRequest) -> dict[str, Any]:
                 model=req.model or settings.gemini_model,
             )
             pm.register(provider, primary=(settings.ai_provider == "gemini"))
+        elif req.provider == "grok":
+            from dash_backend.services.ai_providers.grok_provider import GrokProvider
+
+            provider = GrokProvider(
+                api_key=req.api_key,
+                model=req.model or settings.grok_model,
+            )
+            pm.register(provider, primary=(settings.ai_provider == "grok"))
 
     return {"status": "ok", "provider": req.provider, "configured": bool(req.api_key)}

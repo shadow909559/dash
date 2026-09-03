@@ -88,7 +88,9 @@ class Settings(BaseSettings):
     claude_api_key: str | None = None
     claude_model: str = "claude-sonnet-4-20250514"
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-3.6-flash"
+    grok_api_key: str | None = None
+    grok_model: str = "grok-3-mini"
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.2:1b"  # DASH default: fast 1B model for responsive chat
     # Model used for RAG embeddings via Ollama (/api/embed). Falls back to

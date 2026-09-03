@@ -1,19 +1,34 @@
-import React, { useState, useRef, useEffect } from "react";
-import { AgentPanel } from "@/components/AgentPanel";
+/**
+ * ChatPage — ChatGPT/Gemini-style chat interface.
+ *
+ * Features:
+ * - Clean message bubbles (user right, assistant left)
+ * - Typing indicator with animated dots
+ * - Model selector at top
+ * - Input bar with send/mic/attachments
+ * - Copy messages, regenerate responses
+ * - Streaming text display
+ */
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useChatStore } from "@/stores/chatStore";
 import { useAIStore } from "@/stores/aiStore";
+import { useModelStore } from "@/stores/modelStore";
+import { ModelSelector } from "@/components/ModelSelector";
 import {
   Send,
   Mic,
   MicOff,
-  Trash2,
   Bot,
   User,
   Sparkles,
   Loader2,
-  MessageSquare,
   Copy,
   Check,
+  RefreshCw,
+  Paperclip,
+  StopCircle,
+  MoreHorizontal,
+  Trash2,
 } from "lucide-react";
 
 export const ChatPage: React.FC = () => {
@@ -27,55 +42,75 @@ export const ChatPage: React.FC = () => {
     cancelRequest,
   } = useChatStore();
   const { dashState, websocketStatus } = useAIStore();
+  const { selectedModelId, models } = useModelStore();
+
   const [inputText, setInputText] = useState("");
-  const [selectedAgentId, setSelectedAgentId] = useState<string | undefined>();
-  const [showAgentPanel, setShowAgentPanel] = useState(true);
   const [isListening, setIsListening] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
 
+  const selectedModel = models.find((m) => m.id === selectedModelId);
+
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, assistantMessage]);
 
+  // Auto-focus input
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
+  // Scroll detection for "scroll to bottom" button
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (el) {
+      setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 200);
+    }
+  }, []);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 150) + "px";
+    }
+  }, [inputText]);
+
+  // Speech recognition
   useEffect(() => {
     const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = false;
       recognition.lang = "en-US";
-
       recognition.onresult = (event: any) => {
         const transcript = event.results[0]?.[0]?.transcript;
-        if (transcript) {
-          setInputText(transcript);
-          sendMessage(transcript);
-        }
+        if (transcript) setInputText(transcript);
         setIsListening(false);
       };
-
       recognition.onerror = () => setIsListening(false);
       recognition.onend = () => setIsListening(false);
       recognitionRef.current = recognition;
     }
-  }, [sendMessage]);
+  }, []);
 
   const handleSend = () => {
     if (!inputText.trim() || isProcessing) return;
-    sendMessage(inputText.trim());
+    // Store the input text in the store's input field, then call sendMessage
+    useChatStore.setState({ input: inputText.trim() });
+    sendMessage();
     setInputText("");
+    if (inputRef.current) inputRef.current.style.height = "auto";
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -88,655 +123,336 @@ export const ChatPage: React.FC = () => {
       recognitionRef.current.stop();
       setIsListening(false);
     } else {
-      try {
-        recognitionRef.current.start();
-        setIsListening(true);
-      } catch (err) {
-        console.warn("Could not start recognition", err);
-      }
+      recognitionRef.current.start();
+      setIsListening(true);
     }
   };
 
-  const copyMessage = (content: string, id: string) => {
-    navigator.clipboard.writeText(content);
+  const copyMessage = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const wsDisconnected = websocketStatus !== "connected";
-
-  const getStateStatus = (): "online" | "offline" | "warning" | "processing" => {
-    if (wsDisconnected) return "offline";
-    if (isProcessing) return "processing";
-    return "online";
-  };
-
-  const getStateLabel = () => {
-    if (wsDisconnected) return "Disconnected";
-    if (isProcessing) return statusDetail || "Processing";
-    return "Ready";
-  };
+  const allMessages = [
+    ...messages,
+    ...(assistantMessage
+      ? [{ id: assistantMessage.id || "streaming", role: "assistant" as const, content: assistantMessage.content || "" }]
+      : []),
+  ];
 
   return (
-    <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
-      {/* Agent Panel Sidebar */}
-      {showAgentPanel && (
-        <AgentPanel
-          selectedAgentId={selectedAgentId}
-          onSelectAgent={setSelectedAgentId}
-        />
-      )}
-
-      {/* Main Chat Area */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateRows: "auto minmax(0, 1fr) auto",
-          flex: 1,
-          height: "100%",
-          minHeight: 0,
-          backgroundColor: "var(--dash-bg)",
-          overflow: "hidden",
-          position: "relative",
-        }}
-      >
-      {/* HUD grid overlay */}
-      <div
-        className="dash-hud-grid"
-        style={{
-          position: "absolute",
-          inset: 0,
-          opacity: 0.2,
-          pointerEvents: "none",
-          zIndex: 0,
-        }}
-      />
-
-      {/* Top Chat Header */}
-      <div
-        className="dash-luminous"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "12px 24px",
-          borderBottom: "1px solid var(--dash-border)",
-          backgroundColor: "var(--dash-surface)",
-          zIndex: 10,
-          position: "relative",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: "var(--dash-radius-sm)",
-              background: isProcessing
-                ? "var(--dash-accent)"
-                : "var(--ultron-surface)",
-              border: "1px solid var(--ultron-border)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: isProcessing
-                ? "0 0 20px var(--dash-accent-glow)"
-                : undefined,
-              transition: "all 0.3s",
-            }}
-          >
-            <Bot
-              size={17}
-              color={isProcessing ? "#fff" : "var(--ultron-text)"}
-            />
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: "var(--dash-text)",
-                letterSpacing: "-0.01em",
-              }}
-            >
-              DASH Assistant
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: 10,
-                fontFamily: "'JetBrains Mono', monospace",
-                color:
-                  getStateStatus() === "online"
-                    ? "var(--dash-success)"
-                    : getStateStatus() === "processing"
-                      ? "var(--ultron-core-bright)"
-                      : "var(--dash-danger)",
-              }}
-            >
-              <span
-                className={
-                  getStateStatus() === "online" ||
-                  getStateStatus() === "processing"
-                    ? "animate-status-pulse"
-                    : undefined
-                }
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background:
-                    getStateStatus() === "online"
-                      ? "var(--dash-success)"
-                      : getStateStatus() === "processing"
-                        ? "var(--ultron-core-bright)"
-                        : "var(--dash-danger)",
-                }}
-              />
-              {getStateLabel()}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {isProcessing && (
+    <div className="flex flex-col h-full bg-[#0d0d1a]">
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
+        <ModelSelector />
+        <div className="flex items-center gap-2">
+          {messages.length > 0 && (
             <button
-              onClick={cancelRequest}
-              title="Cancel request"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                padding: "6px 12px",
-                background: "rgba(63, 169, 245, 0.1)",
-                border: "1px solid rgba(63, 169, 245, 0.25)",
-                borderRadius: "var(--dash-radius-sm)",
-                color: "var(--dash-danger)",
-                fontSize: 11,
-                cursor: "pointer",
-                fontWeight: 500,
-                transition: "all var(--dash-transition-fast)",
-              }}
+              onClick={clearMessages}
+              className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5"
+              title="New chat"
             >
-              <Trash2 size={12} /> Cancel
+              <Trash2 size={16} />
             </button>
           )}
-          <button
-            onClick={clearMessages}
-            title="Clear Conversation"
-            className="dash-btn-ghost"
-          >
-            <Trash2 size={12} /> Clear
-          </button>
-        </div>
-      </div>
-
-      {/* Center: Scrollable Message List */}
-      <div
-        style={{
-          overflowY: "auto",
-          minHeight: 0,
-          padding: "20px 24px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 14,
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        {/* Empty state */}
-        {messages.length === 0 && !assistantMessage && (
           <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              flex: 1,
-              gap: 14,
-              textAlign: "center",
-              margin: "auto 0",
-            }}
-          >
-            <div
-              style={{
-                width: 60,
-                height: 60,
-                borderRadius: "var(--dash-radius-lg)",
-                background:
-                  "linear-gradient(135deg, var(--ultron-surface), var(--dash-surface))",
-                border: "1px solid var(--ultron-border)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxShadow: "0 0 30px var(--ultron-glow), 0 0 60px var(--ultron-glow-intense)",
-              }}
-            >
-              <Sparkles size={28} color="var(--ultron-core-bright)" />
-            </div>
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 700,
-                color: "var(--dash-text)",
-                letterSpacing: "-0.01em",
-              }}
-            >
-              How can DASH help you today?
-            </div>
-            <div
-              style={{
-                fontSize: 13,
-                maxWidth: 440,
-                lineHeight: 1.6,
-                color: "var(--dash-text-secondary)",
-              }}
-            >
-              Ask a question, request code generation, run system checks, manage
-              files, or control your desktop remotely.
-            </div>
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                marginTop: 8,
-                flexWrap: "wrap",
-                justifyContent: "center",
-              }}
-            >
-              {[
-                "What's my system status?",
-                "List open windows",
-                "Search memory for projects",
-              ].map((suggestion) => (
-                <button
-                  key={suggestion}
-                  onClick={() => {
-                    setInputText(suggestion);
-                    sendMessage(suggestion);
-                  }}
-                  className="dash-btn-ghost"
-                  style={{
-                    padding: "7px 14px",
-                    borderRadius: "var(--dash-radius-full)",
-                    fontSize: 11,
-                    background: "var(--dash-surface)",
-                  }}
-                >
-                  <MessageSquare size={10} style={{ opacity: 0.6 }} />
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Messages */}
-        {messages.map((message) => {
-          const isUser = message.role === "user";
-          return (
-            <div
-              key={message.id}
-              className="animate-slide-up"
-              style={{
-                display: "flex",
-                gap: 10,
-                maxWidth: "85%",
-                alignSelf: isUser ? "flex-end" : "flex-start",
-                flexDirection: isUser ? "row-reverse" : "row",
-              }}
-            >
-              {/* Avatar */}
-              <div
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: "var(--dash-radius-sm)",
-                  backgroundColor: isUser
-                    ? "var(--dash-accent)"
-                    : "var(--ultron-surface)",
-                  border: `1px solid ${isUser ? "transparent" : "var(--ultron-border)"}`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  marginTop: 2,
-                }}
-              >
-                {isUser ? (
-                  <User size={14} color="#ffffff" />
-                ) : (
-                  <Bot size={14} color="var(--ultron-core-bright)" />
-                )}
-              </div>
-
-              {/* Message Bubble */}
-              <div
-                style={{
-                  padding: "12px 16px",
-                  borderRadius: isUser
-                    ? "var(--dash-radius-md) var(--dash-radius-md) 4px var(--dash-radius-md)"
-                    : "var(--dash-radius-md) var(--dash-radius-md) var(--dash-radius-md) 4px",
-                  backgroundColor: isUser
-                    ? "var(--dash-accent)"
-                    : "var(--dash-surface)",
-                  color: isUser ? "#ffffff" : "var(--dash-text)",
-                  border: isUser ? "none" : "1px solid var(--ultron-border)",
-                  fontSize: 13.5,
-                  lineHeight: 1.55,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  boxShadow: isUser
-                    ? "0 2px 16px var(--dash-accent-glow)"
-                    : "var(--dash-shadow-sm)",
-                  position: "relative",
-                }}
-              >
-                {message.content}
-                {!isUser && (
-                  <button
-                    onClick={() => copyMessage(message.content, message.id)}
-                    style={{
-                      position: "absolute",
-                      top: 6,
-                      right: 6,
-                      background: "transparent",
-                      border: "none",
-                      color: "var(--dash-text-muted)",
-                      cursor: "pointer",
-                      padding: 2,
-                      borderRadius: 3,
-                      opacity: 0.4,
-                      transition: "all var(--dash-transition-fast)",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.opacity = "1";
-                      e.currentTarget.style.color = "var(--dash-accent)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.opacity = "0.4";
-                      e.currentTarget.style.color = "var(--dash-text-muted)";
-                    }}
-                  >
-                    {copiedId === message.id ? (
-                      <Check size={12} />
-                    ) : (
-                      <Copy size={12} />
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Streaming Assistant Message */}
-        {assistantMessage && (
-          <div
-            className="animate-slide-up"
-            style={{
-              display: "flex",
-              gap: 10,
-              maxWidth: "85%",
-              alignSelf: "flex-start",
-            }}
-          >
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: "var(--dash-radius-sm)",
-                background: "var(--ultron-surface)",
-                border: "1px solid var(--ultron-border)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                marginTop: 2,
-                boxShadow: "0 0 16px var(--ultron-glow)",
-              }}
-            >
-              <Bot size={14} color="var(--ultron-core-bright)" />
-            </div>
-
-            <div
-              style={{
-                padding: "12px 16px",
-                borderRadius:
-                  "var(--dash-radius-md) var(--dash-radius-md) var(--dash-radius-md) 4px",
-                backgroundColor: "var(--dash-surface)",
-                color: "var(--dash-text)",
-                border: "1px solid var(--ultron-border)",
-                fontSize: 13.5,
-                lineHeight: 1.55,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                boxShadow: "0 0 24px var(--ultron-glow)",
-                position: "relative",
-              }}
-            >
-              {assistantMessage.content || (
-                <span
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <Loader2
-                    size={14}
-                    className="animate-rotate"
-                    style={{ color: "var(--dash-accent)" }}
-                  />
-                  <span
-                    style={{
-                      display: "flex",
-                      gap: 4,
-                      alignItems: "center",
-                    }}
-                  >
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
-                    <span className="typing-dot" />
-                  </span>
-                </span>
-              )}
-              {assistantMessage.content && (
-                <button
-                  onClick={() =>
-                    copyMessage(
-                      assistantMessage!.content,
-                      assistantMessage!.id
-                    )
-                  }
-                  style={{
-                    position: "absolute",
-                    top: 6,
-                    right: 6,
-                    background: "transparent",
-                    border: "none",
-                    color: "var(--dash-text-muted)",
-                    cursor: "pointer",
-                    padding: 2,
-                    borderRadius: 3,
-                    opacity: 0.4,
-                    transition: "all var(--dash-transition-fast)",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.opacity = "1";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.opacity = "0.4";
-                  }}
-                >
-                  <Copy size={12} />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Bottom Fixed Composer */}
-      <div
-        style={{
-          flexShrink: 0,
-          padding: "14px 24px 18px 24px",
-          backgroundColor: "var(--dash-surface)",
-          borderTop: "1px solid var(--dash-border)",
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          position: "relative",
-          zIndex: 10,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            backgroundColor: "var(--dash-bg)",
-            border: `1px solid ${isListening ? "var(--ultron-core)" : "var(--dash-border)"}`,
-            borderRadius: "var(--dash-radius-md)",
-            padding: "6px 8px 6px 16px",
-            transition:
-              "border-color var(--dash-transition-fast), box-shadow var(--dash-transition-fast)",
-            boxShadow: isListening
-              ? "0 0 16px var(--ultron-glow)"
-              : undefined,
-          }}
-        >
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              isListening
-                ? "Listening..."
-                : wsDisconnected
-                  ? "Disconnected from backend..."
-                  : "Message DASH... (Enter to send)"
-            }
-            aria-label="Message DASH"
-            disabled={isProcessing}
-            style={{
-              flex: 1,
-              background: "transparent",
-              border: "none",
-              /* a11y: removed outline:none — global :focus-visible handles focus */
-              color: "var(--dash-text)",
-              fontSize: 13.5,
-            }}
+            className={`w-2 h-2 rounded-full ${
+              websocketStatus === "connected" ? "bg-green-400" : "bg-red-400"
+            }`}
+            title={websocketStatus}
           />
-
-          <button
-            onClick={toggleMic}
-            title={isListening ? "Stop listening" : "Voice input"}
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: "var(--dash-radius-sm)",
-              background: isListening
-                ? "var(--ultron-surface)"
-                : "transparent",
-              border: isListening
-                ? "1px solid var(--ultron-border)"
-                : "none",
-              color: isListening
-                ? "var(--ultron-core-bright)"
-                : "var(--dash-text-secondary)",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all var(--dash-transition-fast)",
-            }}
-            onMouseEnter={(e) => {
-              if (!isListening)
-                e.currentTarget.style.backgroundColor =
-                  "rgba(255, 255, 255, 0.06)";
-            }}
-            onMouseLeave={(e) => {
-              if (!isListening)
-                e.currentTarget.style.backgroundColor = "transparent";
-            }}
-          >
-            {isListening ? <MicOff size={16} /> : <Mic size={16} />}
-          </button>
-
-          <button
-            onClick={handleSend}
-            disabled={!inputText.trim() || isProcessing}
-            title="Send message"
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: "var(--dash-radius-sm)",
-              backgroundColor:
-                inputText.trim() && !isProcessing
-                  ? "var(--dash-accent)"
-                  : "rgba(255, 255, 255, 0.05)",
-              border: "none",
-              color:
-                inputText.trim() && !isProcessing
-                  ? "#ffffff"
-                  : "var(--dash-text-muted)",
-              cursor:
-                inputText.trim() && !isProcessing ? "pointer" : "default",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all var(--dash-transition-fast)",
-              boxShadow:
-                inputText.trim() && !isProcessing
-                  ? "0 0 12px var(--dash-accent-glow)"
-                  : "none",
-            }}
-          >
-            {isProcessing ? (
-              <Loader2 size={15} className="animate-rotate" />
-            ) : (
-              <Send size={15} />
-            )}
-          </button>
         </div>
       </div>
 
+      {/* ── Messages ───────────────────────────────────────────── */}
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto"
+      >
+        {allMessages.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+            {allMessages.map((msg, i) => (
+              <MessageBubble
+                key={msg.id || i}
+                message={msg}
+                onCopy={() => copyMessage(msg.id || String(i), msg.content)}
+                isCopied={copiedId === (msg.id || String(i))}
+              />
+            ))}
 
-      {/* Agent Panel Toggle (floating button) */}
-      {!showAgentPanel && (
-        <button
-          onClick={() => setShowAgentPanel(true)}
-          style={{
-            position: "absolute",
-            left: 8,
-            top: 60,
-            background: "rgba(139, 92, 246, 0.15)",
-            border: "1px solid rgba(139, 92, 246, 0.3)",
-            borderRadius: 8,
-            padding: "8px 10px",
-            color: "var(--dash-accent)",
-            cursor: "pointer",
-            zIndex: 10,
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 11,
-            fontWeight: 500,
-          }}
+            {/* Typing indicator */}
+            {isProcessing && !assistantMessage && (
+              <div className="flex gap-3">
+                <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
+                  <Bot size={16} className="text-cyan-400" />
+                </div>
+                <div className="px-4 py-3 rounded-2xl bg-white/5">
+                  <TypingIndicator />
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+
+        {/* Scroll to bottom */}
+        {showScrollBtn && (
+          <button
+            onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })}
+            className="fixed bottom-24 right-8 w-10 h-10 rounded-full
+              bg-[#1a1a2e] border border-white/10 shadow-lg
+              flex items-center justify-center text-white/60 hover:text-white
+              transition-all z-10"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 1v12M1 7l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {/* ── Input Bar ──────────────────────────────────────────── */}
+      <div className="border-t border-white/5 px-4 py-3">
+        <div className="max-w-3xl mx-auto">
+          <div className="flex items-end gap-2 bg-white/5 border border-white/10 rounded-2xl px-3 py-2
+            focus-within:border-cyan-500/30 transition-colors">
+            {/* Attachment button */}
+            <button className="p-1.5 text-white/30 hover:text-white/60 mb-0.5">
+              <Paperclip size={18} />
+            </button>
+
+            {/* Input */}
+            <textarea
+              ref={inputRef}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Message DASH..."
+              rows={1}
+              className="flex-1 bg-transparent text-sm text-white placeholder-white/30
+                resize-none outline-none max-h-[150px] py-1.5"
+            />
+
+            {/* Mic button */}
+            <button
+              onClick={toggleMic}
+              className={`p-1.5 mb-0.5 rounded-lg transition-colors ${
+                isListening
+                  ? "text-red-400 bg-red-500/20"
+                  : "text-white/30 hover:text-white/60"
+              }`}
+            >
+              {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+            </button>
+
+            {/* Send / Stop */}
+            {isProcessing ? (
+              <button
+                onClick={cancelRequest}
+                className="p-1.5 text-red-400 hover:text-red-300 mb-0.5"
+              >
+                <StopCircle size={18} />
+              </button>
+            ) : (
+              <button
+                onClick={handleSend}
+                disabled={!inputText.trim()}
+                className={`p-1.5 rounded-lg mb-0.5 transition-all ${
+                  inputText.trim()
+                    ? "text-cyan-400 hover:bg-cyan-500/20"
+                    : "text-white/20"
+                }`}
+              >
+                <Send size={18} />
+              </button>
+            )}
+          </div>
+
+          {/* Model info */}
+          <div className="text-center mt-2">
+            <span className="text-[11px] text-white/20">
+              {selectedModel ? `${selectedModel.name}` : "No model selected"}
+              {" · "}DASH can make mistakes
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Message Bubble ───────────────────────────────────────────────
+
+const MessageBubble: React.FC<{
+  message: { id?: string; role: string; content: string };
+  onCopy: () => void;
+  isCopied: boolean;
+}> = ({ message, onCopy, isCopied }) => {
+  const isUser = message.role === "user";
+
+  return (
+    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+      {/* Avatar */}
+      <div
+        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+          isUser
+            ? "bg-purple-500/20"
+            : "bg-cyan-500/20"
+        }`}
+      >
+        {isUser ? (
+          <User size={16} className="text-purple-400" />
+        ) : (
+          <Bot size={16} className="text-cyan-400" />
+        )}
+      </div>
+
+      {/* Content */}
+      <div className={`group relative max-w-[85%] ${isUser ? "text-right" : ""}`}>
+        <div
+          className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+            isUser
+              ? "bg-cyan-500/15 text-white/90 rounded-br-md"
+              : "bg-white/5 text-white/80 rounded-bl-md"
+          }`}
         >
-          <Bot size={14} />
-          Agents
-        </button>
-      )}
+          <MessageContent content={message.content} />
+        </div>
 
+        {/* Actions */}
+        <div
+          className={`flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity ${
+            isUser ? "justify-end" : ""
+          }`}
+        >
+          <button
+            onClick={onCopy}
+            className="p-1 text-white/20 hover:text-white/50 rounded"
+          >
+            {isCopied ? <Check size={12} /> : <Copy size={12} />}
+          </button>
+          {!isUser && (
+            <button className="p-1 text-white/20 hover:text-white/50 rounded">
+              <RefreshCw size={12} />
+            </button>
+          )}
+          <button className="p-1 text-white/20 hover:text-white/50 rounded">
+            <MoreHorizontal size={12} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Message Content (handles markdown-like formatting) ───────────
+
+const MessageContent: React.FC<{ content: string }> = ({ content }) => {
+  // Simple markdown: code blocks, bold, italic
+  const parts = content.split(/(```[\s\S]*?```|`[^`]+`|\*\*[^*]+\*\*)/g);
+
+  return (
+    <div className="whitespace-pre-wrap break-words">
+      {parts.map((part, i) => {
+        if (part.startsWith("```")) {
+          const code = part.replace(/```\w*\n?/g, "").replace(/```$/g, "");
+          return (
+            <pre key={i} className="bg-black/30 rounded-lg p-3 my-2 overflow-x-auto text-xs font-mono">
+              <code>{code}</code>
+            </pre>
+          );
+        }
+        if (part.startsWith("`") && part.endsWith("`")) {
+          return (
+            <code key={i} className="bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">
+              {part.slice(1, -1)}
+            </code>
+          );
+        }
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={i}>{part.slice(2, -2)}</strong>;
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </div>
+  );
+};
+
+// ── Typing Indicator ─────────────────────────────────────────────
+
+const TypingIndicator: React.FC = () => (
+  <div className="flex items-center gap-1 py-1">
+    {[0, 1, 2].map((i) => (
+      <div
+        key={i}
+        className="w-1.5 h-1.5 rounded-full bg-cyan-400/60"
+        style={{
+          animation: "typing 1.4s infinite",
+          animationDelay: `${i * 0.2}s`,
+        }}
+      />
+    ))}
+    <style>{`
+      @keyframes typing {
+        0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
+        30% { opacity: 1; transform: scale(1); }
+      }
+    `}</style>
+  </div>
+);
+
+// ── Empty State (ChatGPT-style welcome) ──────────────────────────
+
+const EmptyState: React.FC = () => {
+  const { sendMessage } = useChatStore();
+  const { selectedModelId, models } = useModelStore();
+  const model = models.find((m) => m.id === selectedModelId);
+
+  const suggestions = [
+    { icon: "💻", text: "Write a Python script to organize my Downloads" },
+    { icon: "🔍", text: "Find all large files on my system" },
+    { icon: "📊", text: "Show me system health and performance" },
+    { icon: "🔒", text: "Check for security issues on my PC" },
+  ];
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full px-4">
+      {/* Logo */}
+      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20
+        flex items-center justify-center mb-6 border border-cyan-500/20">
+        <Sparkles size={28} className="text-cyan-400" />
+      </div>
+
+      <h1 className="text-2xl font-semibold text-white/90 mb-2">
+        How can I help you today?
+      </h1>
+      <p className="text-sm text-white/40 mb-8">
+        {model ? `Powered by ${model.name}` : "Select a model to get started"}
+      </p>
+
+      {/* Suggestion cards */}
+      <div className="grid grid-cols-2 gap-3 max-w-lg w-full">
+        {suggestions.map((s, i) => (
+          <button
+            key={i}
+            onClick={() => {
+              useChatStore.setState({ input: s.text });
+              sendMessage();
+            }}
+            className="flex items-start gap-3 p-3 rounded-xl bg-white/3 border border-white/5
+              hover:bg-white/5 hover:border-white/10 transition-all text-left group"
+          >
+            <span className="text-lg">{s.icon}</span>
+            <span className="text-xs text-white/50 group-hover:text-white/70 leading-relaxed">
+              {s.text}
+            </span>
+          </button>
+        ))}
       </div>
     </div>
   );

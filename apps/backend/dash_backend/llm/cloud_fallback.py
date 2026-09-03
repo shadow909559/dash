@@ -163,8 +163,9 @@ class ProviderSelector:
 
         Priority:
         1. Cloud (Gemini) if healthy and fast (<5s)
-        2. Local (Ollama) if healthy
-        3. Cloud as last resort even if slow
+        2. Cloud (Grok) if Gemini unavailable
+        3. Local (Ollama) if healthy
+        4. Any cloud as last resort
         """
         await self.check_all()
 
@@ -172,7 +173,6 @@ class ProviderSelector:
         local_ok = self._local_health and self._local_health.healthy
 
         if cloud_ok and local_ok:
-            # Both available — prefer cloud for speed
             return "openai"  # Gemini via OpenAI-compatible endpoint
 
         if cloud_ok:
