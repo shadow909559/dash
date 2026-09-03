@@ -158,6 +158,7 @@ class AgentCore:
         self._running_tasks: dict[str, asyncio.Task] = {}
         self._callbacks: list[Callable] = []
         self._memory: list[dict[str, Any]] = []  # short-term working memory
+        self._plans: dict[str, Any] = {}  # goal_id -> TaskPlan
 
     def on_step(self, callback: Callable) -> Callable:
         """Register a callback for step completion. Returns an unsubscribe function."""
@@ -228,6 +229,22 @@ class AgentCore:
         )
         self._goals[goal.id] = goal
 
+        # Generate task plan for complex goals
+        from dash_backend.autonomous.planner import is_complex_goal, plan_task
+        if is_complex_goal(description):
+            try:
+                plan = await asyncio.wait_for(
+                    plan_task(description, context),
+                    timeout=30.0,
+                )
+                self._plans[goal.id] = plan
+                logger.info(
+                    "Task plan generated: %d steps for goal %s",
+                    len(plan.steps), goal.id[:12],
+                )
+            except Exception as exc:
+                logger.warning("Planner failed, proceeding without plan: %s", exc)
+
         task = asyncio.create_task(self._run_loop(goal))
         self._running_tasks[goal.id] = task
         task.add_done_callback(lambda t: self._running_tasks.pop(goal.id, None))
@@ -250,6 +267,16 @@ class AgentCore:
                 # ── OBSERVE ────────────────────────────────────────
                 goal.state = AgentState.THINKING
                 observation = await self._observe(goal)
+
+                # Inject plan context if available
+                plan = self._plans.get(goal.id)
+                if plan and plan.current_step:
+                    step_desc = plan.current_step.description
+                    observation = (
+                        f"CURRENT PLAN STEP ({plan.completed_count+1}/{len(plan.steps)}): "
+                        f"{step_desc}\n\n"
+                        f"{observation}"
+                    )
 
                 # ── THINK ──────────────────────────────────────────
                 thought, action, args = await self._think(goal, observation)
@@ -307,6 +334,15 @@ class AgentCore:
                 step.success = not _is_error_result(tool_result)
 
                 goal.steps.append(step)
+
+                # Advance plan if this step succeeded
+                if plan and plan.current_step and step.success:
+                    plan.current_step.status = "done"
+                    plan.current_step.result_summary = (step.tool_result or "")[:200]
+                    if plan.current_step.index < len(plan.steps) - 1:
+                        plan.steps[plan.current_step.index + 1].status = "active"
+                    elif plan.is_complete:
+                        goal.result = f"Plan completed: {plan.completed_count}/{len(plan.steps)} steps succeeded"
 
                 # ── REFLECT ────────────────────────────────────────
                 goal.state = AgentState.REFLECTING
@@ -568,6 +604,10 @@ class AgentCore:
                 await session.commit()
         except Exception as exc:
             logger.debug("Failed to store episodic memory: %s", exc)
+
+    def get_plan(self, goal_id: str) -> dict | None:
+        plan = self._plans.get(goal_id)
+        return plan.to_dict() if plan else None
 
     def get_working_memory(self) -> list[dict]:
         return list(self._memory)
