@@ -67,9 +67,8 @@ def lambda_handler(event, context):
     broadcast = config.get("broadcast_ip", DEFAULT_BROADCAST)
     port = int(config.get("port", DEFAULT_PORT))
 
-    # Check if EC2 should also be started
-    start_ec2 = config.get("start_ec2", "false").lower() == "true"
-    ec2_instance_id = config.get("ec2_instance_id", "")
+    # No EC2 — using Cloudflare Tunnel (free forever)
+    # The tunnel starts automatically via auto-start script
 
     try:
         # Send WoL packet
@@ -84,14 +83,7 @@ def lambda_handler(event, context):
             }),
         }
 
-        # Optionally start EC2
-        if start_ec2 and ec2_instance_id:
-            ec2.start_instances(InstanceIds=[ec2_instance_id])
-            result["body"] = json.dumps({
-                "message": "Wake-on-LAN sent + EC2 starting",
-                "mac": mac,
-                "ec2_instance": ec2_instance_id,
-            })
+        # EC2 removed — Cloudflare Tunnel handles remote access
 
         return result
 
