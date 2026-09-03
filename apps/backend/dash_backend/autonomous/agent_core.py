@@ -282,8 +282,10 @@ class AgentCore:
                     tool_args=fast.tool_args,
                 )
                 t0 = time.time()
-                result = await self._act(step)
+                result = await self._act(fast.tool_name, fast.tool_args)
                 step.duration_ms = (time.time() - t0) * 1000
+                step.tool_result = result.get("summary", result.get("output", str(result)))
+                step.success = "error" not in result
                 goal.steps.append(step)
 
                 if step.success:
