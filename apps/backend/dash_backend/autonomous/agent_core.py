@@ -28,6 +28,7 @@ logger = get_logger(__name__)
 # ── Limits ────────────────────────────────────────────────────────────────
 MAX_ITERATIONS = 30          # hard cap per goal
 DEFAULT_TIMEOUT = 300.0      # 5 minutes per goal
+THINK_TIMEOUT = 90.0         # max seconds per LLM think step
 
 
 class AgentState(Enum):
@@ -238,13 +239,12 @@ class AgentCore:
         """The core observe → think → act → reflect loop."""
         goal.state = AgentState.THINKING
         goal.started_at = time.time()
-
-        await self._notify("goal.started", goal.to_dict())
+        await self._notify("goal.started", {"goal": goal.to_dict()})
 
         try:
             while goal.iteration < goal.max_iterations:
                 if goal.state == AgentState.PAUSED:
-                    await self._notify("goal.paused", goal.to_dict())
+                    await self._notify("goal.paused", {"goal": goal.to_dict()})
                     return
 
                 # ── OBSERVE ────────────────────────────────────────
@@ -269,7 +269,7 @@ class AgentCore:
                     goal.state = AgentState.COMPLETED
                     goal.result = args.get("summary", thought)
                     goal.completed_at = time.time()
-                    await self._notify("goal.completed", goal.to_dict())
+                    await self._notify("goal.completed", {"goal": goal.to_dict()})
                     logger.info("Agent goal completed: %s", goal.id)
                     try:
                         await self.remember(goal)
@@ -281,7 +281,7 @@ class AgentCore:
                     goal.state = AgentState.FAILED
                     goal.error = args.get("reason", thought)
                     goal.completed_at = time.time()
-                    await self._notify("goal.failed", goal.to_dict())
+                    await self._notify("goal.failed", {"goal": goal.to_dict()})
                     logger.warning("Agent goal blocked: %s — %s", goal.id, goal.error)
                     try:
                         await self.remember(goal)
@@ -325,14 +325,14 @@ class AgentCore:
                     goal.state = AgentState.FAILED
                     goal.error = f"Timed out after {goal.timeout}s"
                     goal.completed_at = time.time()
-                    await self._notify("goal.failed", goal.to_dict())
+                    await self._notify("goal.failed", {"goal": goal.to_dict()})
                     return
 
             # Max iterations reached
             goal.state = AgentState.FAILED
             goal.error = f"Reached max iterations ({goal.max_iterations})"
             goal.completed_at = time.time()
-            await self._notify("goal.failed", goal.to_dict())
+            await self._notify("goal.failed", {"goal": goal.to_dict()})
 
         except asyncio.CancelledError:
             # Only overwrite state if not already PAUSED (pause sets state before cancelling)
@@ -345,7 +345,7 @@ class AgentCore:
             goal.state = AgentState.FAILED
             goal.error = str(exc)
             goal.completed_at = time.time()
-            await self._notify("goal.failed", goal.to_dict())
+            await self._notify("goal.failed", {"goal": goal.to_dict()})
 
     # ── OBSERVE ────────────────────────────────────────────────────────
 
@@ -456,8 +456,11 @@ class AgentCore:
 
         try:
             # Use native tool calling but we parse the text response
-            response = await chat_completion_with_native_tool_calls(
-                messages, tools=tool_defs[:15]
+            response = await asyncio.wait_for(
+                chat_completion_with_native_tool_calls(
+                    messages, tools=tool_defs[:15]
+                ),
+                timeout=THINK_TIMEOUT,
             )
 
             text = response.assistant_text.strip()
@@ -478,6 +481,9 @@ class AgentCore:
 
             return thought, action, args
 
+        except asyncio.TimeoutError:
+            logger.warning("Agent think step timed out after %ss", THINK_TIMEOUT)
+            return f"LLM think timed out after {THINK_TIMEOUT}s", None, None
         except Exception as exc:
             logger.exception("Agent think step failed")
             return f"Error thinking: {exc}", None, None

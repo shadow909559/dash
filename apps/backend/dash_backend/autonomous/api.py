@@ -163,20 +163,17 @@ async def agent_ws(websocket: WebSocket) -> None:
                 max_iter = msg.get("max_iterations", 30)
                 timeout_s = msg.get("timeout", 300.0)
                 goal = await core.run_goal(desc, ctx, max_iter, timeout_s)
-                await websocket.send_json({
-                    "type": "agent.goal.started",
-                    "goal": goal.to_dict(),
-                })
+                # Ack only — the core's _notify callback broadcasts the event
 
             elif msg_type == "agent.pause":
                 goal_id = msg.get("goal_id", "")
                 ok = await core.pause_goal(goal_id)
-                await websocket.send_json({"type": "agent.paused", "success": ok, "goal_id": goal_id})
+                await websocket.send_json({"type": "agent.paused", "success": ok})
 
             elif msg_type == "agent.cancel":
                 goal_id = msg.get("goal_id", "")
                 ok = await core.cancel_goal(goal_id)
-                await websocket.send_json({"type": "agent.cancelled", "success": ok, "goal_id": goal_id})
+                await websocket.send_json({"type": "agent.cancelled", "success": ok})
 
             elif msg_type == "agent.goals":
                 goals = core.list_goals()
