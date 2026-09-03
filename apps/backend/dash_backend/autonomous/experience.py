@@ -42,11 +42,13 @@ class GoalExperience:
     def to_dict(self) -> dict:
         return {
             "goal": self.goal_description[:100],
+            "tool_sequence": self.tool_sequence,
             "tools": [t["tool"] for t in self.tool_sequence if t.get("success")],
             "outcome": self.outcome[:100],
             "success": self.success,
             "age_hours": round((time.time() - self.timestamp) / 3600, 1),
             "access_count": self.access_count,
+            "tags": self.tags,
         }
 
     def tool_summary(self) -> str:
@@ -111,11 +113,14 @@ class ExperienceCache:
         if len(self._experiences) > self._max_entries:
             self._experiences = self._experiences[-self._max_entries:]
 
-        # Generate embedding asynchronously (fire and forget)
-        asyncio.create_task(self._generate_exp_embedding(exp))
-
-        # Persist to database
-        asyncio.create_task(self._persist_experience(exp))
+        # Generate embedding and persist asynchronously (fire and forget)
+        # Guard: only works when called from async context (agent _run_loop)
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._generate_exp_embedding(exp))
+            loop.create_task(self._persist_experience(exp))
+        except RuntimeError:
+            pass  # sync context — skip async tasks, experience still cached in-memory
 
         logger.info(
             "Experience recorded: '%s' → %d tools, success=%s",
@@ -157,7 +162,6 @@ class ExperienceCache:
         """Load persisted experiences from the memories table."""
         if self._loaded:
             return 0
-        self._loaded = True
 
         try:
             import uuid
@@ -177,16 +181,18 @@ class ExperienceCache:
                         data = json.loads(mem.content)
                         exp = GoalExperience(
                             goal_description=data.get("goal", ""),
-                            tool_sequence=[],  # tools not stored in to_dict
+                            tool_sequence=data.get("tool_sequence", []),
                             outcome=data.get("outcome", ""),
                             success=data.get("success", False),
                             timestamp=mem.created_at.timestamp() if mem.created_at else time.time(),
+                            tags=data.get("tags", []),
                         )
                         self._experiences.append(exp)
                         loaded += 1
                     except Exception:
                         continue
 
+                self._loaded = True  # only mark loaded on success
                 logger.info("Loaded %d experiences from database", loaded)
                 return loaded
         except Exception:
@@ -274,8 +280,7 @@ class ExperienceCache:
         lines = ["PAST EXPERIENCES (similar goals that worked before):"]
         for i, exp in enumerate(experiences, 1):
             lines.append(f"\n{i}. Goal: \"{exp.goal_description[:80]}\"")
-            lines.append(f"   Tools used successfully:")
-            lines.append(exp.tool_summary())
+            lines.append(f"   {exp.tool_summary()}")
             lines.append(f"   Outcome: {exp.outcome[:80]}")
 
         return "\n".join(lines)
@@ -302,7 +307,7 @@ def _extract_tags(text: str) -> set[str]:
         "than", "too", "very", "just", "because", "but", "and", "or", "if",
         "while", "about", "against", "up", "down", "find", "list", "get",
         "show", "check", "look", "see", "make", "create", "set", "run",
-        "and", "that", "this", "it", "my", "your", "me", "i",
+        "that", "this", "it", "my", "your", "me", "i",
     }
     words = set()
     for word in text.lower().split():
