@@ -59,6 +59,8 @@ class AutonomousBrain:
         self._cooldown_seconds = 300.0  # don't re-handle same alert within 5 min
         self._conversations: list[dict[str, Any]] = []  # chat history for context
         self._max_conversations = 50
+        self._last_memory_maintenance: float = 0.0
+        self._memory_maintenance_interval: float = 3600.0  # run every hour
 
     async def start(self) -> None:
         """Start the brain — run boot sequence then enter monitoring loop."""
@@ -462,6 +464,12 @@ class AutonomousBrain:
 
             # Self-healing: check if core services are alive
             await self._check_services()
+
+            # Memory maintenance (runs hourly, not every cycle)
+            now = time.time()
+            if now - self._last_memory_maintenance >= self._memory_maintenance_interval:
+                self._last_memory_maintenance = now
+                await self._memory_maintenance()
         except Exception as exc:
             logger.debug("Monitor cycle error: %s", exc)
 
@@ -533,6 +541,34 @@ class AutonomousBrain:
             )
         except Exception as exc:
             logger.error("Failed to restart backend: %s", exc)
+
+    # ── Memory Maintenance ────────────────────────────────────────────
+
+    async def _memory_maintenance(self) -> None:
+        """Hourly memory maintenance: prune expired memories, consolidate short-term."""
+        try:
+            from dash_backend.intelligence.memory_service import MemoryService
+            svc = MemoryService()
+
+            # 1. Clean up expired memories
+            expired = await svc.cleanup_expired_memories()
+            if expired > 0:
+                logger.info("Brain: pruned %d expired memories", expired)
+
+            # 2. Consolidate short-term memories that exceed threshold
+            # (This runs per-conversation; we trigger for active conversations)
+            for conv_id in list(svc._short_term_memory.keys()):
+                stm = svc._short_term_memory.get(conv_id)
+                if stm and len(stm.messages) >= svc._consolidation_threshold:
+                    await svc._consolidate_memory(conv_id)
+                    logger.debug("Brain: consolidated memory for conversation %s", conv_id)
+
+            # 3. Report memory stats
+            total = len(svc._long_term_memory)
+            if total > 0:
+                logger.info("Brain: memory maintenance complete — %d long-term memories", total)
+        except Exception as exc:
+            logger.debug("Memory maintenance error: %s", exc)
 
     # ── Status ─────────────────────────────────────────────────────────
 
