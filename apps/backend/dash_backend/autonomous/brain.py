@@ -297,6 +297,10 @@ class AutonomousBrain:
             try:
                 from dash_backend.llm.service import build_chat_messages, collect_streamed_response
                 context = self._build_context()
+                # Retrieve relevant memories for context
+                memory_context = await self._retrieve_memories(message, user_id)
+                if memory_context:
+                    context = f"{context}\n\n{memory_context}"
                 spoken_rules = (
                     " RULES FOR VOICE MODE: Keep replies under 2 sentences. "
                     "No formatting, no lists, no markdown. Just speak naturally."
@@ -339,6 +343,58 @@ class AutonomousBrain:
             parts.append(f"RAM: {r.get('ram_percent', '?')}% ({r.get('ram_used_gb', '?')}/{r.get('ram_total_gb', '?')} GB)")
             parts.append(f"Disk: {r.get('disk_percent', '?')}% ({r.get('disk_free_gb', '?')} GB free)")
         return "\n".join(parts) if parts else "System status unknown"
+
+    async def _retrieve_memories(self, query: str, user_id: str = "user") -> str:
+        """Retrieve relevant long-term memories for context injection."""
+        try:
+            from dash_backend.db.session import AsyncSessionLocal
+            from dash_backend.intelligence.memory_service import MemoryService
+
+            svc = MemoryService()
+            async with AsyncSessionLocal() as session:
+                # Try to get user ID from user_id string
+                import uuid
+                try:
+                    uid = uuid.UUID(user_id)
+                except (ValueError, AttributeError):
+                    uid = None
+
+                if uid:
+                    memories, _ = await svc.get_user_memories(
+                        session, uid, limit=5, memory_type="fact"
+                    )
+                else:
+                    memories = []
+
+                if memories:
+                    lines = [f"- {m.content[:100]}" for m in memories[:5]]
+                    return "PAST MEMORIES:\n" + "\n".join(lines)
+        except Exception as exc:
+            logger.debug("Memory retrieval failed: %s", exc)
+        return ""
+
+    async def _store_memory(self, content: str, user_id: str = "user",
+                            memory_type: str = "fact", importance: float = 0.5) -> None:
+        """Store a memory for long-term recall."""
+        try:
+            from dash_backend.db.session import AsyncSessionLocal
+            from dash_backend.intelligence.memory_service import MemoryService
+
+            svc = MemoryService()
+            async with AsyncSessionLocal() as session:
+                import uuid
+                try:
+                    uid = uuid.UUID(user_id)
+                except (ValueError, AttributeError):
+                    return
+
+                await svc.store_long_term(
+                    session, uid, content,
+                    memory_type=memory_type,
+                    importance=importance,
+                )
+        except Exception as exc:
+            logger.debug("Memory storage failed: %s", exc)
 
     # ── Notification ───────────────────────────────────────────────────
 

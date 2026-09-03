@@ -192,6 +192,27 @@ async def agent_ws(websocket: WebSocket) -> None:
                 mem = core.get_working_memory()
                 await websocket.send_json({"type": "agent.memory", "memory": mem})
 
+            elif msg_type == "memory.recall":
+                query = msg.get("query", "")
+                try:
+                    from dash_backend.db.session import AsyncSessionLocal
+                    from dash_backend.intelligence.memory_service import MemoryService
+                    import uuid
+                    svc = MemoryService()
+                    async with AsyncSessionLocal() as session:
+                        try:
+                            uid = uuid.UUID(user_id)
+                            memories, total = await svc.get_user_memories(session, uid, limit=10)
+                        except (ValueError, Exception):
+                            memories, total = [], 0
+                    await websocket.send_json({
+                        "type": "memory.recalled",
+                        "memories": [{"content": m.content[:200], "type": m.memory_type, "importance": m.importance} for m in memories],
+                        "total": total,
+                    })
+                except Exception as exc:
+                    await websocket.send_json({"type": "memory.recalled", "memories": [], "error": str(exc)})
+
             else:
                 await websocket.send_json({"type": "error", "error": f"Unknown: {msg_type}"})
 

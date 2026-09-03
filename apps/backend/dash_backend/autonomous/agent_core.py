@@ -597,27 +597,36 @@ class AgentCore:
     # ── Long-term Memory (Episodic) ────────────────────────────────────
 
     async def remember(self, goal: AgentGoal) -> None:
-        """Store completed goal in long-term episodic memory."""
+        """Store completed goal in long-term memory via the memory service."""
         try:
             from dash_backend.db.session import AsyncSessionLocal
-            from dash_backend.db.models.message import Message, MessageRole
+            from dash_backend.intelligence.memory_service import MemoryService
+            import uuid
 
+            summary = (
+                f"Autonomous task completed: {goal.description}\n"
+                f"Status: {goal.state.value}\n"
+                f"Iterations: {goal.iteration}\n"
+                f"Result: {goal.result or goal.error}"
+            )
+
+            # Store as long-term memory
+            svc = MemoryService()
             async with AsyncSessionLocal() as session:
-                summary = (
-                    f"Autonomous task: {goal.description}\n"
-                    f"Status: {goal.state.value}\n"
-                    f"Iterations: {goal.iteration}\n"
-                    f"Result: {goal.result or goal.error}"
-                )
-                msg = Message(
-                    conversation_id=goal.id,
-                    role=MessageRole.ASSISTANT,
-                    content=summary,
-                )
-                session.add(msg)
-                await session.commit()
+                user_id = goal.context.get("user_id")
+                if user_id:
+                    try:
+                        uid = uuid.UUID(user_id)
+                        importance = 0.7 if goal.state == AgentState.COMPLETED else 0.3
+                        await svc.store_long_term(
+                            session, uid, summary,
+                            memory_type="goal_outcome",
+                            importance=importance,
+                        )
+                    except (ValueError, Exception):
+                        pass
         except Exception as exc:
-            logger.debug("Failed to store episodic memory: %s", exc)
+            logger.debug("Failed to store memory: %s", exc)
 
     def get_plan(self, goal_id: str) -> dict | None:
         plan = self._plans.get(goal_id)
