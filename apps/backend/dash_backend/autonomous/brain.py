@@ -416,7 +416,7 @@ class AutonomousBrain:
     # ── Monitoring Cycle ───────────────────────────────────────────────
 
     async def _monitor_cycle(self) -> None:
-        """Periodic check — refresh system health, detect anomalies."""
+        """Periodic check — refresh system health, detect anomalies, heal services."""
         try:
             status = await self._check_system_health()
             self._last_status_report = status
@@ -424,8 +424,80 @@ class AutonomousBrain:
             # If there are critical alerts, handle them
             for alert in status.get("alerts", []):
                 self._handle_alert(alert)
+
+            # Self-healing: check if core services are alive
+            await self._check_services()
         except Exception as exc:
             logger.debug("Monitor cycle error: %s", exc)
+
+    async def _check_services(self) -> None:
+        """Check if backend, Ollama, and tunnel are alive. Restart if dead."""
+        import asyncio.subprocess as Subprocess
+
+        services = [
+            {"name": "Ollama", "check": self._check_ollama, "restart": self._restart_ollama},
+            {"name": "Backend", "check": self._check_backend, "restart": self._restart_backend},
+        ]
+
+        for svc in services:
+            try:
+                alive = await svc["check"]()
+                if not alive:
+                    logger.warning("Brain: %s is down, restarting...", svc["name"])
+                    await svc["restart"]()
+                    # Verify it came back
+                    await asyncio.sleep(5)
+                    if await svc["check"]():
+                        logger.info("Brain: %s restarted successfully", svc["name"])
+                    else:
+                        logger.error("Brain: %s restart failed", svc["name"])
+            except Exception as exc:
+                logger.debug("Service check error (%s): %s", svc["name"], exc)
+
+    async def _check_ollama(self) -> bool:
+        """Check if Ollama is responding on port 11434."""
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection("127.0.0.1", 11434),
+                timeout=3.0,
+            )
+            writer.close()
+            await writer.wait_closed()
+            return True
+        except Exception:
+            return False
+
+    async def _check_backend(self) -> bool:
+        """Check if the backend health endpoint responds."""
+        try:
+            import urllib.request
+            req = urllib.request.Request("http://127.0.0.1:8000/health")
+            resp = await asyncio.to_thread(urllib.request.urlopen, req, timeout=3)
+            return resp.status == 200
+        except Exception:
+            return False
+
+    async def _restart_ollama(self) -> None:
+        """Restart Ollama service."""
+        import subprocess
+        try:
+            subprocess.Popen(
+                ["ollama", "serve"],
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+            )
+        except Exception as exc:
+            logger.error("Failed to restart Ollama: %s", exc)
+
+    async def _restart_backend(self) -> None:
+        """Restart the backend via the scheduled task."""
+        import subprocess
+        try:
+            subprocess.run(
+                ["schtasks", "/Run", "/TN", "DASH-Backend"],
+                captureoutput=True, timeout=10,
+            )
+        except Exception as exc:
+            logger.error("Failed to restart backend: %s", exc)
 
     # ── Status ─────────────────────────────────────────────────────────
 

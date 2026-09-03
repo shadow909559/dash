@@ -483,7 +483,32 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 task.add_done_callback(chat_tasks.discard)
                 continue
 
-            # Voice STT
+            # Voice STT → brain → TTS (full JARVIS cycle)
+            elif msg_type == "voice.interact":
+                audio_b64 = msg.get("audio_base64", "")
+                if audio_b64:
+                    try:
+                        import base64
+                        from dash_backend.voice import transcribe_audio, synthesize_text
+                        from dash_backend.autonomous.brain import get_brain
+                        # Transcribe
+                        audio_bytes = base64.b64decode(audio_b64)
+                        transcript = await transcribe_audio(audio_bytes)
+                        if transcript and len(transcript.strip()) > 1:
+                            await send_json({"type": "voice.transcript", "text": transcript})
+                            # Brain processes it
+                            brain = get_brain()
+                            response = await brain.handle_chat(transcript, user_id, voice_mode=True)
+                            await send_json({"type": "chat.token", "message_id": str(uuid.uuid4()), "content": response})
+                            # Synthesize response
+                            tts_audio = await synthesize_text(response[:500], provider_name="piper")
+                            if tts_audio:
+                                await send_json({"type": "voice.tts_ready", "audio_base64": tts_audio})
+                    except Exception as exc:
+                        logger.debug("Voice interact failed: %s", exc)
+                        await send_json({"type": "voice.error", "error": str(exc)})
+
+            # Voice STT (standalone)
             elif msg_type == "voice.stt":
                 stt_msg = msg
                 async with AsyncSessionLocal() as session:

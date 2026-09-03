@@ -264,30 +264,43 @@ class MemoryService:
         return entry
 
     async def _generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding for text (mock implementation).
+        """Generate embedding using Ollama's nomic-embed-text model."""
+        try:
+            import json as _json
+            import urllib.request
 
-        In production, this would use an actual embedding model
-        like OpenAI's text-embedding-3-small or sentence-transformers.
-        """
-        # Simple hash-based embedding for demonstration
-        # In production, replace with actual embedding generation
+            payload = _json.dumps({
+                "model": "nomic-embed-text",
+                "input": text[:2000],
+            }).encode("utf-8")
+
+            req = urllib.request.Request(
+                "http://127.0.0.1:11434/api/embed",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            resp = await asyncio.to_thread(urllib.request.urlopen, req, timeout=10)
+            data = _json.loads(resp.read())
+            embeddings = data.get("embeddings", [[]])
+            if embeddings and embeddings[0]:
+                return embeddings[0]
+        except Exception:
+            pass
+
+        # Fallback: hash-based embedding if Ollama is unavailable
         import hashlib
-
         hash_obj = hashlib.sha256(text.encode())
         hash_bytes = hash_obj.digest()
-
-        # Convert to float values between -1 and 1
         embedding = []
         for i in range(0, min(len(hash_bytes), 384), 4):
             chunk = hash_bytes[i:i+4]
             if len(chunk) == 4:
                 value = int.from_bytes(chunk, byteorder='big', signed=True)
-                normalized = value / (2**31)  # Normalize to [-1, 1]
+                normalized = value / (2**31)
                 embedding.append(normalized)
-
-        # Pad to 384 dimensions
         while len(embedding) < 384:
             embedding.append(0.0)
+        return embedding
 
         return embedding
 
