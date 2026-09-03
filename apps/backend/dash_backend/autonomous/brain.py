@@ -123,7 +123,17 @@ class AutonomousBrain:
         except Exception as exc:
             logger.debug("Could not wire idle detector: %s", exc)
 
-        # 4. Report boot status to connected clients
+        # 4. Load past experiences from database
+        try:
+            from dash_backend.autonomous.experience import get_experience_cache
+            exp_cache = get_experience_cache()
+            loaded = await exp_cache.load_from_db()
+            if loaded > 0:
+                logger.info("Brain: loaded %d past experiences from database", loaded)
+        except Exception as exc:
+            logger.debug("Could not load experiences: %s", exc)
+
+        # 5. Report boot status to connected clients
         await self._notify_boot_status(status)
 
         elapsed = time.time() - t0
