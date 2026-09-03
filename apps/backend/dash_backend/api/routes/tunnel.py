@@ -16,40 +16,48 @@ logger = get_logger(__name__)
 
 @router.get("/tunnel/status")
 async def tunnel_status() -> dict:
-    """Check if Cloudflare tunnel is running and return its URL."""
-    try:
-        # Check if cloudflared process is running
-        result = subprocess.run(
-            ["tasklist", "/FI", "IMAGENAME eq cloudflared.exe", "/NH"],
-            capture_output=True, text=True, timeout=5,
-        )
-        running = "cloudflared.exe" in result.stdout
-
-        return {
-            "running": running,
-            "provider": "cloudflare",
-            "cost": "free_forever",
-            "note": "Android app connects via this tunnel URL when away from home",
-        }
-    except Exception as exc:
-        return {
-            "running": False,
-            "error": str(exc)[:100],
-        }
+    """Check if a tunnel is running and return its URL."""
+    # Check ngrok first, then cloudflare
+    providers = [
+        {"name": "ngrok", "process": "ngrok.exe"},
+        {"name": "cloudflare", "process": "cloudflared.exe"},
+    ]
+    
+    for provider in providers:
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {provider['process']}", "/NH"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if provider["process"] in result.stdout:
+                return {
+                    "running": True,
+                    "provider": provider["name"],
+                    "cost": "free_forever",
+                    "note": "Android app connects via this tunnel URL when away from home",
+                }
+        except Exception:
+            continue
+    
+    return {
+        "running": False,
+        "provider": None,
+        "setup": "Run: ngrok http --domain=YOUR_DOMAIN 8000",
+    }
 
 
 @router.get("/tunnel/url")
 async def tunnel_url() -> dict:
-    """Get the current tunnel URL (trycloudflare.com free tier)."""
-    # The URL is displayed in the cloudflared console output
-    # For production, save it to a file or SSM parameter
+    """Get the current tunnel URL."""
     return {
-        "url": "Check cloudflared terminal output for URL",
-        "instructions": [
-            "1. Run: cloudflared tunnel --url http://localhost:8000",
-            "2. Copy the URL shown (e.g. https://abc-xyz.trycloudflare.com)",
-            "3. Enter it in the Android app settings",
+        "setup": [
+            "1. Sign up at https://dashboard.ngrok.com (free)",
+            "2. Install: winget install ngrok.ngrok",
+            "3. Auth: ngrok config add-authtoken YOUR_TOKEN",
+            "4. Reserve free domain at https://dashboard.ngrok.com/domains",
+            "5. Run: ngrok http --domain=YOUR_DOMAIN 8000",
+            "6. Enter the URL in Android app settings",
         ],
         "cost": "free_forever",
-        "limitation": "URL changes on restart (use named tunnel for permanent URL)",
+        "permanent": True,
     }
