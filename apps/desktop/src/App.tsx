@@ -4,7 +4,6 @@ import BootScreen from "@/components/BootScreen";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NotificationProvider } from "@/components/NotificationProvider";
 import { DASHSidebar } from "@/components/DASHSidebar";
-import { DASHHeader } from "@/components/DASHHeader";
 import { CommandPalette } from "@/components/CommandPalette";
 import { initializeWebSocket } from "@/lib/ws";
 import { resetWsClient } from "@/lib/wsClient";
@@ -153,20 +152,17 @@ export function App() {
               onToggle={() => setSidebarExpanded((prev) => !prev)}
             />
 
-            {/* Right: Primary Workspace Area */}
+            {/* Right: Primary Workspace Area — no toolbar/header */}
             <div
               style={{
-                display: "grid",
-                gridTemplateRows: "48px 1fr",
+                display: "flex",
+                flexDirection: "column",
                 minWidth: 0,
                 height: "100%",
                 overflow: "hidden",
                 backgroundColor: "var(--dash-bg)",
               }}
             >
-              {/* Top Navigation & Status Header */}
-              <DASHHeader sidebarExpanded={sidebarExpanded} />
-
               {/* Main Content Viewport — JARVIS grid background */}
               <main
                 id="main-content"

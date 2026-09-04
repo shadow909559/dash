@@ -4,25 +4,14 @@ import {
   Home,
   MessageSquare,
   Brain,
-  BookOpen,
-  FolderKanban,
-  Code2,
-  Compass,
   Globe,
   Monitor,
-  Smartphone,
   Zap,
-  CalendarDays,
   Bot,
-  Bell,
-  CheckSquare,
-  Puzzle,
-  BarChart3,
   Activity,
   Settings,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck,
   Mic,
 } from "lucide-react";
 import { useAIStore } from "@/stores/aiStore";
@@ -41,29 +30,18 @@ interface NavItem {
 }
 
 const PRIMARY_NAV_ITEMS: NavItem[] = [
-  { id: "home", path: "/", label: "Home", icon: Home },
+  { id: "home", path: "/", label: "Dashboard", icon: Home },
   { id: "chat", path: "/chat", label: "Chat", icon: MessageSquare },
   { id: "voice", path: "/voice", label: "Voice", icon: Mic },
   { id: "memory", path: "/memory", label: "Memory", icon: Brain },
-  { id: "knowledge", path: "/knowledge", label: "Knowledge", icon: BookOpen },
-  { id: "obsidian", path: "/obsidian", label: "Obsidian", icon: BookOpen },
-  { id: "projects", path: "/projects", label: "Projects", icon: FolderKanban },
-
-  { id: "research", path: "/research", label: "Research", icon: Compass },
-  { id: "browser", path: "/browser", label: "Browser", icon: Globe },
-  { id: "desktop", path: "/desktop", label: "Desktop", icon: Monitor },
-  { id: "phone", path: "/phone", label: "Phone", icon: Smartphone },
-  { id: "automation", path: "/automation", label: "Automation", icon: Zap },
-  { id: "planner", path: "/planner", label: "Planner", icon: CalendarDays },
+  { id: "research", path: "/research", label: "Research", icon: Globe },
+  { id: "desktop", path: "/desktop", label: "Control", icon: Monitor },
+  { id: "automation", path: "/automation", label: "Automate", icon: Zap },
   { id: "agents", path: "/agents", label: "Agents", icon: Bot },
   { id: "system-monitor", path: "/system-monitor", label: "System", icon: Activity },
 ];
 
 const SECONDARY_NAV_ITEMS: NavItem[] = [
-  { id: "notifications", path: "/notifications", label: "Notifications", icon: Bell },
-  { id: "approvals", path: "/approvals", label: "Approvals", icon: CheckSquare },
-  { id: "plugins", path: "/plugins", label: "Plugins", icon: Puzzle },
-  { id: "analytics", path: "/analytics", label: "Analytics", icon: BarChart3 },
   { id: "settings", path: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -100,10 +78,10 @@ export const DASHSidebar: React.FC<DASHSidebarProps> = ({ isExpanded, onToggle }
               padding: isExpanded ? "8px 12px" : "8px",
               justifyContent: isExpanded ? "flex-start" : "center",
               borderRadius: "var(--dash-radius-sm)",
-              color: isActive ? "var(--dash-text)" : "var(--dash-text-secondary)",
-              backgroundColor: isActive ? "rgba(255, 255, 255, 0.10)" : "transparent",
-              border: "none",
-              boxShadow: "none",
+              color: isActive ? "var(--dash-accent)" : "var(--dash-text-secondary)",
+              background: isActive ? "var(--ultron-surface)" : "transparent",
+              border: isActive ? "1px solid var(--ultron-border)" : "1px solid transparent",
+              boxShadow: isActive ? "0 0 12px rgba(63, 169, 245, 0.15)" : "none",
               textDecoration: "none",
               fontSize: 13,
               fontWeight: isActive ? 500 : 400,
@@ -192,21 +170,33 @@ export const DASHSidebar: React.FC<DASHSidebarProps> = ({ isExpanded, onToggle }
             overflow: "hidden",
           }}
         >
-          {/* DASH Hexagon/Circle Logo */}
+          {/* DASH Logo Mark */}
           <div
             className="dash-jarvis-logo"
             style={{
-              width: 28,
-              height: 28,
-              borderRadius: "var(--dash-radius-sm)",
-              background: "var(--dash-surface)",
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: "linear-gradient(135deg, #3fa9f5, #1a5276)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               flexShrink: 0,
+              boxShadow: "0 0 15px rgba(63, 169, 245, 0.3)",
+              animation: "jarvis-glow-breathe 3s ease-in-out infinite",
             }}
           >
-            <ShieldCheck size={16} color="#ffffff" />
+            <span
+              style={{
+                fontFamily: "'Orbitron', monospace",
+                fontSize: 14,
+                fontWeight: 800,
+                color: "#fff",
+                letterSpacing: "0.05em",
+              }}
+            >
+              D
+            </span>
           </div>
           {isExpanded && (
             <div style={{ display: "flex", flexDirection: "column" }}>
