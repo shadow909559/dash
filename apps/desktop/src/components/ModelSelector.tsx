@@ -1,6 +1,7 @@
 /**
- * ModelSelector — ChatGPT-style model dropdown.
+ * ModelSelector — JARVIS-themed model dropdown.
  * Shows grouped models by provider, with "Add custom model" at the bottom.
+ * Uses inline styles (no Tailwind dependency).
  */
 import React, { useState, useRef, useEffect } from "react";
 import { useModelStore } from "@/stores/modelStore";
@@ -8,11 +9,8 @@ import {
   ChevronDown,
   Check,
   Zap,
-  Globe,
-  Cpu,
   Plus,
   X,
-  Trash2,
   Eye,
   EyeOff,
 } from "lucide-react";
@@ -37,7 +35,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ compact }) => {
 
   const selectedModel = models.find((m) => m.id === selectedModelId);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -48,51 +45,108 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ compact }) => {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Group models by provider
   const grouped = providers.map((p) => ({
     provider: p,
     models: models.filter((m) => m.providerId === p.id),
   }));
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div ref={dropdownRef} style={{ position: "relative" }}>
       {/* Trigger button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg
-          bg-white/5 hover:bg-white/10 border border-white/10
-          text-sm text-white/80 transition-all"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "6px 12px",
+          borderRadius: 8,
+          background: "var(--dash-surface)",
+          border: "1px solid var(--dash-border)",
+          color: "var(--dash-text)",
+          fontSize: 13,
+          cursor: "pointer",
+          transition: "all 150ms ease",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = "var(--dash-border-hover)";
+          e.currentTarget.style.background = "var(--dash-surface-hover)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = "var(--dash-border)";
+          e.currentTarget.style.background = "var(--dash-surface)";
+        }}
       >
         {selectedModel ? (
           <>
-            <span className="text-xs">
+            <span style={{ fontSize: 14 }}>
               {providers.find((p) => p.id === selectedModel.providerId)?.icon}
             </span>
-            <span className="font-medium">{selectedModel.name}</span>
+            <span style={{ fontWeight: 500 }}>{selectedModel.name}</span>
           </>
         ) : (
-          <span className="text-white/40">Select model</span>
+          <span style={{ color: "var(--dash-text-muted)" }}>Select model</span>
         )}
         <ChevronDown
           size={14}
-          className={`text-white/40 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          style={{
+            color: "var(--dash-text-muted)",
+            transition: "transform 200ms ease",
+            transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+          }}
         />
       </button>
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 w-80 max-h-96 overflow-y-auto
-          bg-[#1a1a2e]/95 backdrop-blur-xl border border-white/10
-          rounded-xl shadow-2xl z-50">
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            marginTop: 8,
+            width: 320,
+            maxHeight: 384,
+            overflowY: "auto",
+            background: "rgba(8, 12, 20, 0.96)",
+            backdropFilter: "blur(16px)",
+            border: "1px solid var(--dash-border)",
+            borderRadius: 12,
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(63, 169, 245, 0.1)",
+            zIndex: 50,
+          }}
+        >
           {grouped.map(({ provider, models: providerModels }) =>
             providerModels.length > 0 ? (
               <div key={provider.id}>
                 {/* Provider header */}
-                <div className="px-3 pt-3 pb-1 text-xs font-semibold text-white/40 uppercase tracking-wider flex items-center gap-2">
+                <div
+                  style={{
+                    padding: "10px 12px 4px",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "var(--dash-text-muted)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontFamily: "'Orbitron', monospace",
+                  }}
+                >
                   <span>{provider.icon}</span>
                   <span>{provider.name}</span>
                   {provider.isLocal && (
-                    <span className="px-1.5 py-0.5 text-[10px] rounded bg-green-500/20 text-green-400">
+                    <span
+                      style={{
+                        padding: "1px 6px",
+                        fontSize: 9,
+                        borderRadius: 4,
+                        background: "rgba(34, 197, 94, 0.15)",
+                        color: "#22c55e",
+                        fontWeight: 600,
+                      }}
+                    >
                       LOCAL
                     </span>
                   )}
@@ -105,26 +159,64 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ compact }) => {
                       selectModel(model.id);
                       setIsOpen(false);
                     }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5
-                      hover:bg-white/5 transition-colors text-left"
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "8px 12px",
+                      background: model.id === selectedModelId ? "var(--ultron-surface)" : "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      transition: "background 150ms ease",
+                      borderLeft: model.id === selectedModelId ? "2px solid var(--dash-accent)" : "2px solid transparent",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (model.id !== selectedModelId) {
+                        e.currentTarget.style.background = "rgba(63, 169, 245, 0.06)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (model.id !== selectedModelId) {
+                        e.currentTarget.style.background = "transparent";
+                      }
+                    }}
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-white/90 font-medium truncate">
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: model.id === selectedModelId ? "var(--dash-accent)" : "var(--dash-text)",
+                          fontWeight: 500,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {model.name}
                       </div>
-                      <div className="text-xs text-white/40 truncate">
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "var(--dash-text-muted)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {model.description}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                       {model.speed === "fast" && (
-                        <Zap size={12} className="text-yellow-400" />
+                        <Zap size={12} style={{ color: "#eab308" }} />
                       )}
                       {model.size && (
-                        <span className="text-[10px] text-white/30">{model.size}</span>
+                        <span style={{ fontSize: 10, color: "var(--dash-text-muted)" }}>{model.size}</span>
                       )}
                       {model.id === selectedModelId && (
-                        <Check size={14} className="text-cyan-400" />
+                        <Check size={14} style={{ color: "var(--dash-accent)" }} />
                       )}
                     </div>
                   </button>
@@ -134,7 +226,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ compact }) => {
           )}
 
           {/* Divider */}
-          <div className="border-t border-white/5 mx-3 my-2" />
+          <div style={{ height: 1, background: "var(--dash-border-subtle)", margin: "4px 12px" }} />
 
           {/* Add custom model */}
           <button
@@ -142,17 +234,37 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ compact }) => {
               setShowAddCustom(true);
               setIsOpen(false);
             }}
-            className="w-full flex items-center gap-3 px-3 py-2.5
-              hover:bg-white/5 transition-colors text-left"
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "8px 12px",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              textAlign: "left",
+              transition: "background 150ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(63, 169, 245, 0.06)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
           >
-            <div className="w-7 h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-              <Plus size={14} className="text-cyan-400" />
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 8,
+                background: "rgba(63, 169, 245, 0.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Plus size={14} style={{ color: "var(--dash-accent)" }} />
             </div>
             <div>
-              <div className="text-sm text-cyan-400 font-medium">Add custom model</div>
-              <div className="text-xs text-white/40">
-                OpenAI-compatible API with your own key
-              </div>
+              <div style={{ fontSize: 13, color: "var(--dash-accent)", fontWeight: 500 }}>Add custom model</div>
+              <div style={{ fontSize: 11, color: "var(--dash-text-muted)" }}>OpenAI-compatible API with your own key</div>
             </div>
           </button>
         </div>
@@ -166,7 +278,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ compact }) => {
   );
 };
 
-// ── Add Custom Model Modal ──────────────────────────────────────────
+/* ── Add Custom Model Modal ──────────────────────────────────── */
 
 const AddCustomModelModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { addCustomProvider } = useModelStore();
@@ -183,12 +295,9 @@ const AddCustomModelModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
       setError("All fields are required");
       return;
     }
-
     setTesting(true);
     setError("");
-
     try {
-      // Test the API connection
       const resp = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -201,13 +310,7 @@ const AddCustomModelModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           max_tokens: 5,
         }),
       });
-
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.error?.message || `HTTP ${resp.status}`);
-      }
-
-      // Success — add the provider
+      if (!resp.ok) throw new Error(`API returned ${resp.status}`);
       const providerId = `custom-${Date.now()}`;
       addCustomProvider(
         {
@@ -217,22 +320,21 @@ const AddCustomModelModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           apiKey,
           isLocal: false,
           isCustom: true,
-          icon: "⚡",
+          icon: "🔌",
         },
         [
           {
-            id: modelName,
+            id: `${providerId}:${modelName}`,
             name: modelName,
             provider: name,
             providerId,
             description: `Custom model via ${name}`,
-            speed: "medium",
+            speed: "medium" as const,
             isLocal: false,
             isCustom: true,
           },
-        ]
+        ],
       );
-
       onClose();
     } catch (err: any) {
       setError(err.message || "Connection failed");
@@ -241,93 +343,110 @@ const AddCustomModelModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     }
   };
 
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "8px 12px",
+    borderRadius: 8,
+    background: "var(--dash-surface)",
+    border: "1px solid var(--dash-border)",
+    color: "var(--dash-text)",
+    fontSize: 13,
+    outline: "none",
+    fontFamily: "'Inter', sans-serif",
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#1a1a2e] border border-white/10 rounded-2xl w-[440px] shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
-          <h3 className="text-white font-semibold">Add Custom Model</h3>
-          <button onClick={onClose} className="text-white/40 hover:text-white/70">
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: "rgba(0, 0, 0, 0.6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 100,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: 400,
+          padding: 24,
+          borderRadius: 16,
+          background: "var(--dash-bg-subtle)",
+          border: "1px solid var(--dash-border)",
+          boxShadow: "0 16px 48px rgba(0, 0, 0, 0.5), 0 0 30px rgba(63, 169, 245, 0.1)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: "var(--dash-text)", fontFamily: "'Orbitron', monospace" }}>
+            Add Custom Model
+          </h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--dash-text-muted)", cursor: "pointer" }}>
             <X size={18} />
           </button>
         </div>
 
-        {/* Form */}
-        <div className="px-5 py-4 space-y-3">
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div>
-            <label className="text-xs text-white/50 mb-1 block">Provider Name</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. My OpenAI, Together AI, DeepSeek"
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
-                text-sm text-white placeholder-white/30 focus:outline-none focus:border-cyan-500/50"
-            />
+            <label style={{ fontSize: 11, color: "var(--dash-text-muted)", marginBottom: 4, display: "block", fontFamily: "'Orbitron', monospace", letterSpacing: "0.05em" }}>NAME</label>
+            <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder="My Custom Model" />
           </div>
           <div>
-            <label className="text-xs text-white/50 mb-1 block">Base URL</label>
-            <input
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://api.openai.com/v1"
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
-                text-sm text-white placeholder-white/30 focus:outline-none focus:border-cyan-500/50"
-            />
+            <label style={{ fontSize: 11, color: "var(--dash-text-muted)", marginBottom: 4, display: "block", fontFamily: "'Orbitron', monospace", letterSpacing: "0.05em" }}>API BASE URL</label>
+            <input style={inputStyle} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" />
           </div>
           <div>
-            <label className="text-xs text-white/50 mb-1 block">API Key</label>
-            <div className="relative">
+            <label style={{ fontSize: 11, color: "var(--dash-text-muted)", marginBottom: 4, display: "block", fontFamily: "'Orbitron', monospace", letterSpacing: "0.05em" }}>API KEY</label>
+            <div style={{ position: "relative" }}>
               <input
+                style={{ ...inputStyle, paddingRight: 36 }}
                 type={showKey ? "text" : "password"}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-..."
-                className="w-full px-3 py-2 pr-10 bg-white/5 border border-white/10 rounded-lg
-                  text-sm text-white placeholder-white/30 focus:outline-none focus:border-cyan-500/50"
               />
               <button
-                type="button"
                 onClick={() => setShowKey(!showKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60"
+                style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--dash-text-muted)", cursor: "pointer" }}
               >
                 {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
             </div>
           </div>
           <div>
-            <label className="text-xs text-white/50 mb-1 block">Model Name</label>
-            <input
-              value={modelName}
-              onChange={(e) => setModelName(e.target.value)}
-              placeholder="e.g. gpt-4o, deepseek-chat, claude-3-sonnet"
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg
-                text-sm text-white placeholder-white/30 focus:outline-none focus:border-cyan-500/50"
-            />
+            <label style={{ fontSize: 11, color: "var(--dash-text-muted)", marginBottom: 4, display: "block", fontFamily: "'Orbitron', monospace", letterSpacing: "0.05em" }}>MODEL NAME</label>
+            <input style={inputStyle} value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="gpt-4, claude-3, etc." />
           </div>
 
           {error && (
-            <div className="text-xs text-red-400 bg-red-500/10 px-3 py-2 rounded-lg">
+            <div style={{ fontSize: 12, color: "#ef4444", padding: "6px 10px", borderRadius: 6, background: "rgba(239, 68, 68, 0.1)" }}>
               {error}
             </div>
           )}
-        </div>
 
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-white/5 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-white/50 hover:text-white/70 rounded-lg"
-          >
-            Cancel
-          </button>
           <button
             onClick={handleTestAndAdd}
             disabled={testing}
-            className="px-4 py-2 text-sm font-medium rounded-lg
-              bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30
-              disabled:opacity-50 transition-all"
+            style={{
+              padding: "10px 16px",
+              borderRadius: 8,
+              background: testing ? "var(--dash-surface)" : "linear-gradient(135deg, #3fa9f5, #1a5276)",
+              border: "none",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: testing ? "wait" : "pointer",
+              fontFamily: "'Orbitron', monospace",
+              letterSpacing: "0.05em",
+              boxShadow: testing ? "none" : "0 0 15px rgba(63, 169, 245, 0.3)",
+            }}
           >
-            {testing ? "Testing..." : "Test & Add"}
+            {testing ? "Testing connection..." : "Test & Add Model"}
           </button>
         </div>
       </div>
