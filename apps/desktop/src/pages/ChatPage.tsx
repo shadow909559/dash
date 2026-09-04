@@ -223,7 +223,7 @@ export const ChatPage: React.FC = () => {
           padding: "8px 16px",
           borderBottom: "1px solid var(--dash-border-subtle)",
           background: "var(--dash-bg-subtle)",
-          overflowX: "auto",
+          overflow: "visible",
           flexShrink: 0,
         }}
       >
