@@ -22,7 +22,7 @@ interface ChatState {
   requestTimeout: ReturnType<typeof setTimeout> | null;
   statusDetail: string;
   setInput: (input: string) => void;
-  sendMessage: (override?: string) => void;
+  sendMessage: (override?: string, agentMode?: string) => void;
   addMessage: (message: ChatMessage) => void;
   updateAssistantMessage: (token: string) => void;
   commitAssistantMessage: () => void;
@@ -56,7 +56,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setProcessing: (processing) => set({ isProcessing: processing }),
   setCurrentMessageId: (id) => set({ currentMessageId: id }),
   setStatusDetail: (detail) => set({ statusDetail: detail }),
-  sendMessage: (override) => {
+  sendMessage: (override, agentMode?: string) => {
     const text = (override ?? get().input).trim();
     if (!text) return;
     if (get().isProcessing) return;
@@ -143,7 +143,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     const wsClient = getWsClient();
-    wsClient.sendChatMessage(messageId, text, get().conversationId || undefined);
+    wsClient.sendChatMessage(messageId, text, get().conversationId || undefined, agentMode);
   },
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
   updateAssistantMessage: (token) => {

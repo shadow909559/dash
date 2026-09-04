@@ -104,6 +104,8 @@ class ChatSendMessage(WSBaseMessage):
     # Optional agent selection (agent id as UUID string). If provided, the agent's
     # system_prompt will be injected into the LLM system prompt for this request.
     agent_id: str | None = None
+    # Agent mode: general, coder, planner, research, executor
+    agent_mode: str = "general"
     # Voice mode: when True, LLM is instructed to reply with short, spoken-friendly text
     voice_mode: bool = False
 

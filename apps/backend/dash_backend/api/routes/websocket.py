@@ -300,7 +300,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         try:
             from dash_backend.autonomous.brain import get_brain
             brain = get_brain()
-            response = await brain.handle_chat(chat_msg.content, user_id)
+            response = await brain.handle_chat(chat_msg.content, user_id, agent_mode=getattr(chat_msg, 'agent_mode', 'general'))
             assistant_content = response
             await send_json({"type": "chat.token", "message_id": request_id, "content": response})
             await send_json({"type": "chat.done", "message_id": request_id, "conversation_id": chat_msg.conversation_id})

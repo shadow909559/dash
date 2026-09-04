@@ -467,23 +467,33 @@ class LoRATrainer:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT role, content, created_at FROM messages
-                WHERE role IN ('user', 'assistant')
+                WHERE role IN ('user', 'assistant', 'USER', 'ASSISTANT')
                 ORDER BY created_at ASC
             """)
             rows = cursor.fetchall()
             conn.close()
 
-            # Pair user/assistant messages
+            # Pair user/assistant messages (handle consecutive same-role, case-insensitive)
             examples = []
             i = 0
-            while i < len(rows) - 1:
-                if rows[i][0] == "user" and rows[i + 1][0] == "assistant":
-                    examples.append(TrainingExample(
-                        instruction=rows[i][1],
-                        input="",
-                        output=rows[i + 1][1],
-                    ))
-                    i += 2
+            while i < len(rows):
+                if rows[i][0].lower() == "user":
+                    # Find next assistant response
+                    for j in range(i + 1, len(rows)):
+                        if rows[j][0].lower() == "assistant":
+                            user_text = rows[i][1]
+                            assistant_text = rows[j][1]
+                            # Skip error/timeout responses
+                            if assistant_text and not assistant_text.startswith("I encountered an issue") and not assistant_text.startswith("I'm thinking about") and len(assistant_text) > 10:
+                                examples.append(TrainingExample(
+                                    instruction=user_text,
+                                    input="",
+                                    output=assistant_text,
+                                ))
+                            i = j + 1
+                            break
+                    else:
+                        i += 1
                 else:
                     i += 1
 

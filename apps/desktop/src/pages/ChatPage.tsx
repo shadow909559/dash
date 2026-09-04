@@ -176,7 +176,7 @@ export const ChatPage: React.FC = () => {
   const handleSend = () => {
     if (!inputText.trim() || isProcessing) return;
     useChatStore.setState({ input: inputText.trim() });
-    sendMessage();
+    sendMessage(undefined, activeMode);
     setInputText("");
     if (inputRef.current) inputRef.current.style.height = "auto";
   };

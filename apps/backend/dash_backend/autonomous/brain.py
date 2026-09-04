@@ -292,12 +292,13 @@ class AutonomousBrain:
 
     # ── Chat Integration ───────────────────────────────────────────────
 
-    async def handle_chat(self, message: str, user_id: str = "user", voice_mode: bool = False) -> str:
+    async def handle_chat(self, message: str, user_id: str = "user", voice_mode: bool = False, agent_mode: str = "general") -> str:
         """Process a chat message through the autonomous brain.
 
         If the message is a complex task, create a goal and let the agent
         execute it.  If it's a simple question, answer directly via LLM.
         When voice_mode=True, responses are shorter and spoken-friendly.
+        agent_mode selects the personality: general, coder, planner, research, executor.
         Returns the response text.
         """
         # Store in conversation history
@@ -333,23 +334,46 @@ class AutonomousBrain:
             # Simple question — answer via LLM
             try:
                 from dash_backend.llm.service import build_chat_messages, collect_streamed_response
+                from dash_backend.llm.fine_tuner import get_fine_tuning_manager
                 context = self._build_context()
                 # Retrieve relevant memories for context
                 memory_context = await self._retrieve_memories(message, user_id)
                 if memory_context:
                     context = f"{context}\n\n{memory_context}"
+                # RAG: search Obsidian vault and code repos for relevant context
+                rag_context = ""
+                try:
+                    ftm = get_fine_tuning_manager()
+                    await ftm.rag_engine.initialize()
+                    rag_results = await ftm.rag_engine.search(message, top_k=3)
+                    if rag_results:
+                        rag_parts = []
+                        for r in rag_results:
+                            rag_parts.append(f"[{r.source.split(chr(92))[-1]}] {r.content[:300]}")
+                        rag_context = "\n\nRELEVANT DOCUMENTS:\n" + "\n".join(rag_parts)
+                except Exception:
+                    pass  # RAG not initialized yet, skip silently
+                # Get agent-mode-specific system prompt
                 spoken_rules = (
                     " RULES FOR VOICE MODE: Keep replies under 2 sentences. "
                     "No formatting, no lists, no markdown. Just speak naturally."
                     if voice_mode else ""
                 )
-                messages = build_chat_messages(
-                    system_prompt=(
+                try:
+                    ftm = get_fine_tuning_manager()
+                    system_prompt = ftm.prompt_engine.get_system_prompt(agent_mode)
+                except Exception:
+                    system_prompt = (
                         "You are DASH, an AI assistant similar to JARVIS. "
                         "You are running on the user's Windows computer. "
-                        "Be concise, helpful, and slightly formal. "
+                        "Be concise, helpful, and slightly formal."
+                    )
+                messages = build_chat_messages(
+                    system_prompt=(
+                        f"{system_prompt}"
                         f"{spoken_rules}"
                         f"\n\nSYSTEM STATUS:\n{context}"
+                        f"{rag_context}"
                     ),
                     user_message=message,
                 )

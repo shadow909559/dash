@@ -273,7 +273,7 @@ export class WsClient {
     return true;
   }
 
-  sendChatMessage(messageId: string, content: string, conversationId?: string): boolean {
+  sendChatMessage(messageId: string, content: string, conversationId?: string, agentMode?: string): boolean {
     // Set up request timeout
     const timeout = setTimeout(() => {
       if (this.activeRequestIds.has(messageId)) {
@@ -291,6 +291,7 @@ export class WsClient {
           conversation_id: conversationId || null,
           message_id: messageId,
           content,
+          agent_mode: agentMode || "general",
         }),
       );
       return true;
