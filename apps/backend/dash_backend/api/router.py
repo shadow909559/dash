@@ -38,6 +38,7 @@ from dash_backend.api.routes.ollama_proxy import router as ollama_proxy_router
 from dash_backend.api.routes.ec2_control import router as ec2_control_router
 from dash_backend.api.routes.ollama_tunnel import router as ollama_tunnel_router
 from dash_backend.autonomous.api import router as agent_router
+from dash_backend.api.routes.fine_tuning import router as fine_tuning_router
 
 
 api_router = APIRouter()
@@ -228,6 +229,12 @@ api_router.include_router(
 api_router.include_router(
     ollama_tunnel_router,
     tags=["ollama-tunnel"],
+)
+
+# 3-level LLM fine-tuning
+api_router.include_router(
+    fine_tuning_router,
+    tags=["fine-tuning"],
 )
 
 # Autonomous agent — self-operating AI

@@ -4,6 +4,7 @@ import BootScreen from "@/components/BootScreen";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NotificationProvider } from "@/components/NotificationProvider";
 import { DASHSidebar } from "@/components/DASHSidebar";
+import { TitleBar } from "@/components/TitleBar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { initializeWebSocket } from "@/lib/ws";
 import { resetWsClient } from "@/lib/wsClient";
@@ -131,13 +132,15 @@ export function App() {
           <a href="#main-content" className="skip-link">
             Skip to main content
           </a>
+          {/* Title bar for frameless window */}
+          <TitleBar />
           {/* Command palette: Ctrl+K / Cmd+K */}
           <CommandPalette />
           {/* CSS Grid shell: sidebar (auto) + content area (1fr) */}
           <div
             style={{
               width: "100vw",
-              height: "100vh",
+              height: "calc(100vh - 32px)",
               display: "grid",
               gridTemplateColumns: sidebarExpanded ? "240px 1fr" : "64px 1fr",
               backgroundColor: "var(--dash-bg)",

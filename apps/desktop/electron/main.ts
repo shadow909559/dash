@@ -457,8 +457,9 @@ function createWindow(): void {
   minHeight: 600,
   show: true,
   title: "DASH",
-  frame: true,
-  backgroundColor: "#050608",
+  frame: false,
+  backgroundColor: "#080c14",
+  titleBarStyle: "hidden",
 
   webPreferences: {
       preload: isDev
