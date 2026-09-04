@@ -1,13 +1,14 @@
 /**
- * ChatPage — ChatGPT/Gemini-style chat interface.
+ * ChatPage — JARVIS-style multi-agent chat interface.
  *
  * Features:
- * - Clean message bubbles (user right, assistant left)
- * - Typing indicator with animated dots
- * - Model selector at top
- * - Input bar with send/mic/attachments
- * - Copy messages, regenerate responses
- * - Streaming text display
+ * - 5 agent modes with distinct tabs, colors, and AI models
+ * - General: Gemini/Grok for general conversation
+ * - Coder: Qwen 2.5 Coder for code generation
+ * - Planner: Ollama for task decomposition
+ * - Research: Gemini for web research
+ * - Executor: Fast-path for direct tool execution
+ * - Clean message bubbles with agent-specific theming
  */
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useChatStore } from "@/stores/chatStore";
@@ -21,7 +22,6 @@ import {
   Bot,
   User,
   Sparkles,
-  Loader2,
   Copy,
   Check,
   RefreshCw,
@@ -29,7 +29,77 @@ import {
   StopCircle,
   MoreHorizontal,
   Trash2,
+  Code2,
+  CalendarDays,
+  Compass,
+  Zap,
+  MessageSquare,
 } from "lucide-react";
+
+/* ── Agent Mode Definitions ────────────────────────────────── */
+interface AgentMode {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>;
+  color: string;
+  glowColor: string;
+  modelHint: string;
+  systemPrompt: string;
+  placeholder: string;
+}
+
+const AGENT_MODES: AgentMode[] = [
+  {
+    id: "general",
+    label: "General",
+    icon: MessageSquare,
+    color: "#3fa9f5",
+    glowColor: "rgba(63, 169, 245, 0.25)",
+    modelHint: "Gemini / Grok",
+    systemPrompt: "You are DASH, a JARVIS-like AI assistant. Be concise, helpful, and slightly formal. Use technical language when appropriate.",
+    placeholder: "Ask DASH anything...",
+  },
+  {
+    id: "coder",
+    label: "Coder",
+    icon: Code2,
+    color: "#22c55e",
+    glowColor: "rgba(34, 197, 94, 0.25)",
+    modelHint: "Qwen 2.5 Coder",
+    systemPrompt: "You are DASH Coder. Write clean, efficient code. Explain briefly. Prefer Python, TypeScript, Bash. Include error handling.",
+    placeholder: "Describe what to code...",
+  },
+  {
+    id: "planner",
+    label: "Planner",
+    icon: CalendarDays,
+    color: "#eab308",
+    glowColor: "rgba(234, 179, 8, 0.25)",
+    modelHint: "Ollama Local",
+    systemPrompt: "You are DASH Planner. Break complex goals into clear, actionable steps. Prioritize by dependency and urgency.",
+    placeholder: "What do you want to accomplish?",
+  },
+  {
+    id: "research",
+    label: "Research",
+    icon: Compass,
+    color: "#a855f7",
+    glowColor: "rgba(168, 85, 247, 0.25)",
+    modelHint: "Gemini",
+    systemPrompt: "You are DASH Research. Find, analyze, and summarize information. Cite sources. Be thorough but concise.",
+    placeholder: "What do you want to research?",
+  },
+  {
+    id: "executor",
+    label: "Executor",
+    icon: Zap,
+    color: "#ef4444",
+    glowColor: "rgba(239, 68, 68, 0.25)",
+    modelHint: "Fast-Path",
+    systemPrompt: "You are DASH Executor. Execute tasks immediately. Use available tools. Report results clearly.",
+    placeholder: "What task should DASH execute?",
+  },
+];
 
 export const ChatPage: React.FC = () => {
   const {
@@ -44,6 +114,7 @@ export const ChatPage: React.FC = () => {
   const { dashState, websocketStatus } = useAIStore();
   const { selectedModelId, models } = useModelStore();
 
+  const [activeMode, setActiveMode] = useState("general");
   const [inputText, setInputText] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -53,6 +124,7 @@ export const ChatPage: React.FC = () => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
 
+  const currentMode = AGENT_MODES.find((m) => m.id === activeMode) || AGENT_MODES[0];
   const selectedModel = models.find((m) => m.id === selectedModelId);
 
   // Auto-scroll to bottom
@@ -63,9 +135,9 @@ export const ChatPage: React.FC = () => {
   // Auto-focus input
   useEffect(() => {
     inputRef.current?.focus();
-  }, []);
+  }, [activeMode]);
 
-  // Scroll detection for "scroll to bottom" button
+  // Scroll detection
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
     if (el) {
@@ -103,7 +175,6 @@ export const ChatPage: React.FC = () => {
 
   const handleSend = () => {
     if (!inputText.trim() || isProcessing) return;
-    // Store the input text in the store's input field, then call sendMessage
     useChatStore.setState({ input: inputText.trim() });
     sendMessage();
     setInputText("");
@@ -142,43 +213,125 @@ export const ChatPage: React.FC = () => {
   ];
 
   return (
-    <div className="flex flex-col h-full bg-[#0d0d1a]">
-      {/* ── Header ─────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
-        <ModelSelector />
-        <div className="flex items-center gap-2">
-          {messages.length > 0 && (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--dash-bg)" }}>
+      {/* ── Agent Mode Tabs ──────────────────────────────────── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          padding: "8px 16px",
+          borderBottom: "1px solid var(--dash-border-subtle)",
+          background: "var(--dash-bg-subtle)",
+          overflowX: "auto",
+          flexShrink: 0,
+        }}
+      >
+        {AGENT_MODES.map((mode) => {
+          const Icon = mode.icon;
+          const isActive = activeMode === mode.id;
+          return (
             <button
-              onClick={clearMessages}
-              className="p-1.5 rounded-lg text-white/30 hover:text-white/60 hover:bg-white/5"
-              title="New chat"
+              key={mode.id}
+              onClick={() => setActiveMode(mode.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "6px 12px",
+                borderRadius: 8,
+                border: isActive ? `1px solid ${mode.color}40` : "1px solid transparent",
+                background: isActive ? `${mode.glowColor}` : "transparent",
+                color: isActive ? mode.color : "var(--dash-text-muted)",
+                fontSize: 12,
+                fontWeight: 500,
+                fontFamily: "'Orbitron', monospace",
+                letterSpacing: "0.05em",
+                cursor: "pointer",
+                transition: "all 150ms ease",
+                boxShadow: isActive ? `0 0 12px ${mode.glowColor}` : "none",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.background = `${mode.glowColor}40`;
+                  e.currentTarget.style.color = mode.color;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "var(--dash-text-muted)";
+                }
+              }}
             >
-              <Trash2 size={16} />
+              <Icon size={14} />
+              <span>{mode.label}</span>
             </button>
-          )}
+          );
+        })}
+
+        {/* Model info badge */}
+        <div
+          style={{
+            marginLeft: "auto",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexShrink: 0,
+          }}
+        >
+          <ModelSelector />
           <div
-            className={`w-2 h-2 rounded-full ${
-              websocketStatus === "connected" ? "bg-green-400" : "bg-red-400"
-            }`}
-            title={websocketStatus}
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: websocketStatus === "connected" ? "var(--dash-success)" : "var(--dash-danger)",
+              boxShadow: websocketStatus === "connected" ? "0 0 6px rgba(34, 197, 94, 0.5)" : "none",
+            }}
           />
         </div>
       </div>
 
-      {/* ── Messages ───────────────────────────────────────────── */}
+      {/* ── Mode Info Bar ────────────────────────────────────── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "6px 16px",
+          borderBottom: "1px solid var(--dash-border-subtle)",
+          fontSize: 11,
+          color: "var(--dash-text-muted)",
+          fontFamily: "'Orbitron', monospace",
+          letterSpacing: "0.08em",
+          flexShrink: 0,
+        }}
+      >
+        <span style={{ color: currentMode.color }}>{currentMode.label.toUpperCase()}</span>
+        <span>·</span>
+        <span>{currentMode.modelHint}</span>
+        <span>·</span>
+        <span>{currentMode.placeholder}</span>
+      </div>
+
+      {/* ── Messages ─────────────────────────────────────────── */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto"
+        style={{ flex: 1, overflowY: "auto", padding: "16px" }}
       >
         {allMessages.length === 0 ? (
-          <EmptyState />
+          <EmptyState mode={currentMode} />
         ) : (
-          <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+          <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
             {allMessages.map((msg, i) => (
               <MessageBubble
                 key={msg.id || i}
                 message={msg}
+                mode={currentMode}
                 onCopy={() => copyMessage(msg.id || String(i), msg.content)}
                 isCopied={copiedId === (msg.id || String(i))}
               />
@@ -186,12 +339,24 @@ export const ChatPage: React.FC = () => {
 
             {/* Typing indicator */}
             {isProcessing && !assistantMessage && (
-              <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
-                  <Bot size={16} className="text-cyan-400" />
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: "50%",
+                    background: currentMode.glowColor,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    border: `1px solid ${currentMode.color}30`,
+                  }}
+                >
+                  <Bot size={16} style={{ color: currentMode.color }} />
                 </div>
-                <div className="px-4 py-3 rounded-2xl bg-white/5">
-                  <TypingIndicator />
+                <div style={{ padding: "12px 16px", borderRadius: 16, background: "var(--dash-surface)" }}>
+                  <TypingIndicator color={currentMode.color} />
                 </div>
               </div>
             )}
@@ -204,10 +369,23 @@ export const ChatPage: React.FC = () => {
         {showScrollBtn && (
           <button
             onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })}
-            className="fixed bottom-24 right-8 w-10 h-10 rounded-full
-              bg-[#1a1a2e] border border-white/10 shadow-lg
-              flex items-center justify-center text-white/60 hover:text-white
-              transition-all z-10"
+            style={{
+              position: "fixed",
+              bottom: 80,
+              right: 32,
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              background: "var(--dash-surface)",
+              border: "1px solid var(--dash-border)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--dash-text-secondary)",
+              cursor: "pointer",
+              boxShadow: "var(--dash-shadow-md)",
+              zIndex: 10,
+            }}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M7 1v12M1 7l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -216,13 +394,44 @@ export const ChatPage: React.FC = () => {
         )}
       </div>
 
-      {/* ── Input Bar ──────────────────────────────────────────── */}
-      <div className="border-t border-white/5 px-4 py-3">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex items-end gap-2 bg-white/5 border border-white/10 rounded-2xl px-3 py-2
-            focus-within:border-cyan-500/30 transition-colors">
-            {/* Attachment button */}
-            <button className="p-1.5 text-white/30 hover:text-white/60 mb-0.5">
+      {/* ── Input Bar ────────────────────────────────────────── */}
+      <div
+        style={{
+          padding: "12px 16px",
+          borderTop: "1px solid var(--dash-border-subtle)",
+          background: "var(--dash-bg-subtle)",
+        }}
+      >
+        <div style={{ maxWidth: 800, margin: "0 auto" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 8,
+              padding: "8px 12px",
+              borderRadius: 16,
+              background: "var(--dash-surface)",
+              border: `1px solid var(--dash-border)`,
+              transition: "border-color 200ms ease",
+            }}
+            onFocus={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor = currentMode.color + "60";
+            }}
+            onBlur={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor = "var(--dash-border)";
+            }}
+          >
+            {/* Attachment */}
+            <button
+              style={{
+                padding: 4,
+                color: "var(--dash-text-muted)",
+                cursor: "pointer",
+                background: "none",
+                border: "none",
+                marginBottom: 2,
+              }}
+            >
               <Paperclip size={18} />
             </button>
 
@@ -232,20 +441,34 @@ export const ChatPage: React.FC = () => {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Message DASH..."
+              placeholder={currentMode.placeholder}
               rows={1}
-              className="flex-1 bg-transparent text-sm text-white placeholder-white/30
-                resize-none outline-none max-h-[150px] py-1.5"
+              style={{
+                flex: 1,
+                background: "transparent",
+                border: "none",
+                outline: "none",
+                color: "var(--dash-text)",
+                fontSize: 14,
+                resize: "none",
+                maxHeight: 150,
+                padding: "4px 0",
+                fontFamily: "'Inter', sans-serif",
+              }}
             />
 
-            {/* Mic button */}
+            {/* Mic */}
             <button
               onClick={toggleMic}
-              className={`p-1.5 mb-0.5 rounded-lg transition-colors ${
-                isListening
-                  ? "text-red-400 bg-red-500/20"
-                  : "text-white/30 hover:text-white/60"
-              }`}
+              style={{
+                padding: 4,
+                color: isListening ? "#ef4444" : "var(--dash-text-muted)",
+                background: isListening ? "rgba(239, 68, 68, 0.15)" : "none",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+                marginBottom: 2,
+              }}
             >
               {isListening ? <MicOff size={18} /> : <Mic size={18} />}
             </button>
@@ -254,7 +477,14 @@ export const ChatPage: React.FC = () => {
             {isProcessing ? (
               <button
                 onClick={cancelRequest}
-                className="p-1.5 text-red-400 hover:text-red-300 mb-0.5"
+                style={{
+                  padding: 4,
+                  color: "#ef4444",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  marginBottom: 2,
+                }}
               >
                 <StopCircle size={18} />
               </button>
@@ -262,11 +492,15 @@ export const ChatPage: React.FC = () => {
               <button
                 onClick={handleSend}
                 disabled={!inputText.trim()}
-                className={`p-1.5 rounded-lg mb-0.5 transition-all ${
-                  inputText.trim()
-                    ? "text-cyan-400 hover:bg-cyan-500/20"
-                    : "text-white/20"
-                }`}
+                style={{
+                  padding: 4,
+                  color: inputText.trim() ? currentMode.color : "var(--dash-text-muted)",
+                  background: "none",
+                  border: "none",
+                  cursor: inputText.trim() ? "pointer" : "default",
+                  marginBottom: 2,
+                  transition: "color 150ms ease",
+                }}
               >
                 <Send size={18} />
               </button>
@@ -274,11 +508,8 @@ export const ChatPage: React.FC = () => {
           </div>
 
           {/* Model info */}
-          <div className="text-center mt-2">
-            <span className="text-[11px] text-white/20">
-              {selectedModel ? `${selectedModel.name}` : "No model selected"}
-              {" · "}DASH can make mistakes
-            </span>
+          <div style={{ textAlign: "center", marginTop: 8, fontSize: 11, color: "var(--dash-text-muted)" }}>
+            {selectedModel ? selectedModel.name : "No model selected"} · DASH can make mistakes
           </div>
         </div>
       </div>
@@ -286,90 +517,124 @@ export const ChatPage: React.FC = () => {
   );
 };
 
-// ── Message Bubble ───────────────────────────────────────────────
+/* ── Message Bubble ──────────────────────────────────────────── */
 
 const MessageBubble: React.FC<{
   message: { id?: string; role: string; content: string };
+  mode: AgentMode;
   onCopy: () => void;
   isCopied: boolean;
-}> = ({ message, onCopy, isCopied }) => {
+}> = ({ message, mode, onCopy, isCopied }) => {
   const isUser = message.role === "user";
 
   return (
-    <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+    <div style={{ display: "flex", gap: 10, flexDirection: isUser ? "row-reverse" : "row", alignItems: "flex-start" }}>
       {/* Avatar */}
       <div
-        className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-          isUser
-            ? "bg-purple-500/20"
-            : "bg-cyan-500/20"
-        }`}
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: "50%",
+          background: isUser ? "rgba(168, 85, 247, 0.15)" : mode.glowColor,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          border: `1px solid ${isUser ? "rgba(168, 85, 247, 0.3)" : mode.color + "30"}`,
+        }}
       >
         {isUser ? (
-          <User size={16} className="text-purple-400" />
+          <User size={16} style={{ color: "#a855f7" }} />
         ) : (
-          <Bot size={16} className="text-cyan-400" />
+          <Bot size={16} style={{ color: mode.color }} />
         )}
       </div>
 
       {/* Content */}
-      <div className={`group relative max-w-[85%] ${isUser ? "text-right" : ""}`}>
+      <div style={{ maxWidth: "85%", position: "relative" }}>
         <div
-          className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-            isUser
-              ? "bg-cyan-500/15 text-white/90 rounded-br-md"
-              : "bg-white/5 text-white/80 rounded-bl-md"
-          }`}
+          style={{
+            padding: "10px 14px",
+            borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+            background: isUser ? `${mode.color}15` : "var(--dash-surface)",
+            color: "var(--dash-text)",
+            fontSize: 13,
+            lineHeight: 1.6,
+            border: `1px solid ${isUser ? mode.color + "20" : "var(--dash-border-subtle)"}`,
+          }}
         >
           <MessageContent content={message.content} />
         </div>
 
         {/* Actions */}
         <div
-          className={`flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity ${
-            isUser ? "justify-end" : ""
-          }`}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            marginTop: 4,
+            opacity: 0,
+            transition: "opacity 150ms ease",
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0"; }}
         >
           <button
             onClick={onCopy}
-            className="p-1 text-white/20 hover:text-white/50 rounded"
+            style={{ padding: 2, color: "var(--dash-text-muted)", background: "none", border: "none", cursor: "pointer" }}
           >
             {isCopied ? <Check size={12} /> : <Copy size={12} />}
           </button>
           {!isUser && (
-            <button className="p-1 text-white/20 hover:text-white/50 rounded">
+            <button style={{ padding: 2, color: "var(--dash-text-muted)", background: "none", border: "none", cursor: "pointer" }}>
               <RefreshCw size={12} />
             </button>
           )}
-          <button className="p-1 text-white/20 hover:text-white/50 rounded">
-            <MoreHorizontal size={12} />
-          </button>
         </div>
       </div>
     </div>
   );
 };
 
-// ── Message Content (handles markdown-like formatting) ───────────
+/* ── Message Content (markdown-like) ─────────────────────────── */
 
 const MessageContent: React.FC<{ content: string }> = ({ content }) => {
-  // Simple markdown: code blocks, bold, italic
   const parts = content.split(/(```[\s\S]*?```|`[^`]+`|\*\*[^*]+\*\*)/g);
 
   return (
-    <div className="whitespace-pre-wrap break-words">
+    <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
       {parts.map((part, i) => {
         if (part.startsWith("```")) {
           const code = part.replace(/```\w*\n?/g, "").replace(/```$/g, "");
           return (
-            <pre key={i} className="bg-black/30 rounded-lg p-3 my-2 overflow-x-auto text-xs font-mono">
+            <pre
+              key={i}
+              style={{
+                background: "rgba(0,0,0,0.3)",
+                borderRadius: 8,
+                padding: 12,
+                margin: "8px 0",
+                overflowX: "auto",
+                fontSize: 12,
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            >
               <code>{code}</code>
             </pre>
           );
         }
         if (part.startsWith("`") && part.endsWith("`")) {
           return (
-            <code key={i} className="bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">
+            <code
+              key={i}
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                padding: "1px 5px",
+                borderRadius: 4,
+                fontSize: 12,
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            >
               {part.slice(1, -1)}
             </code>
           );
@@ -383,16 +648,20 @@ const MessageContent: React.FC<{ content: string }> = ({ content }) => {
   );
 };
 
-// ── Typing Indicator ─────────────────────────────────────────────
+/* ── Typing Indicator ────────────────────────────────────────── */
 
-const TypingIndicator: React.FC = () => (
-  <div className="flex items-center gap-1 py-1">
+const TypingIndicator: React.FC<{ color: string }> = ({ color }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 0" }}>
     {[0, 1, 2].map((i) => (
       <div
         key={i}
-        className="w-1.5 h-1.5 rounded-full bg-cyan-400/60"
         style={{
-          animation: "typing 1.4s infinite",
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          background: color,
+          opacity: 0.5,
+          animation: `typing 1.4s infinite`,
           animationDelay: `${i * 0.2}s`,
         }}
       />
@@ -406,51 +675,106 @@ const TypingIndicator: React.FC = () => (
   </div>
 );
 
-// ── Empty State (ChatGPT-style welcome) ──────────────────────────
+/* ── Empty State ─────────────────────────────────────────────── */
 
-const EmptyState: React.FC = () => {
+const EmptyState: React.FC<{ mode: AgentMode }> = ({ mode }) => {
   const { sendMessage } = useChatStore();
-  const { selectedModelId, models } = useModelStore();
-  const model = models.find((m) => m.id === selectedModelId);
 
-  const suggestions = [
-    { icon: "💻", text: "Write a Python script to organize my Downloads" },
-    { icon: "🔍", text: "Find all large files on my system" },
-    { icon: "📊", text: "Show me system health and performance" },
-    { icon: "🔒", text: "Check for security issues on my PC" },
-  ];
+  const suggestions: Record<string, { icon: string; text: string }[]> = {
+    general: [
+      { icon: "🤖", text: "What can you do for me?" },
+      { icon: "📊", text: "Show me system health" },
+      { icon: "🔐", text: "Check security status" },
+      { icon: "💡", text: "Suggest automations" },
+    ],
+    coder: [
+      { icon: "🐍", text: "Write a Python script to organize files" },
+      { icon: "⚡", text: "Create a TypeScript utility function" },
+      { icon: "🔧", text: "Debug this error in my code" },
+      { icon: "📦", text: "Generate a REST API endpoint" },
+    ],
+    planner: [
+      { icon: "📋", text: "Plan a weekly backup schedule" },
+      { icon: "🎯", text: "Break down a complex project" },
+      { icon: "⏰", text: "Create a maintenance checklist" },
+      { icon: "🚀", text: "Plan a deployment strategy" },
+    ],
+    research: [
+      { icon: "🔍", text: "Compare Python web frameworks" },
+      { icon: "📈", text: "Research best practices for Docker" },
+      { icon: "🌐", text: "Find information about cloud services" },
+      { icon: "📚", text: "Explain how neural networks work" },
+    ],
+    executor: [
+      { icon: "⚡", text: "Clean up my Downloads folder" },
+      { icon: "🗑️", text: "Find and delete duplicate files" },
+      { icon: "📁", text: "Organize files by type" },
+      { icon: "🔄", text: "Run system diagnostics" },
+    ],
+  };
+
+  const items = suggestions[mode.id] || suggestions.general;
 
   return (
-    <div className="flex flex-col items-center justify-center h-full px-4">
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", padding: "0 16px" }}>
       {/* Logo */}
-      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20
-        flex items-center justify-center mb-6 border border-cyan-500/20">
-        <Sparkles size={28} className="text-cyan-400" />
+      <div
+        style={{
+          width: 64,
+          height: 64,
+          borderRadius: 16,
+          background: `linear-gradient(135deg, ${mode.color}25, ${mode.color}10)`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: 20,
+          border: `1px solid ${mode.color}30`,
+          boxShadow: `0 0 20px ${mode.glowColor}`,
+        }}
+      >
+        <mode.icon size={28} style={{ color: mode.color }} />
       </div>
 
-      <h1 className="text-2xl font-semibold text-white/90 mb-2">
-        How can I help you today?
+      <h1 style={{ fontSize: 20, fontWeight: 600, color: "var(--dash-text)", marginBottom: 6, fontFamily: "'Orbitron', monospace", letterSpacing: "0.05em" }}>
+        {mode.label} Mode
       </h1>
-      <p className="text-sm text-white/40 mb-8">
-        {model ? `Powered by ${model.name}` : "Select a model to get started"}
+      <p style={{ fontSize: 13, color: "var(--dash-text-muted)", marginBottom: 24 }}>
+        {mode.modelHint} · {mode.placeholder}
       </p>
 
-      {/* Suggestion cards */}
-      <div className="grid grid-cols-2 gap-3 max-w-lg w-full">
-        {suggestions.map((s, i) => (
+      {/* Suggestions */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, maxWidth: 500, width: "100%" }}>
+        {items.map((s, i) => (
           <button
             key={i}
             onClick={() => {
               useChatStore.setState({ input: s.text });
               sendMessage();
             }}
-            className="flex items-start gap-3 p-3 rounded-xl bg-white/3 border border-white/5
-              hover:bg-white/5 hover:border-white/10 transition-all text-left group"
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 10,
+              padding: 12,
+              borderRadius: 12,
+              background: "var(--dash-surface)",
+              border: "1px solid var(--dash-border-subtle)",
+              cursor: "pointer",
+              textAlign: "left",
+              transition: "all 150ms ease",
+              color: "var(--dash-text-secondary)",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--dash-surface-hover)";
+              e.currentTarget.style.borderColor = mode.color + "30";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "var(--dash-surface)";
+              e.currentTarget.style.borderColor = "var(--dash-border-subtle)";
+            }}
           >
-            <span className="text-lg">{s.icon}</span>
-            <span className="text-xs text-white/50 group-hover:text-white/70 leading-relaxed">
-              {s.text}
-            </span>
+            <span style={{ fontSize: 18 }}>{s.icon}</span>
+            <span style={{ fontSize: 12, lineHeight: 1.5 }}>{s.text}</span>
           </button>
         ))}
       </div>
