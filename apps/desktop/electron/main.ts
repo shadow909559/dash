@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, Notification, powerMonitor } from "electron";
+import { app, BrowserWindow, shell, ipcMain, Notification, powerMonitor, screen } from "electron";
 // Use software WebGL (SwiftShader) — keeps the 3D Orb working without GPU crashes
 app.commandLine.appendSwitch("use-gl", "swiftshader");
 app.commandLine.appendSwitch("use-angle", "swiftshader");
@@ -530,8 +530,30 @@ function createWindow(): void {
   }, 3000);
 
   // Tell renderer of window state changes
+  // Fix for frameless Windows maximize: Windows sizes frameless maximized windows
+  // with a 7px invisible resize-border overhang on every side, so part of the app
+  // hangs off-screen and the bottom shows a gap. Snap the bounds to the display
+  // work area after maximizing.
+  const snapToWorkArea = (): void => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const { workArea } = screen.getDisplayMatching(mainWindow.getBounds());
+    mainWindow.setBounds({
+      x: workArea.x,
+      y: workArea.y,
+      width: workArea.width,
+      height: workArea.height,
+    });
+  };
+
   mainWindow.on("maximize", () => {
-    mainWindow?.webContents.send("window:maximize-change", true);
+    snapToWorkArea();
+    // Re-snap once: Windows can restore the overhang bounds after our setBounds.
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isMaximized()) {
+        snapToWorkArea();
+      }
+    }, 50);
+    mainWindow.webContents.send("window:maximize-change", true);
   });
 
   mainWindow.on("unmaximize", () => {

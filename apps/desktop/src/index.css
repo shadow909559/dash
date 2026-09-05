@@ -166,9 +166,11 @@ button, [role="button"], a {
 
 #root {
   width: 100vw;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background-color: var(--dash-bg);
+  display: flex;
+  flex-direction: column;
 }
 
 .font-mono {

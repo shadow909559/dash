@@ -139,8 +139,9 @@ export function App() {
           {/* CSS Grid shell: sidebar (auto) + content area (1fr) */}
           <div
             style={{
-              width: "100vw",
-              height: "calc(100vh - 32px)",
+              width: "100%",
+              flex: 1,
+              minHeight: 0,
               display: "grid",
               gridTemplateColumns: sidebarExpanded ? "240px 1fr" : "64px 1fr",
               backgroundColor: "var(--dash-bg)",
