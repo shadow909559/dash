@@ -1,0 +1,63 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main, feature/**]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+  pull_request:
+    branches: [main, feature/**]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+
+jobs:
+  check-docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify required documentation exists
+        run: |
+          required_docs=(
+            "docs/Architecture.md"
+            "docs/Changelog.md"
+            "docs/ContributionGuide.md"
+            "docs/Deployment.md"
+            "docs/DesktopAutomation.md"
+            "docs/DeveloperGuide.md"
+            "docs/FolderStructure.md"
+            "docs/MemorySystem.md"
+            "docs/Performance.md"
+            "docs/Planner.md"
+            "docs/PluginSDK.md"
+            "docs/RAG.md"
+            "docs/Roadmap.md"
+            "docs/Security.md"
+            "docs/Setup.md"
+            "docs/Testing.md"
+            "docs/UserGuide.md"
+            "docs/Vision.md"
+            "docs/Voice.md"
+            "docs/API.md"
+            "LICENSE"
+          )
+          
+          missing=0
+          for doc in "${required_docs[@]}"; do
+            if [ ! -f "$doc" ]; then
+              echo "✗ Missing: $doc"
+              missing=$((missing + 1))
+            else
+              echo "✓ Found: $doc"
+            fi
+          done
+          
+          if [ $missing -gt 0 ]; then
+            echo "FAILED: $missing required documentation files missing"
+            exit 1
+          fi
+          echo "All required documentation present!"
+

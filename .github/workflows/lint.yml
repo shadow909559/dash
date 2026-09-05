@@ -1,0 +1,29 @@
+name: Lint & Format Check
+
+on:
+  push:
+    branches: [main, develop, feature/**]
+  pull_request:
+    branches: [main, feature/**]
+
+jobs:
+  markdown-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Markdown files
+        uses: DavidAnson/markdownlint-cli2-action@v16
+        with:
+          globs: |
+            *.md
+            docs/*.md
+          config: '{"MD013": false, "MD033": false}'
+        continue-on-error: true
+
+  gitignore-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify .gitignore exists
+        run: test -f .gitignore && echo "OK" || exit 1
+
