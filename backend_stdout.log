@@ -1,0 +1,64 @@
+2026-08-08 21:46:19 | INFO     | dash_backend.main | Starting DASH AI OS backend (env=development, debug=True)
+2026-08-08 21:46:19 | INFO     | dash_backend.skills.registry | Registered skill desktop
+2026-08-08 21:46:19 | INFO     | dash_backend.skills.registry | Registered skill vision
+2026-08-08 21:46:19 | INFO     | dash_backend.skills.registry | Registered skill browser
+2026-08-08 21:46:19 | INFO     | dash_backend.skills.registry | Registered skill coding
+2026-08-08 21:46:19 | INFO     | dash_backend.skills.registry | Registered skill phone
+2026-08-08 21:46:19 | INFO     | dash_backend.automation.scheduler | Automation scheduler started with poll interval 30 seconds
+2026-08-08 21:46:19 | INFO     | dash_backend.events.event_bus | EventBus initialized with history_size=100
+2026-08-08 21:46:19 | INFO     | dash_backend.events.event_bus | EventBus started
+2026-08-08 21:46:19 | INFO     | dash_backend.main | Event Bus started
+2026-08-08 21:46:19 | INFO     | dash_backend.services.system.scheduler | Scheduler started with 0 tasks
+2026-08-08 21:46:19 | INFO     | dash_backend.services.system.health_monitor | HealthMonitor started with 0 checks
+2026-08-08 21:46:19 | INFO     | dash_backend.services.system.metrics | MetricsCollector started
+2026-08-08 21:46:19 | INFO     | dash_backend.services.system.resource_manager | ResourceManager started (interval=5.0s)
+2026-08-08 21:46:19 | INFO     | dash_backend.main | System services started
+2026-08-08 21:46:19 | INFO     | dash_backend.sync.enhanced_service | EnhancedSyncService started
+2026-08-08 21:46:19 | INFO     | dash_backend.main | Enhanced Sync Service started
+2026-08-08 21:46:19 | INFO     | dash_backend.plugins.manager | PluginManager started
+2026-08-08 21:46:19 | INFO     | dash_backend.plugins.hot_reloader | PluginHotReloader started
+2026-08-08 21:46:19 | INFO     | dash_backend.main | Plugin Manager and Hot Reloader started
+2026-08-08 21:46:19 | INFO     | dash_backend.autonomous.background_task_manager | BackgroundTaskManager started
+2026-08-08 21:46:19 | INFO     | dash_backend.autonomous.reminder_service | ReminderService started
+2026-08-08 21:46:19 | INFO     | dash_backend.autonomous.system_monitor_agent | SystemMonitorAgent started
+2026-08-08 21:46:19 | INFO     | dash_backend.autonomous.idle_detector | IdleDetector started (threshold=300.0s)
+2026-08-08 21:46:19 | INFO     | dash_backend.main | Autonomous agent services started
+2026-08-08 21:46:19 | INFO     | dash_backend.performance.latency_optimizer | LatencyOptimizer started with targets: {'desktop_control': 0.05, 'voice': 0.1, 'memory_search': 0.02, 'tool_execution': 0.1}
+2026-08-08 21:46:19 | INFO     | dash_backend.main | Performance optimizers started
+2026-08-08 21:46:38 | INFO     | dash_backend.voice | Piper TTS provider registered (voice=ryan)
+2026-08-08 21:46:51 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-08 21:46:51 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-08 21:48:04 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-08 21:48:05 | INFO     | dash_backend.llm.service | Using AI provider: ollama
+2026-08-08 21:48:09 | WARNING  | dash_backend.llm.service | Could not reach Ollama at http://localhost:11434: All connection attempts failed
+2026-08-08 21:48:09 | WARNING  | dash_backend.llm.service | Ollama model detection failed, using default: llama3.2:1b
+2026-08-08 21:48:09 | INFO     | dash_backend.llm.service | Sending prompt to Ollama model: llama3.2:1b
+2026-08-08 21:48:11 | ERROR    | dash_backend.llm.service | Ollama request failed: All connection attempts failed
+2026-08-08 21:48:11 | INFO     | dash_backend.api.routes.websocket | Completed chat response for user cc7191e8-1ea4-4222-9169-4d34d6ca5098
+2026-08-08 21:48:18 | INFO     | dash_backend.api.routes.websocket | Auto-TTS completed for response
+2026-08-08 21:48:18 | ERROR    | dash_backend.api.routes.websocket | WebSocket error: WebSocket is not connected. Need to call "accept" first.
+Traceback (most recent call last):
+  File "C:\Users\Asus\Desktop\dash\apps\backend\dash_backend\api\routes\websocket.py", line 81, in websocket_endpoint
+    raw_text = await websocket.receive_text()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Asus\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\starlette\websockets.py", line 118, in receive_text
+    raise RuntimeError('WebSocket is not connected. Need to call "accept" first.')
+RuntimeError: WebSocket is not connected. Need to call "accept" first.
+2026-08-08 21:49:17 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-08 22:07:48 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-08 22:07:48 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-08 23:30:38 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-08 23:30:41 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-08 23:32:28 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-08 23:32:28 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-08 23:32:55 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-08 23:32:55 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-08 23:33:05 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-08 23:33:05 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-08 23:33:37 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-08 23:33:37 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-08 23:39:38 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-08 23:39:56 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-08 23:40:46 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-08 23:41:36 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-08 23:42:46 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)

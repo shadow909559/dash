@@ -1,0 +1,81 @@
+.notification-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 320px;
+  z-index: 1000;
+}
+
+.notification {
+  background: rgba(10, 25, 40, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 180, 255, 0.2);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  transition: all 0.5s ease-in-out;
+  transform: translateX(100%);
+  opacity: 0;
+  animation: slideIn 0.5s forwards;
+}
+
+.notification--exit {
+  animation: slideOut 0.5s forwards;
+}
+
+.notification__icon {
+  width: 24px;
+  height: 24px;
+  margin-right: 16px;
+}
+
+.notification--info .notification__icon {
+  background-color: rgba(0, 180, 255, 0.8);
+}
+
+.notification--success .notification__icon {
+  background-color: rgba(0, 255, 150, 0.8);
+}
+
+.notification--error .notification__icon {
+  background-color: rgba(255, 80, 80, 0.8);
+}
+
+.notification__content {
+  flex-grow: 1;
+}
+
+.notification__title {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.notification__message {
+  font-family: 'Segoe UI', 'Roboto', sans-serif;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+@keyframes slideIn {
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}

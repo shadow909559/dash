@@ -1,0 +1,44 @@
+npm notice run dash-desktop@1.0.0 dev
+npm notice run vite
+[36mvite v6.4.3 [32mbuilding for development...[36m[39m
+[36m
+watching for file changes...[39m
+[33mUnknown input options: platform. Allowed options: cache, context, experimentalCacheExpiry, experimentalLogSideEffects, external, fs, input, jsx, logLevel, makeAbsoluteExternalsRelative, maxParallelFileOps, moduleContext, onLog, onwarn, perf, plugins, preserveEntrySignatures, preserveSymlinks, shimMissingExports, strictDeprecations, treeshake, watch[39m
+[36mvite v6.4.3 [32mbuilding for development...[36m[39m
+[36m
+watching for file changes...[39m
+[33mUnknown input options: platform. Allowed options: cache, context, experimentalCacheExpiry, experimentalLogSideEffects, external, fs, input, jsx, logLevel, makeAbsoluteExternalsRelative, maxParallelFileOps, moduleContext, onLog, onwarn, perf, plugins, preserveEntrySignatures, preserveSymlinks, shimMissingExports, strictDeprecations, treeshake, watch[39m
+[36m
+build started...[39m
+[36m
+build started...[39m
+
+  [32m[1mVITE[22m v6.4.3[39m  [2mready in [0m[1m1155[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+transforming...
+transforming...
+[32m✓[39m 1 modules transformed.
+rendering chunks...
+computing gzip size...
+[32m✓[39m 5 modules transformed.
+[2mdist-electron/[22m[36mpreload.js  [39m[1m[2m3.26 kB[22m[1m[22m[2m │ gzip: 0.70 kB[22m
+[36mbuilt in 525ms.[39m
+rendering chunks...
+computing gzip size...
+[2mdist-electron/[22m[36mmain.js  [39m[1m[2m24.13 kB[22m[1m[22m[2m │ gzip: 6.27 kB[22m
+[36mbuilt in 582ms.[39m
+
+[BackendManager] Checking for existing backend on port 8000...
+[BackendManager] Backend already running, connecting to existing instance
+[BackendManager] Starting periodic health checks
+[Main] Backend started successfully
+[Main] Memory cleanup scheduler started
+[5348:0808/214901.039:ERROR:CONSOLE(1)] "Request Autofill.enable failed. {"code":-32601,"message":"'Autofill.enable' wasn't found"}", source: devtools://devtools/bundled/core/protocol_client/protocol_client.js (1)
+[5348:0808/214901.040:ERROR:CONSOLE(1)] "Request Autofill.setAddresses failed. {"code":-32601,"message":"'Autofill.setAddresses' wasn't found"}", source: devtools://devtools/bundled/core/protocol_client/protocol_client.js (1)
+[2m10:18:25 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[2m10:18:25 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[2m10:18:31 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[2m10:19:16 pm[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/VoiceInterface.tsx[22m

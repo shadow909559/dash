@@ -1,0 +1,75 @@
+2026-08-09 19:39:30 | INFO     | dash_backend.main | Starting DASH AI OS backend (env=development, debug=True)
+2026-08-09 19:39:30 | INFO     | dash_backend.skills.registry | Registered skill desktop
+2026-08-09 19:39:30 | INFO     | dash_backend.skills.registry | Registered skill vision
+2026-08-09 19:39:30 | INFO     | dash_backend.skills.registry | Registered skill browser
+2026-08-09 19:39:30 | INFO     | dash_backend.skills.registry | Registered skill coding
+2026-08-09 19:39:30 | INFO     | dash_backend.skills.registry | Registered skill phone
+2026-08-09 19:39:30 | INFO     | dash_backend.automation.scheduler | Automation scheduler started with poll interval 30 seconds
+2026-08-09 19:39:30 | INFO     | dash_backend.events.event_bus | EventBus initialized with history_size=100
+2026-08-09 19:39:30 | INFO     | dash_backend.events.event_bus | EventBus started
+2026-08-09 19:39:30 | INFO     | dash_backend.main | Event Bus started
+2026-08-09 19:39:30 | INFO     | dash_backend.services.system.scheduler | Scheduler started with 0 tasks
+2026-08-09 19:39:30 | INFO     | dash_backend.services.system.health_monitor | HealthMonitor started with 0 checks
+2026-08-09 19:39:30 | INFO     | dash_backend.services.system.metrics | MetricsCollector started
+2026-08-09 19:39:30 | INFO     | dash_backend.services.system.resource_manager | ResourceManager started (interval=5.0s)
+2026-08-09 19:39:30 | INFO     | dash_backend.main | System services started
+2026-08-09 19:39:30 | INFO     | dash_backend.sync.enhanced_service | EnhancedSyncService started
+2026-08-09 19:39:30 | INFO     | dash_backend.main | Enhanced Sync Service started
+2026-08-09 19:39:30 | INFO     | dash_backend.plugins.manager | PluginManager started
+2026-08-09 19:39:30 | INFO     | dash_backend.plugins.hot_reloader | PluginHotReloader started
+2026-08-09 19:39:30 | INFO     | dash_backend.main | Plugin Manager and Hot Reloader started
+2026-08-09 19:39:30 | INFO     | dash_backend.autonomous.background_task_manager | BackgroundTaskManager started
+2026-08-09 19:39:30 | INFO     | dash_backend.autonomous.reminder_service | ReminderService started
+2026-08-09 19:39:30 | INFO     | dash_backend.autonomous.system_monitor_agent | SystemMonitorAgent started
+2026-08-09 19:39:30 | INFO     | dash_backend.autonomous.idle_detector | IdleDetector started (threshold=300.0s)
+2026-08-09 19:39:30 | INFO     | dash_backend.main | Autonomous agent services started
+2026-08-09 19:39:30 | INFO     | dash_backend.performance.latency_optimizer | LatencyOptimizer started with targets: {'desktop_control': 0.05, 'voice': 0.1, 'memory_search': 0.02, 'tool_execution': 0.1}
+2026-08-09 19:39:30 | INFO     | dash_backend.main | Performance optimizers started
+2026-08-09 19:40:57 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-09 19:41:01 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-09 19:41:01 | INFO     | dash_backend.sync.service | Unregistered session for client 926cdfe1-afb2-4789-95f8-bfdcb2823e64
+2026-08-09 19:42:25 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-09 19:42:27 | INFO     | dash_backend.voice | Piper TTS provider registered (voice=ryan)
+2026-08-09 19:42:27 | ERROR    | dash_backend.api.websocket.handlers | Failed to forward STT to chat pipeline
+Traceback (most recent call last):
+  File "C:\Users\Asus\Desktop\dash\apps\backend\dash_backend\api\websocket\handlers.py", line 643, in handle_voice_stt
+    chat_msg = ChatSendMessage(conversation_id=conversation.id, message_id=str(uuid.uuid4()), content=transcript)
+  File "C:\Users\Asus\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\pydantic\main.py", line 263, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for ChatSendMessage
+conversation_id
+  Input should be a valid string [type=string_type, input_value=UUID('785b8fd3-becc-4c2d-bc8c-6bbc4aa2f99c'), input_type=UUID]
+    For further information visit https://errors.pydantic.dev/2.13/v/string_type
+2026-08-09 19:42:27 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-09 19:42:28 | INFO     | dash_backend.sync.service | Unregistered session for client fc5624d4-ecbf-48e3-af56-1a5f93da7bbf
+2026-08-09 19:58:05 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-09 20:49:00 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-09 20:49:02 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-09 20:49:03 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-09 21:52:55 | WARNING  | dash_backend.api.websocket.handlers | STT returned no usable transcript; emitting voice.stt.error
+2026-08-09 23:19:29 | INFO     | dash_backend.llm.service | Using AI provider: ollama
+2026-08-09 23:19:32 | WARNING  | dash_backend.llm.service | Could not reach Ollama at http://localhost:11434: All connection attempts failed
+2026-08-09 23:19:32 | WARNING  | dash_backend.llm.service | Ollama model detection failed, using default: llama3.2:1b
+2026-08-09 23:19:32 | INFO     | dash_backend.llm.service | Sending prompt to Ollama model: llama3.2:1b
+2026-08-09 23:19:35 | ERROR    | dash_backend.llm.service | Ollama request failed: All connection attempts failed
+2026-08-09 23:19:35 | INFO     | dash_backend.api.routes.websocket | Completed chat response for user cc7191e8-1ea4-4222-9169-4d34d6ca5098
+2026-08-09 23:19:39 | INFO     | dash_backend.api.routes.websocket | Auto-TTS completed for response
+2026-08-10 03:38:32 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-10 03:38:32 | INFO     | dash_backend.sync.service | Unregistered session for client 02028361-e6f8-42d5-89db-3554a29dce47
+2026-08-10 03:38:35 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 03:38:37 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 09:05:59 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 09:06:03 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 09:06:03 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)
+2026-08-10 09:06:04 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 09:06:06 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 09:06:07 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 09:06:09 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 09:06:10 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 09:06:12 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 09:06:13 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 09:36:42 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 09:36:43 | WARNING  | dash_backend.desktop.clipboard_manager | Read clipboard failed: Error calling OpenClipboard ([WinError 0] The operation completed successfully.)
+2026-08-10 09:36:54 | INFO     | dash_backend.api.routes.websocket | WebSocket disconnected (user: cc7191e8-1ea4-4222-9169-4d34d6ca5098)
+2026-08-10 09:36:54 | INFO     | dash_backend.sync.service | Unregistered session for client 03773af0-7d3f-4e06-9c22-8c96cde9030a
+2026-08-10 09:37:03 | INFO     | dash_backend.api.routes.websocket | WebSocket connected (guest mode)

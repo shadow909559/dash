@@ -1,0 +1,2 @@
+npm notice run dash-desktop@1.0.0 npx
+npm notice run tsc --noEmit -p tsconfig.json

@@ -1,0 +1,142 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+
+.hud-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hud-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.hud-core {
+  transform-origin: center;
+  transition: transform 0.2s ease-out;
+}
+
+.hud-center-text {
+  font-family: 'Orbitron', 'Segoe UI', 'Roboto', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  fill: rgba(0, 255, 255, 0.95);
+  text-anchor: middle;
+  letter-spacing: 4px;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.8), 0 0 20px rgba(0, 255, 255, 0.5), 0 0 30px rgba(0, 255, 255, 0.3);
+  animation: neonFlicker 3s infinite alternate;
+}
+
+.hud-center-subtext {
+  font-family: 'Orbitron', 'Segoe UI', 'Roboto', sans-serif;
+  font-size: 10px;
+  fill: rgba(0, 255, 255, 0.8);
+  text-anchor: middle;
+  letter-spacing: 2px;
+  text-shadow: 0 0 5px rgba(0, 255, 255, 0.6);
+}
+
+.hud-ring-group {
+  transform-origin: center;
+}
+
+.hud-ring {
+  transform-origin: center;
+  animation: hud-spin 20s linear infinite;
+}
+
+/* State-based animations and color changes */
+.hud--listening .hud-ring-group {
+  filter: url(#hud-glow) drop-shadow(0 0 12px rgba(0, 220, 255, 0.8));
+}
+.hud--listening .hud-ring {
+  animation-duration: 8s;
+}
+
+.hud--thinking .hud-ring {
+  animation-duration: 3s;
+}
+.hud--thinking path[stroke*="255, 200, 0"] { /* Yellow parts */
+  animation: hud-flash-yellow 1s infinite;
+}
+
+.hud--idle .hud-ring {
+  animation-duration: 60s;
+}
+
+.hud--listening .hud-ring-group {
+  filter: url(#hud-glow) drop-shadow(0 0 12px rgba(0, 220, 255, 0.8));
+}
+.hud--listening .hud-ring {
+  animation-duration: 8s;
+}
+
+.hud--thinking .hud-ring {
+  animation-duration: 3s;
+}
+.hud--thinking path[stroke*="255, 200, 0"] { /* Yellow parts */
+  animation: hud-flash-yellow 1s infinite;
+}
+
+.hud--speaking .hud-core {
+  animation: hud-pulse-core 1.5s infinite;
+}
+
+.hud--executing .hud-ring {
+  animation-duration: 5s;
+}
+.hud--executing path[stroke*="255, 200, 0"] {
+  animation: hud-flash-green 0.7s infinite;
+}
+
+.hud--error .hud-ring-group {
+  filter: url(#hud-glow) drop-shadow(0 0 15px rgba(255, 50, 50, 0.9));
+}
+.hud--error .hud-ring {
+  animation-duration: 15s;
+}
+.hud--error circle, .hud--error line, .hud--error path {
+  stroke: rgba(255, 50, 50, 0.8) !important;
+}
+.hud--error .hud-center-text {
+  fill: rgba(255, 50, 50, 0.9);
+  text-shadow: 0 0 8px rgba(255, 50, 50, 0.7);
+}
+.hud--error .hud-center-subtext {
+  fill: rgba(255, 50, 50, 0.7);
+}
+
+/* Keyframe Animations */
+@keyframes hud-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes hud-flash-yellow {
+  0%, 100% { stroke: rgba(255, 200, 0, 0.8); }
+  50% { stroke: rgba(255, 255, 255, 1); filter: drop-shadow(0 0 5px white); }
+}
+
+@keyframes hud-flash-green {
+  0%, 100% { stroke: rgba(0, 220, 0, 0.8); }
+  50% { stroke: rgba(100, 255, 100, 1); filter: drop-shadow(0 0 8px rgba(100, 255, 100, 0.8)); }
+}
+
+@keyframes hud-pulse-core {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
+@keyframes neonFlicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.8), 0 0 20px rgba(0, 255, 255, 0.5), 0 0 30px rgba(0, 255, 255, 0.3);
+  }
+  20%, 24%, 55% {
+    text-shadow: none;
+  }
+}

@@ -1,0 +1,60 @@
+2026-08-23 17:40:00 | INFO     | __main__ | Starting DASH AI OS backend (env=development, debug=True)
+2026-08-23 17:40:01 | INFO     | alembic.runtime.plugins | setup plugin alembic.autogenerate.schemas
+2026-08-23 17:40:01 | INFO     | alembic.runtime.plugins | setup plugin alembic.autogenerate.tables
+2026-08-23 17:40:01 | INFO     | alembic.runtime.plugins | setup plugin alembic.autogenerate.types
+2026-08-23 17:40:01 | INFO     | alembic.runtime.plugins | setup plugin alembic.autogenerate.constraints
+2026-08-23 17:40:01 | INFO     | alembic.runtime.plugins | setup plugin alembic.autogenerate.defaults
+2026-08-23 17:40:01 | INFO     | alembic.runtime.plugins | setup plugin alembic.autogenerate.comments
+2026-08-23 17:40:01 | INFO     | alembic.env | Online migration DSN: sqlite:///dash_dev.db
+2026-08-23 17:40:01 | INFO     | alembic.runtime.migration | Context impl SQLiteImpl.
+2026-08-23 17:40:01 | INFO     | alembic.runtime.migration | Will assume non-transactional DDL.
+2026-08-23 17:40:01 | INFO     | __main__ | Database migrations applied (alembic upgrade head)
+2026-08-23 17:40:01 | INFO     | __main__ | Optional Supabase outbox worker started
+2026-08-23 17:40:01 | INFO     | dash_backend.security.local_identity | Loaded DASH device identity install_id=***HASH_REDACTED*** fingerprint=6f66ac00bef1
+2026-08-23 17:40:01 | INFO     | __main__ | DASH device identity ready install_id=***HASH_REDACTED*** token_fingerprint=6f66ac00bef1
+2026-08-23 17:40:01 | INFO     | dash_backend.tools.register_desktop | Registering 104 desktop tools
+2026-08-23 17:40:01 | INFO     | __main__ | Permission manager initialized
+2026-08-23 17:40:01 | INFO     | __main__ | Executive worker started
+2026-08-23 17:40:01 | INFO     | dash_backend.automation.scheduler | Automation scheduler started with poll interval 30 seconds
+2026-08-23 17:40:01 | INFO     | dash_backend.events.event_bus | EventBus initialized with history_size=100
+2026-08-23 17:40:01 | INFO     | dash_backend.events.event_bus | EventBus started
+2026-08-23 17:40:01 | INFO     | __main__ | Event Bus started
+2026-08-23 17:40:01 | INFO     | dash_backend.services.system.scheduler | Scheduler started with 0 tasks
+2026-08-23 17:40:01 | INFO     | dash_backend.services.system.health_monitor | HealthMonitor started with 0 checks
+2026-08-23 17:40:01 | INFO     | dash_backend.services.system.metrics | MetricsCollector started
+2026-08-23 17:40:01 | INFO     | dash_backend.services.system.resource_manager | ResourceManager started (interval=5.0s)
+2026-08-23 17:40:01 | INFO     | dash_backend.services.ai.provider_health_monitor | Starting AI Provider Health Monitor
+2026-08-23 17:40:01 | INFO     | httpx | HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2026-08-23 17:40:01 | INFO     | dash_backend.llm.provider_manager | Ollama is already running at http://127.0.0.1:11434
+2026-08-23 17:40:01 | INFO     | dash_backend.executive.service | Starting executive worker loop
+2026-08-23 17:40:01 | INFO     | httpx | HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2026-08-23 17:40:01 | INFO     | dash_backend.services.ai.provider_health_monitor | AI provider is now HEALTHY: AI engine ready.
+2026-08-23 17:40:01 | INFO     | dash_backend.services.ai.provider_health_monitor | AI provider status changed: checking -> ready
+2026-08-23 17:40:02 | INFO     | dash_backend.services.system.health_monitor | Registered health check 'supabase' (interval=60.0s, critical=False)
+2026-08-23 17:40:02 | INFO     | __main__ | System services started
+2026-08-23 17:40:02 | INFO     | dash_backend.sync.enhanced_service | EnhancedSyncService started
+2026-08-23 17:40:02 | INFO     | __main__ | Enhanced Sync Service started
+2026-08-23 17:40:02 | INFO     | dash_backend.plugins.manager | PluginManager started
+2026-08-23 17:40:02 | INFO     | dash_backend.plugins.hot_reloader | PluginHotReloader started
+2026-08-23 17:40:02 | INFO     | __main__ | Plugin Manager and Hot Reloader started
+2026-08-23 17:40:02 | INFO     | dash_backend.autonomous.background_task_manager | BackgroundTaskManager started
+2026-08-23 17:40:02 | INFO     | dash_backend.autonomous.reminder_service | ReminderService started
+2026-08-23 17:40:02 | INFO     | dash_backend.autonomous.system_monitor_agent | SystemMonitorAgent started
+2026-08-23 17:40:02 | INFO     | dash_backend.autonomous.idle_detector | IdleDetector started (threshold=300.0s)
+2026-08-23 17:40:02 | INFO     | __main__ | Autonomous agent services started
+2026-08-23 17:40:02 | INFO     | dash_backend.performance.latency_optimizer | LatencyOptimizer started with targets: {'desktop_control': 0.05, 'voice': 0.1, 'memory_search': 0.02, 'tool_execution': 0.1}
+2026-08-23 17:40:02 | INFO     | __main__ | Performance optimizers started
+2026-08-23 17:40:32 | INFO     | httpx | HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2026-08-23 17:40:32 | INFO     | dash_backend.llm.provider_manager | Ollama is already running at http://127.0.0.1:11434
+2026-08-23 17:40:33 | INFO     | httpx | HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2026-08-23 17:41:04 | INFO     | httpx | HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2026-08-23 17:41:04 | INFO     | dash_backend.llm.provider_manager | Ollama is already running at http://127.0.0.1:11434
+2026-08-23 17:41:05 | INFO     | httpx | HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2026-08-23 17:41:07 | INFO     | httpx | HTTP Request: GET https://udolrdcqyhyrvfravaav.supabase.co/auth/v1/settings "HTTP/1.1 200 OK"
+2026-08-23 17:41:35 | INFO     | httpx | HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2026-08-23 17:41:35 | INFO     | dash_backend.llm.provider_manager | Ollama is already running at http://127.0.0.1:11434
+2026-08-23 17:41:36 | INFO     | httpx | HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2026-08-23 17:42:07 | INFO     | httpx | HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2026-08-23 17:42:07 | INFO     | dash_backend.llm.provider_manager | Ollama is already running at http://127.0.0.1:11434
+2026-08-23 17:42:07 | INFO     | httpx | HTTP Request: GET http://127.0.0.1:11434/api/tags "HTTP/1.1 200 OK"
+2026-08-23 17:42:08 | INFO     | httpx | HTTP Request: GET https://udolrdcqyhyrvfravaav.supabase.co/auth/v1/settings "HTTP/1.1 200 OK"
