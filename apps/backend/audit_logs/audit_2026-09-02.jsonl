@@ -1,0 +1,3 @@
+{"timestamp": 1788347763.41377, "datetime": "2026-09-02T16:46:03.413775", "event_type": "power", "user_id": "957d1b52-5f4f-48ff-bb85-c6d5e86f3f08", "action": "lock", "category": "remote_control", "status": "success", "details": {}, "source_ip": ""}
+{"timestamp": 1788347812.6856837, "datetime": "2026-09-02T16:46:52.685690", "event_type": "power", "user_id": "957d1b52-5f4f-48ff-bb85-c6d5e86f3f08", "action": "sleep", "category": "remote_control", "status": "success", "details": {}, "source_ip": ""}
+{"timestamp": 1788347875.1655772, "datetime": "2026-09-02T16:47:55.165581", "event_type": "power", "user_id": "957d1b52-5f4f-48ff-bb85-c6d5e86f3f08", "action": "lock", "category": "remote_control", "status": "success", "details": {}, "source_ip": ""}

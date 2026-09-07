@@ -1,0 +1,403 @@
+/* ═══════════════════════════════════════════════════════════════════
+   DASH Boot Screen — JARVIS-style cinematic loading animation
+   Every value matches the specification exactly.
+   ═══════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&display=swap');
+
+/* ── Full-screen container ───────────────────────────────────────── */
+.dash-boot {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  z-index: 9999;
+  background: #0b0e14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Orbitron', monospace, sans-serif;
+  user-select: none;
+}
+
+/* ── Radial vignette background ──────────────────────────────────── */
+.dash-boot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 70% at 50% 38%, #161b26 0%, #0b0e14 100%);
+  pointer-events: none;
+}
+
+/* ── Technical grid — 50px squares, 7% white ─────────────────────── */
+.dash-boot__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  opacity: 0;
+  animation: bd-fade-in 0.4s 0.1s ease-out forwards;
+}
+
+/* ── Badge anchor — 38% from top ─────────────────────────────────── */
+.dash-boot__badge {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  width: 0;
+  height: 0;
+}
+
+/* ── Layer A: Outer glow halo ──────────────────────────────────────
+     Spec: 260-280px diameter, #3fa9f5, 30-40px blur
+     Breathing: opacity 35%-55%, 3s ease-in-out
+   ──────────────────────────────────────────────────────────────── */
+.dash-boot__glow {
+  position: absolute;
+  left: -140px;
+  top: -140px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(63,169,245,0.55) 0%,
+    rgba(63,169,245,0.3) 30%,
+    rgba(47,143,214,0.12) 55%,
+    transparent 75%
+  );
+  filter: blur(35px);
+  /* Framer-motion handles entrance; CSS handles continuous breathing */
+  animation: bd-glow-breathe 3s ease-in-out infinite;
+}
+
+@keyframes bd-glow-breathe {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(1.04); }
+}
+
+/* ── Layer B: Main ring container ──────────────────────────────────
+     Spec: 185px diameter, 2.5px stroke, conic-gradient, 4s rotation
+   ──────────────────────────────────────────────────────────────── */
+.dash-boot__ring {
+  position: absolute;
+  left: -95px;
+  top: -95px;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  animation: bd-ring-spin 4s linear infinite;
+}
+
+/* Blurred glow duplicate behind the stroke — softer, wider */
+.dash-boot__ring-glow {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg,
+    rgba(234,252,255,0.6) 0%,
+    rgba(63,169,245,0.4) 12%,
+    rgba(47,143,214,0.15) 30%,
+    transparent 50%,
+    rgba(47,143,214,0.15) 70%,
+    rgba(63,169,245,0.4) 88%,
+    rgba(234,252,255,0.6) 100%
+  );
+  filter: blur(8px);
+}
+
+/* The sharp ring stroke — 2.5px via padding + mask */
+.dash-boot__ring-stroke {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  padding: 2.5px;
+  background: conic-gradient(from 0deg,
+    #eafcff 0%,
+    #5ab8f5 8%,
+    #2f8fd6 18%,
+    rgba(47,143,214,0.25) 35%,
+    transparent 50%,
+    rgba(47,143,214,0.25) 65%,
+    #2f8fd6 82%,
+    #5ab8f5 92%,
+    #eafcff 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* Dark center — #0d0f16 per spec */
+.dash-boot__ring-center {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 42%, #12171f 0%, #0d0f16 100%);
+  box-shadow: inset 0 0 30px rgba(0,0,0,0.9);
+}
+
+@keyframes bd-ring-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Layer C: "DASH" text ──────────────────────────────────────────
+     Spec: 22-26px, letter-spacing 3-4px, weight 500-600, #f2f6fa
+     Flicker-in: 400ms after ring
+   ──────────────────────────────────────────────────────────────── */
+.dash-boot__text {
+  position: absolute;
+  left: -60px;
+  top: -14px;
+  width: 120px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  font-family: 'Orbitron', monospace;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 4px;
+  color: #f2f6fa;
+  text-shadow:
+    0 0 12px rgba(63,169,245,0.5),
+    0 0 30px rgba(63,169,245,0.25);
+  opacity: 0;
+  animation: bd-text-flicker 0.4s ease-out forwards;
+}
+
+@keyframes bd-text-flicker {
+  0%   { opacity: 0; }
+  15%  { opacity: 0.8; }
+  30%  { opacity: 0.15; }
+  45%  { opacity: 0.85; }
+  60%  { opacity: 0.4; }
+  75%  { opacity: 0.95; }
+  100% { opacity: 1; }
+}
+
+/* ── Layer D: Orbiting accent arc ──────────────────────────────────
+     Spec: 110-130px radius → 240px diameter, 2px stroke
+     Spans 60-90°, orbits 8-10s, opacity breathing
+   ──────────────────────────────────────────────────────────────── */
+.dash-boot__accent-orbit {
+  position: absolute;
+  left: -125px;
+  top: -125px;
+  width: 250px;
+  height: 250px;
+  border-radius: 50%;
+  animation: bd-orbit-spin 9s linear infinite;
+}
+
+/* Primary arc — top-right quadrant ~80° span */
+.dash-boot__accent-arc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  /* ~80° visible arc at top-right */
+  border-top-color: rgba(255,255,255,0.85);
+  border-right-color: rgba(255,255,255,0.3);
+  filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
+  animation: bd-arc-breathe 4s ease-in-out infinite alternate;
+}
+
+/* Secondary arc — opposite side, thinner, blue-tinted */
+.dash-boot__accent-arc-2 {
+  position: absolute;
+  inset: 10px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  border-bottom-color: rgba(63,169,245,0.5);
+  border-left-color: rgba(63,169,245,0.2);
+  filter: drop-shadow(0 0 4px rgba(63,169,245,0.2));
+  animation: bd-arc-breathe 5s 1s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes bd-arc-breathe {
+  0%   { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+@keyframes bd-orbit-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Layer E: Tick marks // ────────────────────────────────────────
+     Spec: ~8px, at 8 o'clock and 4 o'clock, orbit ~12s opposite
+   ──────────────────────────────────────────────────────────────── */
+.dash-boot__ticks-orbit {
+  position: absolute;
+  left: -155px;
+  top: -155px;
+  width: 310px;
+  height: 310px;
+  border-radius: 50%;
+  animation: bd-ticks-orbit 12s linear infinite;
+}
+
+@keyframes bd-ticks-orbit {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(-360deg); }
+}
+
+.dash-boot__tick {
+  position: absolute;
+  font-family: 'Courier New', monospace;
+  font-size: 8px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  letter-spacing: 1px;
+  text-shadow: 0 0 3px rgba(255,255,255,0.2);
+}
+
+/* 8 o'clock position */
+.dash-boot__tick--left {
+  left: 10%;
+  top: 62%;
+  transform: rotate(55deg);
+}
+
+/* 4 o'clock position */
+.dash-boot__tick--right {
+  right: 10%;
+  top: 62%;
+  transform: rotate(-55deg);
+}
+
+/* ── Layer F: Particles ────────────────────────────────────────────
+     Spec: 8-12 dots, 1-3px, opacity 30-80%, radii 120-200px
+     Twinkle 2-4s, occasional shooting star
+   ──────────────────────────────────────────────────────────────── */
+.dash-boot__particle {
+  position: absolute;
+  border-radius: 50%;
+  background: #eafcff;
+  box-shadow: 0 0 5px rgba(234,252,255,0.4);
+  pointer-events: none;
+  animation: bd-particle-twinkle ease-in-out infinite alternate;
+}
+
+@keyframes bd-particle-twinkle {
+  0% {
+    opacity: var(--p-base, 0.5);
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: calc(var(--p-base, 0.5) * 0.2);
+    transform: translate(var(--p-dx, 3px), var(--p-dy, -3px)) scale(0.5);
+  }
+}
+
+/* Shooting star particle — one occasionally streaks */
+.dash-boot__particle--shooter {
+  animation: bd-shoot 6s ease-in-out infinite !important;
+}
+
+@keyframes bd-shoot {
+  0%, 85%, 100% {
+    opacity: 0;
+    transform: translate(0, 0) scale(1);
+  }
+  88% {
+    opacity: 0.9;
+    transform: translate(25px, -15px) scale(1.5);
+  }
+  92% {
+    opacity: 0.4;
+    transform: translate(40px, -25px) scale(0.8);
+  }
+  95% {
+    opacity: 0;
+    transform: translate(50px, -35px) scale(0.3);
+  }
+}
+
+/* ── Layer G: Bottom dock ──────────────────────────────────────────
+     Spec: ~85% down, 6 icons ~20px, white 55-65%, 14px apart
+   ──────────────────────────────────────────────────────────────── */
+.dash-boot__dock {
+  position: absolute;
+  bottom: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  animation: bd-slide-up 0.5s ease-out forwards;
+}
+
+@keyframes bd-slide-up {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.dash-boot__dock-item {
+  display: flex;
+  align-items: center;
+}
+
+.dash-boot__dock-icon {
+  width: 20px;
+  height: 20px;
+  color: rgba(255,255,255,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dash-boot__dock-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.dash-boot__dock-sep {
+  width: 1px;
+  height: 16px;
+  background: rgba(255,255,255,0.12);
+  margin: 0 7px;
+}
+
+/* ── Layer H: Pagination dots ────────────────────────────────────── */
+.dash-boot__pagination {
+  position: absolute;
+  bottom: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  opacity: 0;
+  animation: bd-slide-up 0.4s ease-out forwards;
+}
+
+.dash-boot__dot {
+  height: 3px;
+  border-radius: 1.5px;
+  background: rgba(255,255,255,0.7);
+}
+
+.dash-boot__dot--active {
+  width: 16px;
+  opacity: 0.9;
+}
+
+.dash-boot__dot--inactive {
+  width: 3px;
+  opacity: 0.3;
+}
+
+/* ── Exit animation ──────────────────────────────────────────────── */
+@keyframes bd-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

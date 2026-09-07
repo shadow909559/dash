@@ -1,0 +1,13 @@
+dash_training/merged_model/model.safetensors
+dash_training/tinyllama-q4_k_m.gguf
+dash_training/tinyllama-q3.gguf
+dash_training/lora_output/adapter_model.safetensors
+apps/backend/dist/DashBackend.exe
+apps/mobile/windows/flutter/ephemeral/flutter_windows.dll
+tools/piper/libtashkeel_model.ort
+tools/piper/onnxruntime.dll
+tools/piper/espeak-ng-data/
+node_modules/@esbuild/win32-x64/esbuild.exe
+apps/desktop/node_modules/typescript/
+node_modules/typescript/
+node_modules/
