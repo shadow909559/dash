@@ -46,6 +46,25 @@ const InfrastructurePage = lazy(() => import("@/pages/InfrastructurePage"));
 const CompliancePage = lazy(() => import("@/pages/CompliancePage"));
 const FeatureFlagsPage = lazy(() => import("@/pages/FeatureFlagsPage"));
 const DataManagementPage = lazy(() => import("@/pages/DataManagementPage"));
+const PasswordManagerPage = lazy(() => import("@/pages/PasswordManagerPage"));
+const CodeEditorPage = lazy(() => import("@/pages/CodeEditorPage"));
+const TerminalPage = lazy(() => import("@/pages/TerminalPage"));
+const ClipboardHistoryPage = lazy(() => import("@/pages/ClipboardHistoryPage"));
+const FileBrowserPage = lazy(() => import("@/pages/FileBrowserPage"));
+const BookmarkManagerPage = lazy(() => import("@/pages/BookmarkManagerPage"));
+const ReadingListPage = lazy(() => import("@/pages/ReadingListPage"));
+const MeetingNotesPage = lazy(() => import("@/pages/MeetingNotesPage"));
+const ActionItemsPage = lazy(() => import("@/pages/ActionItemsPage"));
+const TimeTrackingPage = lazy(() => import("@/pages/TimeTrackingPage"));
+const SprintBoardPage = lazy(() => import("@/pages/SprintBoardPage"));
+const ContactManagerPage = lazy(() => import("@/pages/ContactManagerPage"));
+const ReminderSystemPage = lazy(() => import("@/pages/ReminderSystemPage"));
+const ScreenshotCapturePage = lazy(() => import("@/pages/ScreenshotCapturePage"));
+const SessionReplayPage = lazy(() => import("@/pages/SessionReplayPage"));
+const BackupRestorePage = lazy(() => import("@/pages/BackupRestorePage"));
+const UpdateCheckerPage = lazy(() => import("@/pages/UpdateCheckerPage"));
+const PerformanceMonitorPage = lazy(() => import("@/pages/PerformanceMonitorPage"));
+const DebugConsolePage = lazy(() => import("@/pages/DebugConsolePage"));
 
 // Handle Electron IPC for audio stop (exposed via preload onAudioStopAll)
 const onAudioStopAll = window.electronAPI?.onAudioStopAll ?? null;
@@ -229,6 +248,25 @@ export function App() {
                   <Route path="/compliance" element={<Suspense fallback={<PageSkeleton />}><CompliancePage /></Suspense>} />
                   <Route path="/feature-flags" element={<Suspense fallback={<PageSkeleton />}><FeatureFlagsPage /></Suspense>} />
                   <Route path="/data-management" element={<Suspense fallback={<PageSkeleton />}><DataManagementPage /></Suspense>} />
+                  <Route path="/password-manager" element={<Suspense fallback={<PageSkeleton />}><PasswordManagerPage /></Suspense>} />
+                  <Route path="/code-editor" element={<Suspense fallback={<PageSkeleton />}><CodeEditorPage /></Suspense>} />
+                  <Route path="/terminal" element={<Suspense fallback={<PageSkeleton />}><TerminalPage /></Suspense>} />
+                  <Route path="/clipboard" element={<Suspense fallback={<PageSkeleton />}><ClipboardHistoryPage /></Suspense>} />
+                  <Route path="/files" element={<Suspense fallback={<PageSkeleton />}><FileBrowserPage /></Suspense>} />
+                  <Route path="/bookmarks" element={<Suspense fallback={<PageSkeleton />}><BookmarkManagerPage /></Suspense>} />
+                  <Route path="/reading-list" element={<Suspense fallback={<PageSkeleton />}><ReadingListPage /></Suspense>} />
+                  <Route path="/meetings" element={<Suspense fallback={<PageSkeleton />}><MeetingNotesPage /></Suspense>} />
+                  <Route path="/action-items" element={<Suspense fallback={<PageSkeleton />}><ActionItemsPage /></Suspense>} />
+                  <Route path="/time-tracking" element={<Suspense fallback={<PageSkeleton />}><TimeTrackingPage /></Suspense>} />
+                  <Route path="/sprint-board" element={<Suspense fallback={<PageSkeleton />}><SprintBoardPage /></Suspense>} />
+                  <Route path="/contacts" element={<Suspense fallback={<PageSkeleton />}><ContactManagerPage /></Suspense>} />
+                  <Route path="/reminders" element={<Suspense fallback={<PageSkeleton />}><ReminderSystemPage /></Suspense>} />
+                  <Route path="/screenshots" element={<Suspense fallback={<PageSkeleton />}><ScreenshotCapturePage /></Suspense>} />
+                  <Route path="/session-replay" element={<Suspense fallback={<PageSkeleton />}><SessionReplayPage /></Suspense>} />
+                  <Route path="/backup-restore" element={<Suspense fallback={<PageSkeleton />}><BackupRestorePage /></Suspense>} />
+                  <Route path="/updates" element={<Suspense fallback={<PageSkeleton />}><UpdateCheckerPage /></Suspense>} />
+                  <Route path="/perf-monitor" element={<Suspense fallback={<PageSkeleton />}><PerformanceMonitorPage /></Suspense>} />
+                  <Route path="/debug-console" element={<Suspense fallback={<PageSkeleton />}><DebugConsolePage /></Suspense>} />
                   <Route path="*" element={<Suspense fallback={<PageSkeleton />}><HomePage /></Suspense>} />
                 </Routes>
               </main>
