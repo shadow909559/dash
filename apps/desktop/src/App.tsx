@@ -43,6 +43,9 @@ const VoiceCommandsPage = lazy(() => import("@/pages/VoiceCommandsPage"));
 const CollaborationPage = lazy(() => import("@/pages/CollaborationPage"));
 const PromptStudioPage = lazy(() => import("@/pages/PromptStudioPage"));
 const InfrastructurePage = lazy(() => import("@/pages/InfrastructurePage"));
+const CompliancePage = lazy(() => import("@/pages/CompliancePage"));
+const FeatureFlagsPage = lazy(() => import("@/pages/FeatureFlagsPage"));
+const DataManagementPage = lazy(() => import("@/pages/DataManagementPage"));
 
 // Handle Electron IPC for audio stop (exposed via preload onAudioStopAll)
 const onAudioStopAll = window.electronAPI?.onAudioStopAll ?? null;
@@ -223,6 +226,9 @@ export function App() {
                   <Route path="/collaboration" element={<Suspense fallback={<PageSkeleton />}><CollaborationPage /></Suspense>} />
                   <Route path="/prompt-studio" element={<Suspense fallback={<PageSkeleton />}><PromptStudioPage /></Suspense>} />
                   <Route path="/infrastructure" element={<Suspense fallback={<PageSkeleton />}><InfrastructurePage /></Suspense>} />
+                  <Route path="/compliance" element={<Suspense fallback={<PageSkeleton />}><CompliancePage /></Suspense>} />
+                  <Route path="/feature-flags" element={<Suspense fallback={<PageSkeleton />}><FeatureFlagsPage /></Suspense>} />
+                  <Route path="/data-management" element={<Suspense fallback={<PageSkeleton />}><DataManagementPage /></Suspense>} />
                   <Route path="*" element={<Suspense fallback={<PageSkeleton />}><HomePage /></Suspense>} />
                 </Routes>
               </main>
