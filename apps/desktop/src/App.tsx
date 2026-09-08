@@ -37,6 +37,12 @@ const VoicePage = lazy(() => import("@/pages/VoicePage"));
 const WorkflowBuilderPage = lazy(() => import("@/pages/WorkflowBuilderPage"));
 const TokenUsagePage = lazy(() => import("@/pages/TokenUsagePage"));
 const SecurityHardeningPage = lazy(() => import("@/pages/SecurityHardeningPage"));
+const EmailPage = lazy(() => import("@/pages/EmailPage"));
+const CalendarPage = lazy(() => import("@/pages/CalendarPage"));
+const VoiceCommandsPage = lazy(() => import("@/pages/VoiceCommandsPage"));
+const CollaborationPage = lazy(() => import("@/pages/CollaborationPage"));
+const PromptStudioPage = lazy(() => import("@/pages/PromptStudioPage"));
+const InfrastructurePage = lazy(() => import("@/pages/InfrastructurePage"));
 
 // Handle Electron IPC for audio stop (exposed via preload onAudioStopAll)
 const onAudioStopAll = window.electronAPI?.onAudioStopAll ?? null;
@@ -211,6 +217,12 @@ export function App() {
                   <Route path="/workflows" element={<Suspense fallback={<PageSkeleton />}><WorkflowBuilderPage /></Suspense>} />
                   <Route path="/token-usage" element={<Suspense fallback={<PageSkeleton />}><TokenUsagePage /></Suspense>} />
                   <Route path="/security-hardening" element={<Suspense fallback={<PageSkeleton />}><SecurityHardeningPage /></Suspense>} />
+                  <Route path="/email" element={<Suspense fallback={<PageSkeleton />}><EmailPage /></Suspense>} />
+                  <Route path="/calendar" element={<Suspense fallback={<PageSkeleton />}><CalendarPage /></Suspense>} />
+                  <Route path="/voice-commands" element={<Suspense fallback={<PageSkeleton />}><VoiceCommandsPage /></Suspense>} />
+                  <Route path="/collaboration" element={<Suspense fallback={<PageSkeleton />}><CollaborationPage /></Suspense>} />
+                  <Route path="/prompt-studio" element={<Suspense fallback={<PageSkeleton />}><PromptStudioPage /></Suspense>} />
+                  <Route path="/infrastructure" element={<Suspense fallback={<PageSkeleton />}><InfrastructurePage /></Suspense>} />
                   <Route path="*" element={<Suspense fallback={<PageSkeleton />}><HomePage /></Suspense>} />
                 </Routes>
               </main>

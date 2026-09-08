@@ -74,6 +74,15 @@ def _make_proactive(pred_engine, state=None):
     )
 
 
+def _no_quiet_hours_cfg(**overrides):
+    """Return a config with quiet hours disabled so tests run at any time."""
+    cfg = dict(DEFAULT_CONFIG)
+    cfg["quiet_hours_start"] = 99  # never active
+    cfg["quiet_hours_end"] = 99
+    cfg.update(overrides)
+    return cfg
+
+
 # ---------------------------------------------------------------------------
 # Tests: predictive risks appear in suggestions
 # ---------------------------------------------------------------------------
@@ -85,7 +94,7 @@ async def test_predictive_risk_appears_in_suggestions():
     pred_engine = _mock_predictive_engine([_make_prediction(severity="high")])
     proactive = _make_proactive(pred_engine)
 
-    results = await proactive.evaluate(limit=5)
+    results = await proactive.evaluate(limit=5, config=_no_quiet_hours_cfg())
 
     predictive = [r for r in results if r["id"].startswith("predictive_")]
     assert len(predictive) == 1
@@ -102,7 +111,7 @@ async def test_warning_prediction_appears_above_default_threshold():
     pred_engine = _mock_predictive_engine([_make_prediction(severity="warning")])
     proactive = _make_proactive(pred_engine)
 
-    results = await proactive.evaluate(limit=5)
+    results = await proactive.evaluate(limit=5, config=_no_quiet_hours_cfg())
 
     predictive = [r for r in results if r["id"].startswith("predictive_")]
     assert len(predictive) == 1
@@ -115,7 +124,7 @@ async def test_info_prediction_below_default_threshold_filtered():
     pred_engine = _mock_predictive_engine([_make_prediction(severity="info")])
     proactive = _make_proactive(pred_engine)
 
-    results = await proactive.evaluate(limit=5)
+    results = await proactive.evaluate(limit=5, config=_no_quiet_hours_cfg())
 
     predictive = [r for r in results if r["id"].startswith("predictive_")]
     assert len(predictive) == 0
@@ -127,8 +136,7 @@ async def test_info_prediction_shows_with_lowered_threshold():
     pred_engine = _mock_predictive_engine([_make_prediction(severity="info")])
     proactive = _make_proactive(pred_engine)
 
-    cfg = dict(DEFAULT_CONFIG)
-    cfg["importance_threshold"] = 0.4
+    cfg = _no_quiet_hours_cfg(importance_threshold=0.4)
     results = await proactive.evaluate(limit=5, config=cfg)
 
     predictive = [r for r in results if r["id"].startswith("predictive_")]
@@ -148,14 +156,14 @@ async def test_predictive_cooldown_prevents_repeat():
     proactive = _make_proactive(pred_engine)
 
     # First evaluation: should appear
-    results1 = await proactive.evaluate(limit=5)
+    results1 = await proactive.evaluate(limit=5, config=_no_quiet_hours_cfg())
     assert any(r["id"] == "predictive_ram_trend_exhaustion" for r in results1)
 
     # Acknowledge it
     proactive.record_shown("predictive_ram_trend_exhaustion", "test")
 
     # Second evaluation: should NOT appear (cooldown active)
-    results2 = await proactive.evaluate(limit=5)
+    results2 = await proactive.evaluate(limit=5, config=_no_quiet_hours_cfg())
     assert not any(r["id"] == "predictive_ram_trend_exhaustion" for r in results2)
 
 
@@ -171,7 +179,7 @@ async def test_predictive_respects_limit():
     proactive = _make_proactive(pred_engine)
 
     # Limit of 2 should only return 2 predictive suggestions
-    results = await proactive.evaluate(limit=2)
+    results = await proactive.evaluate(limit=2, config=_no_quiet_hours_cfg())
     assert len(results) == 2
     assert all(r["id"].startswith("predictive_") for r in results)
 
@@ -186,7 +194,7 @@ async def test_multiple_predictions_both_appear():
     pred_engine = _mock_predictive_engine(preds)
     proactive = _make_proactive(pred_engine)
 
-    results = await proactive.evaluate(limit=5)
+    results = await proactive.evaluate(limit=5, config=_no_quiet_hours_cfg())
     predictive = [r for r in results if r["id"].startswith("predictive_")]
     assert len(predictive) == 2
     ids = {r["id"] for r in predictive}
@@ -220,8 +228,7 @@ async def test_predictive_disabled_when_engine_disabled():
     pred_engine = _mock_predictive_engine([_make_prediction(severity="high")])
     proactive = _make_proactive(pred_engine)
 
-    cfg = dict(DEFAULT_CONFIG)
-    cfg["enabled"] = False
+    cfg = _no_quiet_hours_cfg(enabled=False)
 
     results = await proactive.evaluate(limit=5, config=cfg)
     assert len(results) == 0
@@ -240,6 +247,15 @@ async def test_briefing_includes_top_risk_in_attention():
     ])
     proactive = _make_proactive(pred_engine)
     ctx_engine = _mock_context_engine()
+
+    # Override quiet hours so evaluate runs at any time of day
+    _original_evaluate = proactive.evaluate
+
+    async def _evaluate_no_quiet(*args, **kwargs):
+        kwargs.setdefault("config", _no_quiet_hours_cfg())
+        return await _original_evaluate(*args, **kwargs)
+
+    proactive.evaluate = _evaluate_no_quiet
 
     with (
         patch("dash_backend.proactive.briefing.get_proactive_engine", return_value=proactive),
@@ -313,7 +329,7 @@ async def test_predictive_suggestion_payload_contains_risk_metadata():
     ])
     proactive = _make_proactive(pred_engine)
 
-    results = await proactive.evaluate(limit=5)
+    results = await proactive.evaluate(limit=5, config=_no_quiet_hours_cfg())
     sug = next(r for r in results if r["id"].startswith("predictive_"))
 
     payload = sug["payload"]
@@ -332,7 +348,7 @@ async def test_predictive_suggestion_evidence_in_payload():
     ])
     proactive = _make_proactive(pred_engine)
 
-    results = await proactive.evaluate(limit=5)
+    results = await proactive.evaluate(limit=5, config=_no_quiet_hours_cfg())
     sug = next(r for r in results if r["id"].startswith("predictive_"))
 
     assert "4 samples over 8h" in sug["payload"]["evidence"]
@@ -369,7 +385,7 @@ async def test_predictive_fills_remaining_slots_after_signals():
         predictive_engine=pred_engine,
     )
 
-    results = await proactive.evaluate(limit=3)
+    results = await proactive.evaluate(limit=3, config=_no_quiet_hours_cfg())
     # 2 predictive slots filled (no context signals from empty snapshot)
     assert len(results) == 2
     assert all(r["id"].startswith("predictive_") for r in results)
