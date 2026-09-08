@@ -49,6 +49,7 @@ from dash_backend.api.routes.legal import router as legal_router
 from dash_backend.api.routes.enhanced_features import router as enhanced_features_router
 from dash_backend.api.routes.phase2_features import router as phase2_features_router
 from dash_backend.api.routes.phase3_features import router as phase3_features_router
+from dash_backend.api.routes.phase4_features import router as phase4_features_router
 
 
 api_router = APIRouter()
@@ -311,4 +312,10 @@ api_router.include_router(
 api_router.include_router(
     phase3_features_router,
     tags=["features-v3"],
+)
+
+# Phase 4 features: advanced learning, project management, desktop advanced
+api_router.include_router(
+    phase4_features_router,
+    tags=["features-v4"],
 )

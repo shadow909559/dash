@@ -7,7 +7,7 @@ from typing import Optional
 
 from dash_backend.auth.dependencies import get_current_user
 
-router = APIRouter(prefix="/api/v1/phase3", tags=["Features V3"])
+router = APIRouter(prefix="/phase3", tags=["Features V3"])
 
 
 # ── Data Retention ─────────────────────────────────────────────────────────
