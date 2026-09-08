@@ -47,6 +47,7 @@ from dash_backend.api.routes.security import router as security_router
 from dash_backend.api.routes.privacy import router as privacy_router
 from dash_backend.api.routes.legal import router as legal_router
 from dash_backend.api.routes.enhanced_features import router as enhanced_features_router
+from dash_backend.api.routes.phase2_features import router as phase2_features_router
 
 
 api_router = APIRouter()
@@ -297,4 +298,10 @@ api_router.include_router(
 api_router.include_router(
     enhanced_features_router,
     tags=["enhanced"],
+)
+
+# Phase 2 features: email, security, voice, browser, collaboration, AI, infrastructure
+api_router.include_router(
+    phase2_features_router,
+    tags=["features-v2"],
 )

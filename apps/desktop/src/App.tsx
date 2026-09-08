@@ -34,6 +34,9 @@ const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const SystemMonitorPage = lazy(() => import("@/pages/SystemMonitorPage"));
 const VoicePage = lazy(() => import("@/pages/VoicePage"));
+const WorkflowBuilderPage = lazy(() => import("@/pages/WorkflowBuilderPage"));
+const TokenUsagePage = lazy(() => import("@/pages/TokenUsagePage"));
+const SecurityHardeningPage = lazy(() => import("@/pages/SecurityHardeningPage"));
 
 // Handle Electron IPC for audio stop (exposed via preload onAudioStopAll)
 const onAudioStopAll = window.electronAPI?.onAudioStopAll ?? null;
@@ -205,6 +208,9 @@ export function App() {
                   <Route path="/analytics" element={<Suspense fallback={<PageSkeleton />}><AnalyticsPage /></Suspense>} />
                   <Route path="/system-monitor" element={<Suspense fallback={<PageSkeleton />}><SystemMonitorPage /></Suspense>} />
                   <Route path="/settings" element={<Suspense fallback={<PageSkeleton />}><SettingsPage /></Suspense>} />
+                  <Route path="/workflows" element={<Suspense fallback={<PageSkeleton />}><WorkflowBuilderPage /></Suspense>} />
+                  <Route path="/token-usage" element={<Suspense fallback={<PageSkeleton />}><TokenUsagePage /></Suspense>} />
+                  <Route path="/security-hardening" element={<Suspense fallback={<PageSkeleton />}><SecurityHardeningPage /></Suspense>} />
                   <Route path="*" element={<Suspense fallback={<PageSkeleton />}><HomePage /></Suspense>} />
                 </Routes>
               </main>
