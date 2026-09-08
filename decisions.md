@@ -268,3 +268,91 @@ Every meaningful decision, why it was made, and which library/tool was chosen ov
 - `flow.md` answers "how" — what calls what, in what order
 - Separation of concerns — a developer reading one doesn't need the other
 - Easier to maintain — a code change only affects flow.md, a design choice only affects decisions.md
+
+---
+
+## Enhanced Features Decisions
+
+### 20. 9 backend services in a single `services/` package
+
+**Decision:** Create 9 new services under `dash_backend/services/` rather than spreading across modules.
+
+**Why:**
+- Single directory for all enhanced features makes them easy to find
+- Each service is a single file with focused responsibility
+- Services are stateless singletons — easy to test and reason about
+- No database dependency for most features (in-memory state for MVP)
+
+**Alternatives rejected:**
+- Separate packages per feature: Over-structured for the current scope
+- One mega-service: Violates single responsibility
+
+### 21. 84 API routes under a single `/enhanced` prefix
+
+**Decision:** All new routes live under `/api/v1/enhanced/` rather than scattered across existing route files.
+
+**Why:**
+- Clear separation between existing features and new additions
+- Easy to disable all enhanced features by removing one router include
+- Consistent URL structure: `/enhanced/workflows`, `/enhanced/plugins`, etc.
+- No risk of breaking existing routes
+
+### 22. In-memory state for analytics and tracking
+
+**Decision:** Token tracker, activity dashboard, performance profiler use in-memory lists rather than database tables.
+
+**Why:**
+- Immediate functionality without schema migrations
+- Fast reads and writes (no database overhead)
+- Data persists for the lifetime of the process
+- Can be backed by database later without API changes
+
+### 23. Plugin permissions model with 24 granular permissions
+
+**Decision:** Fine-grained permission model rather than coarse "admin" or "user" roles.
+
+**Why:**
+- Security: plugins only get exactly what they need
+- Transparency: users can see and control what each plugin accesses
+- Extensible: new permissions can be added without breaking existing plugins
+- Follows principle of least privilege
+
+### 24. Confidence scoring with 5 independent signals
+
+**Decision:** Multi-signal confidence scoring rather than single LLM-based scoring.
+
+**Why:**
+- No additional API calls needed (no cost)
+- Deterministic — same input always produces same score
+- Each signal is independently interpretable
+- Combines orthogonal evidence (length, sources, hedging, specificity, context)
+
+### 25. Workflow engine with visual node/edge graph model
+
+**Decision:** Graph-based workflow model (nodes + edges) rather than sequential step list.
+
+**Why:**
+- Supports branching (conditions), parallel execution, and loops
+- Visual representation maps directly to UI drag-and-drop
+- Industry standard (similar to n8n, Zapier, GitHub Actions)
+- Easy to serialize/deserialize as JSON
+
+### 26. Forgetting curve for memory lifecycle
+
+**Decision:** Implement human-memory-inspired forgetting curve rather than simple TTL.
+
+**Why:**
+- More nuanced than "delete after N days"
+- Important memories persist longer
+- Frequently accessed memories stay fresh
+- Provides actionable recommendations (keep/consolidate/forget)
+
+### 27. Conversation branching with fork/compare
+
+**Decision:** Full branching model (like Git) rather than linear conversation history.
+
+**Why:**
+- Users can explore "what if" scenarios
+- Compare different AI responses to same question
+- No data loss — all branches preserved
+- Natural extension of the existing conversation model

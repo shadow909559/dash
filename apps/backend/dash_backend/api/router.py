@@ -46,6 +46,7 @@ from dash_backend.executive.router import router as executive_router
 from dash_backend.api.routes.security import router as security_router
 from dash_backend.api.routes.privacy import router as privacy_router
 from dash_backend.api.routes.legal import router as legal_router
+from dash_backend.api.routes.enhanced_features import router as enhanced_features_router
 
 
 api_router = APIRouter()
@@ -290,4 +291,10 @@ api_router.include_router(
 api_router.include_router(
     legal_router,
     tags=["legal"],
+)
+
+# Enhanced features: export, shortcuts, analytics, workflows, plugins, knowledge graph, ensemble
+api_router.include_router(
+    enhanced_features_router,
+    tags=["enhanced"],
 )
