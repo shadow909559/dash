@@ -431,20 +431,30 @@ ipcMain.handle("app:quit", () => {
 });
 
 // ── Startup Settings ─────────────────────────────────────────────────────
+let startupPrefs: { openAtLogin: boolean; startMinimized: boolean; startAsOrb: boolean } = {
+  openAtLogin: false,
+  startMinimized: false,
+  startAsOrb: false,
+};
+
 ipcMain.handle("startup:set-settings", async (_, settings: { openAtLogin: boolean; startMinimized: boolean; startAsOrb: boolean }) => {
+  startupPrefs = { ...startupPrefs, ...settings };
   app.setLoginItemSettings({
     openAtLogin: settings.openAtLogin,
     openAsHidden: settings.startMinimized,
     path: process.execPath,
   });
+  console.log("[Main] Startup settings updated:", startupPrefs);
   return { ok: true };
 });
 
 ipcMain.handle("startup:get-settings", () => {
-  const settings = app.getLoginItemSettings();
+  const login = app.getLoginItemSettings();
   return {
-    openAtLogin: settings.openAtLogin,
-    openAsHidden: settings.openAsHidden,
+    openAtLogin: login.openAtLogin,
+    openAsHidden: login.openAsHidden,
+    startMinimized: login.openAsHidden,
+    startAsOrb: startupPrefs.startAsOrb,
   };
 });
 
@@ -660,6 +670,15 @@ function createWindow(): void {
 
 // ── App lifecycle ───────────────────────────────────────────────────────────
 
+// ── Startup flags ────────────────────────────────────────────────────────
+// The registry Run key launches DASH with `--hidden` (auto-start to tray).
+// The login-item settings may also request starting hidden/minimized.
+const launchHidden =
+  process.argv.includes("--hidden") ||
+  process.argv.includes("--start-minimized") ||
+  app.getLoginItemSettings().openAsHidden;
+console.log("[Main] launchHidden =", launchHidden, "argv =", process.argv.slice(1));
+
 app.whenReady().then(async () => {
   // Apply CSP and security headers before any windows are created
   applyCSP();
@@ -694,6 +713,16 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
+
+  // If launched with --hidden / start-minimized (auto-start at login),
+  // start in the background: hide the main window, keep it in the tray.
+  if (launchHidden && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+    if (systemTray) {
+      systemTray.enableBackgroundMode();
+    }
+    console.log("[Main] Started hidden (tray-only mode) — open from system tray");
+  }
 
   // Start periodic memory cleanup
   startMemoryCleanup();

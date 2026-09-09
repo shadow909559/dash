@@ -108,14 +108,14 @@ export class SystemTray {
     }
   }
 
-  private enableBackgroundMode(): void {
+  enableBackgroundMode(): void {
     if (this.mainWindow) {
       this.mainWindow.setSkipTaskbar(true);
       this.mainWindow.hide();
     }
   }
 
-  private disableBackgroundMode(): void {
+  disableBackgroundMode(): void {
     if (this.mainWindow) {
       this.mainWindow.setSkipTaskbar(false);
       this.mainWindow.show();

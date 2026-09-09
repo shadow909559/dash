@@ -17,8 +17,8 @@ export declare class SystemTray {
     private createTray;
     private createFallbackIcon;
     private restore;
-    private enableBackgroundMode;
-    private disableBackgroundMode;
+    enableBackgroundMode(): void;
+    disableBackgroundMode(): void;
     setWindow(mainWindow: BrowserWindow): void;
     destroy(): void;
 }

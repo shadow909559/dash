@@ -23,6 +23,8 @@ import {
   FileText,
   Eye,
   AlertTriangle,
+  Rocket,
+  Power,
 } from "lucide-react";
 import { GlassCard, StatusIndicator } from "@/components/ultron";
 import { PrivacySection } from "@/components/PrivacySection";
@@ -35,6 +37,42 @@ export const SettingsPage: React.FC = () => {
   );
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState("connection");
+  const [startup, setStartup] = useState({
+    openAtLogin: false,
+    startMinimized: false,
+    startAsOrb: false,
+  });
+  const [startupBusy, setStartupBusy] = useState(false);
+
+  // Load startup settings from Electron (login item) when available.
+  useEffect(() => {
+    const api = (window as any).electronAPI?.app?.startup;
+    if (api?.getSettings) {
+      api
+        .getSettings()
+        .then((s: any) => {
+          setStartup((prev) => ({
+            ...prev,
+            openAtLogin: !!s.openAtLogin,
+            startMinimized: !!s.startMinimized,
+            startAsOrb: !!s.startAsOrb,
+          }));
+        })
+        .catch(() => {});
+    }
+  }, []);
+
+  const updateStartup = useCallback(async (patch: Partial<typeof startup>) => {
+    const api = (window as any).electronAPI?.app?.startup;
+    if (!api?.setSettings) return;
+    setStartupBusy(true);
+    try {
+      const next = { ...startup, ...patch };
+      setStartup(next);
+      await api.setSettings(next);
+    } catch {}
+    setStartupBusy(false);
+  }, [startup]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -55,6 +93,7 @@ export const SettingsPage: React.FC = () => {
 
   const sections = [
     { id: "connection", label: "Connection", icon: Server },
+    { id: "startup", label: "Startup", icon: Rocket },
     { id: "ai", label: "AI Providers", icon: Cpu },
     { id: "voice", label: "Voice", icon: Mic },
     { id: "appearance", label: "Appearance", icon: Palette },
@@ -259,6 +298,154 @@ export const SettingsPage: React.FC = () => {
                   </div>
                 ))}
               </div>
+            </GlassCard>
+          </div>
+        )}
+
+        {activeSection === "startup" && (
+          <div>
+            <h2
+              style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: "var(--dash-text)",
+                marginBottom: 4,
+              }}
+            >
+              Startup
+            </h2>
+            <p
+              style={{
+                fontSize: 12,
+                color: "var(--dash-text-secondary)",
+                marginBottom: 20,
+              }}
+            >
+              Control how DASH launches when you sign in to Windows.
+            </p>
+
+            <GlassCard glow padding={18}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 14,
+                }}
+              >
+                <Power size={16} style={{ color: "var(--dash-accent)" }} />
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "var(--dash-text)",
+                  }}
+                >
+                  Auto-Start
+                </span>
+              </div>
+
+              {[
+                {
+                  key: "openAtLogin",
+                  title: "Launch at login",
+                  desc: "Start DASH automatically when you sign in to Windows.",
+                },
+                {
+                  key: "startMinimized",
+                  title: "Start minimized (tray)",
+                  desc: "Open in the background without showing a window. Reopen from the tray icon.",
+                },
+                {
+                  key: "startAsOrb",
+                  title: "Start as floating orb",
+                  desc: "Launch in compact orb mode instead of the full window.",
+                },
+              ].map((opt) => (
+                <div
+                  key={opt.key}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 16,
+                    padding: "12px 4px",
+                    borderBottom: "1px solid var(--dash-border-subtle)",
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "var(--dash-text)",
+                      }}
+                    >
+                      {opt.title}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "var(--dash-text-muted)",
+                        marginTop: 2,
+                      }}
+                    >
+                      {opt.desc}
+                    </div>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={!!(startup as any)[opt.key]}
+                    aria-label={opt.title}
+                    onClick={() =>
+                      updateStartup({
+                        [opt.key]: !(startup as any)[opt.key],
+                      } as any)
+                    }
+                    disabled={startupBusy}
+                    style={{
+                      minWidth: 44,
+                      height: 24,
+                      borderRadius: 12,
+                      border: "none",
+                      cursor: startupBusy ? "wait" : "pointer",
+                      background: (startup as any)[opt.key]
+                        ? "var(--dash-accent)"
+                        : "var(--dash-bg-subtle)",
+                      position: "relative",
+                      transition: "background var(--dash-transition-fast)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: 3,
+                        left: (startup as any)[opt.key] ? 24 : 3,
+                        width: 18,
+                        height: 18,
+                        borderRadius: "50%",
+                        background: "var(--dash-surface)",
+                        transition: "left var(--dash-transition-fast)",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+                      }}
+                    />
+                  </button>
+                </div>
+              ))}
+
+              <p
+                style={{
+                  fontSize: 11,
+                  color: "var(--dash-text-muted)",
+                  marginTop: 14,
+                  lineHeight: 1.5,
+                }}
+              >
+                Tip: if DASH is launched from the Windows Registry Run key with
+                <code style={{ fontFamily: "'JetBrains Mono', monospace" }}> --hidden</code>
+                , it always starts in the tray regardless of the toggle above.
+              </p>
             </GlassCard>
           </div>
         )}

@@ -388,3 +388,14 @@ Every meaningful decision, why it was made, and which library/tool was chosen ov
 **URLs:**
 - GitHub: `https://github.com/shadow909559/dash/releases/download/v1.0.0/DASH-v1.0.0.apk`
 - S3 backup: `https://dash-web-2026-909559.s3.ap-south-1.amazonaws.com/downloads/DASH-v1.0.0.apk`
+
+### 30. Auto-start: single registry entry + scheduled tasks + `--hidden` tray start
+
+**Decision:** One desktop auto-start entry (HKCU Run key → installed `DASH.exe --hidden`), plus 6 scheduled tasks for backend/Ollama/watchdog/cloud-connect, with the desktop app honoring `--hidden` to start in the tray.
+
+**Why:**
+- Previously the Startup folder and the Run key both launched different DASH builds → duplicate processes at logon
+- The installed app ignored `--hidden`, so it always popped a window at login
+- Bare `pythonw` in startup scripts resolves to the WindowsApps Store stub (inert non-interactively) — must use the full `AppData\Local\Python\bin\pythonw.exe` path
+- The `start` wrapper in bat files broke scheduled-task launches; `run-hidden.vbs` already runs them non-blocking, so direct invocation is correct
+- Electron `setLoginItemSettings` (the Run key) is what the new Settings > Startup toggles control, so the redundant Startup-folder shortcut was removed

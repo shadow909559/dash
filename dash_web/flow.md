@@ -279,6 +279,29 @@ Browser requests /features
 2. **`dash_web/src/pages/DownloadPage.tsx`** — Info box updated: both downloads hosted on GitHub Releases
 3. **`apps/mobile/app/.../AgentModeScreen.kt`** — Added missing `GlassCard` import (fixed pre-existing release build break)
 4. **`apps/backend/dash_backend/api/router.py`** — Registered `integrations_all_router` (73 new routes)
+5. **`apps/desktop/electron/main.ts`** — Auto-start: honor `--hidden` / `--start-minimized` argv and login-item `openAsHidden`; app now starts in the tray when launched by Windows at logon
+6. **`apps/desktop/electron/system_tray.ts`** — Made `enableBackgroundMode()` / `disableBackgroundMode()` public so main.ts can start tray-only
+7. **`apps/desktop/src/pages/SettingsPage.tsx`** — New **Startup** section: "Launch at login", "Start minimized (tray)", "Start as floating orb" toggles wired to Electron `startup:set-settings` IPC
+8. **`apps/desktop/src/electron.d.ts`** — Typed the `electronAPI.app.startup` bridge
+9. **`apps/backend/start-backend.ps1` / `tools/windows/run_core.ps1`** — Use full `C:\Users\Asus\AppData\Local\Python\bin\pythonw.exe` path (bare `pythonw` resolves to the WindowsApps Store stub, which is inert in non-interactive/scheduled-task sessions)
+10. **`scripts/setup-autostart.bat`** — DASH-Backend task now uses `run-hidden.vbs` + fixed `backend-startup.bat`
+
+### Windows Auto-Start Fixes (live on this machine)
+- **Removed duplicate Startup-folder shortcut** — `DASH Desktop.lnk` pointed at the dev build; the HKCU Run key (installed `DASH.exe --hidden`) is now the single desktop auto-start entry
+- **Re-registered 6 scheduled tasks** via `scripts/register-tasks.ps1` (admin): DASH-Backend, DASH-Ollama, DASH-Desktop, DASH-Watchdog, DASH-AutoConnect, DASH-AllServices — all `Ready`
+- **Fixed backend-startup.bat** — removed the `start` wrapper (run-hidden.vbs already runs it non-blocking) and hardcoded the real pythonw path; verified backend reaches `/health` OK through the exact task invocation
+- **Fixed Ollama task** — verified `ollama serve` responds on 11434
+- **Rebuilt & reinstalled the desktop app** — installed `DASH.exe` now contains the `--hidden` tray-start logic (verified in `app.asar`)
+
+### Auto-Start Verification Results
+| Component | Result |
+|-----------|--------|
+| Registry Run key (`DASH` → `DASH.exe --hidden`) | ✅ intact |
+| DASH-Backend task → backend-startup.bat → pythonw | ✅ backend healthy on :8000 |
+| DASH-Ollama task → `ollama serve` | ✅ v0.32.4 on :11434 |
+| DASH-Desktop task → `DASH.exe --hidden` | ✅ task Ready, exe has tray-start code |
+| DASH-Watchdog / DASH-AutoConnect / DASH-AllServices | ✅ registered, Ready |
+| Backend lifespan (executive worker, scheduler, sampler, etc.) | ✅ intact in main.py |
 
 ### Files Created
 1. **`apps/backend/dash_backend/services/oauth_social.py`** — OAuth social login (Google/GitHub/Microsoft): authorize URL, code exchange, account linking

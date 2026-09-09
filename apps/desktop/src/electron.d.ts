@@ -11,6 +11,21 @@ export interface ElectronAPI {
     getMode?: () => Promise<string>;
     onMaximizeChange?: (callback: (maximized: boolean) => void) => () => void;
   };
+  app?: {
+    startup?: {
+      setSettings: (settings: {
+        openAtLogin: boolean;
+        startMinimized: boolean;
+        startAsOrb: boolean;
+      }) => Promise<{ ok: boolean }>;
+      getSettings: () => Promise<{
+        openAtLogin: boolean;
+        openAsHidden: boolean;
+        startMinimized: boolean;
+        startAsOrb: boolean;
+      }>;
+    };
+  };
   onAudioStopAll?: (callback: () => void) => () => void;
 }
 

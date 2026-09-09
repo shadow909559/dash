@@ -5,6 +5,7 @@
 $LOG_DIR = "$env:LOCALAPPDATA\DASH\logs"
 $BACKEND_URL = "http://127.0.0.1:8000/health"
 $BACKEND_DIR = "C:\Users\Asus\Desktop\dash\apps\backend"
+$PYTHONW = "C:\Users\Asus\AppData\Local\Python\bin\pythonw.exe"
 
 # Create log directory
 New-Item -ItemType Directory -Path $LOG_DIR -Force | Out-Null
@@ -23,9 +24,9 @@ try {
     # Backend not running — start it
 }
 
-# Start the backend
+# Start the backend (full pythonw path — Store stub is inert non-interactively)
 Set-Location $BACKEND_DIR
-Start-Process -FilePath "pythonw" -ArgumentList "-m", "uvicorn", "dash_backend.main:app", "--host", "0.0.0.0", "--port", "8000" -WindowStyle Hidden -WorkingDirectory $BACKEND_DIR
+Start-Process -FilePath $PYTHONW -ArgumentList "-m", "uvicorn", "dash_backend.main:app", "--host", "0.0.0.0", "--port", "8000" -WindowStyle Hidden -WorkingDirectory $BACKEND_DIR
 
 # Wait for backend to come up
 $timeout = 30

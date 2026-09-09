@@ -30,9 +30,8 @@ echo.
 echo [2/4] Registering DASH-Backend (backend only, in case all-in-one fails)...
 schtasks /delete /tn "DASH-Backend" /f >nul 2>&1
 schtasks /create /tn "DASH-Backend" ^
-    /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"Set-Location 'C:\Users\Asus\Desktop\dash\apps\backend'; Start-Process pythonw '-m uvicorn dash_backend.main:app --host 0.0.0.0 --port 8000' -WindowStyle Hidden\"" ^
+    /tr "wscript.exe \"%USERPROFILE%\AppData\Local\DASH\scripts\run-hidden.vbs\" \"%USERPROFILE%\AppData\Local\DASH\scripts\backend-startup.bat\"" ^
     /sc onlogon ^
-    /rl highest ^
     /f
 echo       Done.
 
