@@ -12,7 +12,7 @@ export const config = {
   apiUrl: import.meta.env.VITE_DASH_API_URL || "",
   androidUrl:
     import.meta.env.VITE_DASH_ANDROID_URL ||
-    "https://github.com/shadow909559/dash/releases/tag/v1.0.0",  // APK upload pending
+    "https://github.com/shadow909559/dash/releases/download/v1.0.0/DASH-v1.0.0.apk",
   repoUrl: "https://github.com/shadow909559/dash",
   issuesUrl: "https://github.com/shadow909559/dash/issues",
 } as const;

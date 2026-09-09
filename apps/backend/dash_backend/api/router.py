@@ -50,6 +50,7 @@ from dash_backend.api.routes.enhanced_features import router as enhanced_feature
 from dash_backend.api.routes.phase2_features import router as phase2_features_router
 from dash_backend.api.routes.phase3_features import router as phase3_features_router
 from dash_backend.api.routes.phase4_features import router as phase4_features_router
+from dash_backend.api.routes.integrations_all import router as integrations_all_router
 
 
 api_router = APIRouter()
@@ -318,4 +319,10 @@ api_router.include_router(
 api_router.include_router(
     phase4_features_router,
     tags=["features-v4"],
+)
+
+# OAuth, Integrations, Voice Engine, Browser Automation, Push Notifications
+api_router.include_router(
+    integrations_all_router,
+    tags=["integrations"],
 )

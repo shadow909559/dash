@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.websocket.WebSocketManager
+import com.example.ui.components.GlassCard
 import com.example.ui.theme.*
 
 data class AgentGoal(

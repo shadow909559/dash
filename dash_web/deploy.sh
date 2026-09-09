@@ -1,77 +1,78 @@
 #!/bin/bash
-# DASH Website Deployment Script
-# Deploys the built website to AWS S3 and invalidates CloudFront cache.
-#
-# Prerequisites:
-#   - AWS CLI configured with appropriate permissions
-#   - Node.js installed
-#   - npm installed
-#
-# Environment variables (optional, have defaults):
-#   AWS_S3_BUCKET        - S3 bucket name (default: dash-web-2026-909559)
-#   AWS_REGION           - AWS region (default: ap-south-1)
-#   AWS_CF_DISTRIBUTION  - CloudFront distribution ID (optional)
-
+# DASH Website Deploy Script
+# Builds the website, uploads to S3, and creates/updates CloudFront distribution
 set -euo pipefail
 
-BUCKET="${AWS_S3_BUCKET:-dash-web-2026-909559}"
-REGION="${AWS_REGION:-ap-south-1}"
-CF_DIST="${AWS_CF_DISTRIBUTION:-}"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BUCKET="dash-web-2026-909559"
+REGION="ap-south-1"
+S3_WEBSITE="http://${BUCKET}.s3-website.${REGION}.amazonaws.com"
+S3_DIRECT="https://${BUCKET}.s3.${REGION}.amazonaws.com"
+DIST_DIR="dist"
 
-echo "=== DASH Website Deployment ==="
-echo "Bucket: $BUCKET"
-echo "Region: $REGION"
+echo "🔧 Building DASH website..."
+npm run build
 
-# Step 1: Install dependencies
-echo ""
-echo ">>> Step 1: Installing dependencies..."
-cd "$SCRIPT_DIR"
-npm install --silent
-
-# Step 2: TypeScript check
-echo ">>> Step 2: TypeScript check..."
-npx tsc -b
-
-# Step 3: Build
-echo ">>> Step 3: Building production bundle..."
-npx vite build
-
-# Step 4: Verify build
-echo ">>> Step 4: Verifying build..."
-if [ ! -f dist/index.html ]; then
-  echo "ERROR: dist/index.html not found"
+if [ ! -d "$DIST_DIR" ]; then
+  echo "❌ Build failed - dist/ not found"
   exit 1
 fi
-echo "Build verified: $(ls dist/ | wc -l) files"
 
-# Step 5: Upload to S3
-echo ">>> Step 5: Uploading to S3..."
-aws s3 sync dist/ "s3://$BUCKET" --region "$REGION" --delete
-echo "Upload complete"
+echo "📤 Uploading to S3..."
+aws s3 sync "$DIST_DIR" "s3://${BUCKET}" \
+  --delete \
+  --cache-control "public, max-age=31536000, immutable" \
+  --exclude "index.html" \
+  --exclude "*.html"
 
-# Step 6: Invalidate CloudFront (if configured)
-if [ -n "$CF_DIST" ]; then
-  echo ">>> Step 6: Invalidating CloudFront distribution $CF_DIST..."
-  aws cloudfront create-invalidation \
-    --distribution-id "$CF_DIST" \
-    --paths "/index.html" "/assets/*" "/*"
-  echo "Invalidation submitted"
+# Upload HTML files with no-cache
+aws s3 sync "$DIST_DIR" "s3://${BUCKET}" \
+  --exclude "*" \
+  --include "*.html" \
+  --cache-control "no-cache, no-store, must-revalidate"
+
+echo "🌐 S3 website: ${S3_WEBSITE}"
+echo "🔒 S3 HTTPS:   ${S3_DIRECT}/index.html"
+
+# Check if CloudFront distribution exists
+EXISTING=$(aws cloudfront list-distributions --query "DistributionList.Items[?Comment=='DASH Website - HTTPS via CloudFront'].Id" --output text 2>/dev/null || echo "NONE")
+
+if [ "$EXISTING" = "NONE" ] || [ -z "$EXISTING" ]; then
+  echo ""
+  echo "📡 Creating CloudFront distribution..."
+  RESULT=$(aws cloudfront create-distribution --distribution-config file://cloudfront-config.json 2>&1) || {
+    echo ""
+    echo "⚠️  CloudFront creation failed."
+    echo "   This usually means the AWS account needs verification."
+    echo ""
+    echo "   To fix:"
+    echo "   1. Go to https://console.aws.amazon.com/support/home#/"
+    echo "   2. Click 'Account support' or 'Service limit increase'"
+    echo "   3. Request CloudFront distribution creation"
+    echo "   4. Once approved, run this script again"
+    echo ""
+    echo "   The website is still accessible at:"
+    echo "   HTTP:  ${S3_WEBSITE}"
+    echo "   HTTPS: ${S3_DIRECT}/index.html"
+    exit 0
+  }
+
+  DIST_ID=$(echo "$RESULT" | grep -o '"Id": "[^"]*"' | head -1 | cut -d'"' -f4)
+  DIST_DOMAIN=$(echo "$RESULT" | grep -o '"DomainName": "[^"]*"' | head -1 | cut -d'"' -f4)
+  echo "✅ CloudFront distribution created!"
+  echo "   ID:     ${DIST_ID}"
+  echo "   Domain: https://${DIST_DOMAIN}"
+  echo ""
+  echo "⏳ Distribution takes 15-30 minutes to deploy."
+  echo "   Check status: aws cloudfront get-distribution --id ${DIST_ID} --query 'Distribution.Status'"
 else
-  echo ">>> Step 6: Skipped (no CloudFront distribution ID configured)"
+  echo ""
+  echo "📡 CloudFront distribution exists: ${EXISTING}"
+  echo "🔄 Creating invalidation..."
+  aws cloudfront create-invalidation --distribution-id "$EXISTING" --paths "/*" --query "Invalidation.{Id:Id,Status:Status}" --output table
+  echo "✅ Invalidation submitted. Changes propagate in 5-15 minutes."
 fi
 
-# Step 7: Report
-WEBSITE_URL="http://$BUCKET.s3-website.$REGION.amazonaws.com"
-S3_URL="https://$BUCKET.s3.$REGION.amazonaws.com"
 echo ""
-echo "=== Deployment Complete ==="
-echo "S3 Direct:  $S3_URL/index.html"
-echo "Website:    $WEBSITE_URL"
-if [ -n "$CF_DIST" ]; then
-  CF_DOMAIN=$(aws cloudfront get-distribution --id "$CF_DIST" --query "Distribution.DomainName" --output text 2>/dev/null || echo "unknown")
-  echo "CloudFront: https://$CF_DOMAIN"
-fi
-echo ""
-echo "Note: CloudFront requires account verification for new distributions."
-echo "      Visit https://console.aws.amazon.com/support/ to verify your account."
+echo "🎉 Deploy complete!"
+echo "   HTTP:  ${S3_WEBSITE}"
+echo "   HTTPS: ${S3_DIRECT}/index.html"

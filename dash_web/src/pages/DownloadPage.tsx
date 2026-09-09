@@ -154,7 +154,7 @@ export function DownloadPage() {
             />
             <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
               <strong style={{ color: "var(--text-primary)" }}>
-                Downloads are hosted on GitHub Releases.
+                Both downloads are hosted on GitHub Releases.
               </strong>{" "}
               DASH is open source. You can also build from source by cloning the{" "}
               <a href={config.repoUrl} target="_blank" rel="noopener noreferrer">

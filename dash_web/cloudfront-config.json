@@ -1,26 +1,29 @@
 {
-  "CallerReference": "dash-web-2026-909559",
-  "Comment": "DASH Website",
-  "Enabled": true,
-  "DefaultRootObject": "index.html",
+  "CallerReference": "dash-web-deploy-2026",
   "Origins": {
     "Quantity": 1,
     "Items": [
       {
-        "Id": "S3-dash-web-2026-909559",
-        "DomainName": "dash-web-2026-909559.s3.ap-south-1.amazonaws.com",
-        "S3OriginConfig": {
-          "OriginAccessIdentity": ""
+        "Id": "S3-dash-web",
+        "DomainName": "dash-web-2026-909559.s3-website.ap-south-1.amazonaws.com",
+        "CustomOriginConfig": {
+          "HTTPPort": 80,
+          "HTTPSPort": 443,
+          "OriginProtocolPolicy": "http-only",
+          "OriginSslProtocols": {
+            "Quantity": 1,
+            "Items": ["TLSv1.2"]
+          }
         }
       }
     ]
   },
   "DefaultCacheBehavior": {
-    "TargetOriginId": "S3-dash-web-2026-909559",
+    "TargetOriginId": "S3-dash-web",
     "ViewerProtocolPolicy": "redirect-to-https",
     "AllowedMethods": {
-      "Quantity": 2,
-      "Items": ["GET", "HEAD"],
+      "Quantity": 7,
+      "Items": ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"],
       "CachedMethods": {
         "Quantity": 2,
         "Items": ["GET", "HEAD"]
@@ -28,32 +31,43 @@
     },
     "ForwardedValues": {
       "QueryString": false,
-      "Cookies": { "Forward": "none" },
-      "Headers": { "Quantity": 0 },
-      "QueryStringCacheKeys": { "Quantity": 0 }
+      "Cookies": { "Forward": "none" }
     },
     "MinTTL": 0,
     "DefaultTTL": 86400,
     "MaxTTL": 31536000,
-    "Compress": true,
-    "TrustedSigners": { "Enabled": false, "Quantity": 0 }
+    "Compress": true
+  },
+  "CacheBehaviors": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "PathPattern": "/assets/*",
+        "TargetOriginId": "S3-dash-web",
+        "ViewerProtocolPolicy": "redirect-to-https",
+        "AllowedMethods": {
+          "Quantity": 2,
+          "Items": ["GET", "HEAD"],
+          "CachedMethods": { "Quantity": 2, "Items": ["GET", "HEAD"] }
+        },
+        "ForwardedValues": { "QueryString": false, "Cookies": { "Forward": "none" } },
+        "MinTTL": 0,
+        "DefaultTTL": 2592000,
+        "MaxTTL": 31536000,
+        "Compress": true
+      }
+    ]
   },
   "CustomErrorResponses": {
     "Quantity": 2,
     "Items": [
-      {
-        "ErrorCode": 403,
-        "ResponsePagePath": "/index.html",
-        "ResponseCode": "200",
-        "ErrorCachingMinTTL": 10
-      },
-      {
-        "ErrorCode": 404,
-        "ResponsePagePath": "/index.html",
-        "ResponseCode": "200",
-        "ErrorCachingMinTTL": 10
-      }
+      { "ErrorCode": 403, "ResponsePagePath": "/index.html", "ResponseCode": "200", "ErrorCachingMinTTL": 10 },
+      { "ErrorCode": 404, "ResponsePagePath": "/index.html", "ResponseCode": "200", "ErrorCachingMinTTL": 10 }
     ]
   },
+  "Enabled": true,
+  "Comment": "DASH Website - HTTPS via CloudFront",
+  "DefaultRootObject": "index.html",
+  "HttpVersion": "http2and3",
   "PriceClass": "PriceClass_200"
 }
