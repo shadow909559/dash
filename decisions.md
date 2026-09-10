@@ -1,358 +1,315 @@
-# DASH Website — Decisions Log
+# DASH — Decision Log
 
-Every meaningful decision, why it was made, and which library/tool was chosen over alternatives.
-
----
-
-## Architecture Decisions
-
-### 1. React + TypeScript + Vite (not Next.js, not plain HTML)
-
-**Decision:** Use React 19 with TypeScript and Vite as the build tool.
-
-**Why:**
-- The DASH desktop app already uses React + TypeScript, so the team has consistency
-- Vite provides sub-second HMR and fast builds (~7s for production)
-- TypeScript catches type errors at build time, preventing runtime bugs
-- React Router v7 handles client-side routing without a server
-
-**Alternatives rejected:**
-- Next.js: Overkill for a static site, adds SSR complexity, requires Node server
-- Plain HTML: No component reuse, no type safety, tedious to maintain 21+ pages
-- CRA: Deprecated, slower builds, no longer maintained
+Every meaningful technical decision, why it was made, and what alternatives were considered.
 
 ---
 
-### 2. Inline styles over CSS-in-JS or Tailwind
+## 1. Proactive Intelligence Engine — Signal-Based Architecture
 
-**Decision:** Use inline `style={{}}` objects with CSS custom properties for theming.
+**Decision:** Use a `Signal` dataclass with id/category/title/message/importance/payload, detected by `detect_signals()` from an `EnvironmentContext` snapshot, rather than polling individual subsystems.
 
-**Why:**
-- Zero runtime overhead — styles are plain objects, not parsed at runtime
-- No CSS-in-JS bundle cost (no styled-components, emotion, etc.)
-- CSS custom properties (`var(--accent)`, `var(--border)`) handle theming centrally
-- Components are self-contained — no CSS class name conflicts
-- The site is small enough that inline styles don't become unmaintainable
+**Why:** A snapshot-then-detect pattern means one call gathers all context (device, project, activity), and the signal detectors are pure functions over that snapshot. This is testable, deterministic, and avoids N+1 database queries. An alternative would have been event-driven (subscribe to state changes), but signals are ephemeral — they only matter when the user asks for suggestions, not in real time.
 
-**Alternatives rejected:**
-- Tailwind: Adds a build dependency, class soup in JSX, harder to read
-- styled-components: Runtime cost, SSR complexity, bundle bloat
-- CSS Modules: Good but requires separate files, breaks component colocation
+**Files:** `dash_backend/proactive/signals.py`, `dash_backend/proactive/engine.py`
 
 ---
 
-### 3. lucide-react for icons
+## 2. ProactiveEngine — Threshold + Cooldown + Dedup Gating
 
-**Decision:** Use `lucide-react` for all icons.
+**Decision:** Suggestions pass through three gates: importance threshold (default 0.55), per-signal cooldown (default 120 min), and session-level dedup (seen set cleared each evaluate call).
 
-**Why:**
-- Tree-shakeable — only used icons are bundled
-- Consistent design language (all icons share the same stroke weight)
-- Already used in the DASH desktop app
-- MIT licensed, no attribution required
-- 1000+ icons, covering all needs
+**Why:** Without gating, the same low-importance signal would appear on every 30-second poll. Cooldown prevents nagging. Dedup prevents duplicates within one request. Threshold filters noise. This matches the spec's requirement for "respectful" proactive behavior. The alternative was a simpler "show all" approach, but that would overwhelm users.
 
-**Alternatives rejected:**
-- react-icons: Larger bundle, inconsistent icon styles
-- heroicons: Fewer icons, tied to Tailwind ecosystem
-- Custom SVGs: Tedious to maintain, no consistency
+**File:** `dash_backend/proactive/engine.py` — `evaluate()`
 
 ---
 
-### 4. No analytics, no tracking, no cookies
+## 3. ProactiveState — Disk-Persisted Cooldown File
 
-**Decision:** The public website does not use Google Analytics, Mixpanel, Plausible, or any tracking.
+**Decision:** Store signal shown-times in a JSON file at `%LOCALAPPDATA%/DASH/proactive_state.json` rather than in SQLite.
 
-**Why:**
-- DASH is a privacy-first product — tracking visitors would contradict the product's values
-- The privacy policy states "No Tracking: DASH does not use cookies, analytics, or tracking"
-- Cookie banner exists purely for completeness and legal compliance
-- No third-party scripts = faster page loads, smaller attack surface
+**Why:** The proactive state is ephemeral and doesn't need ACID transactions. A JSON file is faster for reads, simpler to debug, and survives database resets. It also avoids schema migrations for a feature that's purely operational state.
 
-**Alternatives rejected:**
-- Google Analytics: Privacy concerns, GDPR consent burden, external dependency
-- Plausible: Better privacy, but still unnecessary for a product site
-- Hotjar: Session recording contradicts privacy-first stance
+**File:** `dash_backend/proactive/state.py`
 
 ---
 
-### 5. Static site (no backend for the website)
+## 4. Predictive Engine — Least-Squares Trend Detection
 
-**Decision:** The website is a static SPA deployed to S3, with no server-side logic.
+**Decision:** Use numpy's `polyfit` (degree 1) for linear regression on device sample history, rather than a more complex time-series model.
 
-**Why:**
-- DASH already has a backend (FastAPI) for the desktop app — no need to duplicate
-- Static sites are infinitely scalable, cheap to host, and impossible to crash
-- S3 + CloudFront handles millions of requests at near-zero cost
-- No server means no server maintenance, no patches, no downtime
+**Why:** DASH samples device metrics every 5 minutes, giving ~288 points/day. A simple linear trend with R² confidence is sufficient to detect "disk is filling up" or "RAM usage is climbing." More complex models (ARIMA, exponential smoothing) would add dependencies for marginal accuracy gains on this data volume. The trend analysis is supplementary — it's used for predictions, not critical decisions.
 
-**Alternatives rejected:**
-- Vercel/Netlify: Work well but add external dependencies for a simple static site
-- Custom server: Unnecessary complexity, hosting costs, maintenance burden
+**File:** `dash_backend/predictive/engine.py` — `_device_predictions()`
 
 ---
 
-### 6. S3 + CloudFront for deployment
+## 5. PredictiveEngine — SampleStore with Rolling Window
 
-**Decision:** Deploy to AWS S3 with CloudFront CDN for HTTPS and global distribution.
+**Decision:** Keep device samples in a JSON file with a 7-day rolling window (max 2016 samples at 5-min intervals), capped at 2 MB.
 
-**Why:**
-- S3 static website hosting is free (you only pay for storage and transfer)
-- CloudFront provides HTTPS, CDN caching, and SPA fallback (403/404 → index.html)
-- AWS is already used for DASH backend hosting
-- The `dash-web` IAM user has minimal permissions (S3 + CloudFront only)
+**Why:** A rolling window prevents unbounded disk growth. 7 days provides enough history for meaningful trend detection (e.g., "disk usage increased 2% this week"). JSON was chosen over SQLite because samples are append-only, rarely queried by index, and the entire file is read for trend analysis anyway.
 
-**Alternatives rejected:**
-- GitHub Pages: Free but no HTTPS customization, limited headers
-- Vercel: Good but adds a dependency on another platform
-- Self-hosted: Unnecessary for a static site
+**File:** `dash_backend/predictive/sampler.py`
 
 ---
 
-### 7. Separate IAM user for website deployment
+## 6. DeviceSampler — Background Task with Configurable Interval
 
-**Decision:** Created a dedicated `dash-web` IAM user with only S3 and CloudFront permissions.
+**Decision:** Run the device sampler as an `asyncio.create_task` with a minimum interval of 30 seconds (overridable for tests), started during app lifespan.
 
-**Why:**
-- Principle of least privilege — the website deployer can't access the DASH backend
-- Compromising the website deploy key doesn't compromise the whole AWS account
-- Easy to rotate credentials without affecting other services
-- ARN: `arn:aws:iam::752651103716:user/dash-web`
+**Why:** The sampler needs to run continuously in the background without blocking request handlers. `asyncio.create_task` is the standard FastAPI pattern for background work. The 30-second floor prevents test files from spamming the sampler during full test runs. An alternative was a periodic scheduler (like APScheduler), but the app already uses APScheduler for automation rules — adding another scheduler instance would be wasteful.
+
+**File:** `dash_backend/predictive/sampler.py`
 
 ---
 
-### 8. SPA fallback via CloudFront error pages
+## 7. Predictive→Proactive Integration — Fill Remaining Slots
 
-**Decision:** Configure CloudFront to return `index.html` for 403/404 errors.
+**Decision:** Predictive risks fill remaining suggestion slots after proactive signals, never competing for the same limit.
 
-**Why:**
-- React Router uses client-side routing (e.g., `/features`, `/download`)
-- Direct navigation to these URLs returns 404 from S3 (no server-side routing)
-- CloudFront error page override maps 403/404 → `index.html`, letting React Router handle the route
-- Real 404s are handled by the React `<NotFoundPage />` component
+**Why:** Proactive signals are immediate and actionable ("you have uncommitted work"). Predictive risks are forward-looking and informational ("disk will fill in 3 days"). Users should see actionable items first, with predictive risks as supplementary context. If predictive risks competed for slots, a high-severity prediction could push out a more actionable suggestion.
+
+**File:** `dash_backend/proactive/engine.py` — `_append_predictive_suggestions()`
 
 ---
 
-### 9. Vite path aliases (`@/`)
+## 8. Severity-to-Importance Mapping for Predictions
 
-**Decision:** Use `@/` as a path alias for `./src/` in TypeScript imports.
+**Decision:** Map prediction severity to proactive importance: `high` → 0.8, `warning` → 0.65, `info` → 0.45.
 
-**Why:**
-- Eliminates deep relative imports (`../../components/Header` → `@/components/Header`)
-- Standard convention in React projects
-- Configured in both `vite.config.ts` and `tsconfig.json` for IDE support
+**Why:** The proactive system uses a 0-1 importance scale. Predictions use severity strings. The mapping ensures that `info` predictions (0.45) are filtered by the default 0.55 threshold — users only see predictions they'd care about. `high` predictions always pass. This was tuned so that the system isn't noisy but doesn't miss critical risks.
 
----
-
-## UI/UX Decisions
-
-### 10. Dark theme only (no light mode toggle)
-
-**Decision:** The website is dark-only with a `#0a0a0f` base.
-
-**Why:**
-- DASH is a developer tool / AI OS — dark is the expected aesthetic
-- The spec explicitly says "dark, technical, mature, minimal, engineered"
-- Avoids the complexity of maintaining two themes
-- `color-scheme: dark` in meta tag tells the browser to use dark scrollbars, form controls, etc.
+**File:** `dash_backend/proactive/engine.py`
 
 ---
 
-### 11. JetBrains Mono + Inter fonts
+## 9. Briefing — Top Risk vs. Full Prediction List
 
-**Decision:** Use JetBrains Mono for code/technical content, Inter for body text.
+**Decision:** Show only the single highest-importance predictive risk in the briefing, not a full list.
 
-**Why:**
-- JetBrains Mono: Designed for code, excellent readability, ligatures
-- Inter: Designed for screens, excellent readability at all sizes
-- Both are free (Google Fonts), open source
-- Loaded via Google Fonts CDN with `preconnect` for performance
+**Why:** The briefing is designed to be scannable in under 30 seconds. A single "Top risk:" line with severity, title, and horizon is more useful than a list of 5 predictions. Full predictions are available via `/predictive/risks`. The alternative was showing all predictions, but that would make the briefing too long.
+
+**File:** `dash_backend/proactive/briefing.py` — `_extract_top_risk()`, `format_briefing()`
 
 ---
 
-### 12. No images, all vector icons
+## 10. Briefing Trend Lines — Least-Squares with Confidence
 
-**Decision:** Use lucide-react SVG icons instead of raster images.
+**Decision:** Show trend direction (rising/falling/stable) with a confidence indicator based on history span, using linear regression.
 
-**Why:**
-- Zero images means zero `<img>` tags, zero alt text issues, zero lazy loading
-- SVGs scale perfectly at any resolution
-- Smaller bundle than raster images
-- Consistent with the "no fake stock photos" requirement
+**Why:** Users need to know *what's happening* (RAM is rising) and *how confident* we are (based on 3 days of data vs. 3 hours). The confidence indicator prevents false alarms from short data spans. An alternative was percentage-based ("RAM increased 5%"), but that doesn't indicate direction or predict future behavior.
 
-**Exception:** `og-image.png` is a raster image for OpenGraph previews (required by social platforms).
+**File:** `dash_backend/proactive/briefing.py` — `_trend_lines()`
 
 ---
 
-### 13. Skip-to-content link
+## 11. Typed Memory — Five Canonical Types
 
-**Decision:** Include a visually hidden "Skip to content" link at the top of the page.
+**Decision:** Define exactly 5 memory types: `personal`, `preference`, `project`, `decision`, `experience`. Use a `type_map` for bidirectional normalization.
 
-**Why:**
-- WCAG 2.1 requirement for keyboard navigation
-- Allows screen reader users to skip the navigation and go directly to content
-- Hidden by default, visible on focus (keyboard navigation)
+**Why:** The spec calls for typed memory (Part 9-10). Five types cover all use cases without being so granular that users are confused about which to use. The type_map allows `"personal"` and `"Personal"` to resolve to the same internal type, preventing bugs from inconsistent casing.
 
----
-
-### 14. Cookie banner that says "no cookies"
-
-**Decision:** Display a cookie consent banner that explains DASH does NOT use cookies.
-
-**Why:**
-- Legal compliance — many jurisdictions require cookie consent banners
-- Honesty — telling users "we don't track you" builds trust
-- The banner has a single "Understood" button, no "Accept All" / "Reject All" complexity
-- Dismissal state is saved in localStorage so it only shows once
+**File:** `dash_backend/memory/service.py`
 
 ---
 
-### 15. Contact form submits to `/thank-you` (no backend)
+## 12. Remember Decision Flow — Structured Memory Record
 
-**Decision:** The contact form shows a loading state, then redirects to a thank-you page.
+**Decision:** `remember_decision()` creates a memory with structured content: "Decision: {decision}. Rationale: {rationale}. Alternatives considered: {alternatives}."
 
-**Why:**
-- The website is static — there's no backend to receive form submissions
-- A proper implementation would use a form service (Formspree, Netlify Forms)
-- The UX is honest — the user sees a clear "Message received" confirmation
-- Contact details (phone, email) are provided as alternatives
+**Why:** Decisions need context to be useful later. A flat string "we chose SQLite" is less useful than "Decision: Use SQLite. Rationale: Faster to iterate. Alternatives: PostgreSQL, MySQL." The structured format enables `get_continue_context()` to parse and present decisions clearly.
+
+**File:** `dash_backend/memory/service.py`
 
 ---
 
-## Security Decisions
+## 13. Continue Work Flow — Work Context Records
 
-### 16. CSP meta tag in index.html
+**Decision:** `record_work_context()` stores task/progress/blockers/next_steps as a single memory, and `get_continue_context()` retrieves the most recent ones filtered by project.
 
-**Decision:** Add Content Security Policy via `<meta>` tag.
+**Why:** "Continue where we left off" needs to know what was being done, what's done, what's blocking, and what's next. Storing this as a single memory (rather than separate fields) keeps the schema simple and allows the LLM to parse it naturally. Filtering by project_id ensures relevant context for multi-project users.
 
-**Why:**
-- Prevents XSS attacks by restricting script sources to `'self'`
-- Prevents clickjacking via `frame-ancestors: 'none'`
-- Prevents form hijacking via `form-action: 'self'`
-- No inline scripts allowed (`script-src 'self'`)
-- `'unsafe-inline'` is only allowed for styles (required by React)
+**File:** `dash_backend/memory/service.py`
 
 ---
 
-### 17. No API keys in frontend
+## 14. Memory — Confidence Score (0.0–1.0)
 
-**Decision:** All configuration uses `import.meta.env.VITE_*` variables with no hardcoded secrets.
+**Decision:** Add a `confidence` float column to Memory, defaulting to 0.5, clamped to [0.0, 1.0].
 
-**Why:**
-- Frontend code is public — any `VITE_*` variable is visible in the browser
-- The `.env.example` file shows what variables are needed without actual values
-- No AWS keys, no database credentials, no API tokens in source code
+**Why:** Not all memories are equally reliable. A user-stated preference ("I prefer dark mode") has higher confidence than an inferred fact. The confidence score enables retrieval to weight reliable memories higher. Default 0.5 is neutral — neither trusted nor suspect.
 
----
-
-### 18. Download URLs point to GitHub releases
-
-**Decision:** Download buttons link to `https://github.com/shadow909559/dash/releases/latest`.
-
-**Why:**
-- GitHub releases are free, secure, and bandwidth-friendly
-- HTTPS is enforced by GitHub
-- Release integrity is verified by GitHub's checksum system
-- No need to host large binaries on S3
+**File:** `dash_backend/db/models/memory.py`
 
 ---
 
-## Documentation Decisions
+## 15. Memory — Project Association
 
-### 19. decisions.md and flow.md as separate files
+**Decision:** Add a nullable `project_id` UUID column to Memory for project-scoped memories.
 
-**Decision:** Create two documentation files rather than one combined document.
+**Why:** Users work on multiple projects. A memory about "use TypeScript" is relevant to the TypeScript project but noise for a Python project. Project scoping enables `get_continue_context(project_id)` to return only relevant work state.
 
-**Why:**
-- `decisions.md` answers "why" — what was decided and why
-- `flow.md` answers "how" — what calls what, in what order
-- Separation of concerns — a developer reading one doesn't need the other
-- Easier to maintain — a code change only affects flow.md, a design choice only affects decisions.md
+**File:** `dash_backend/db/models/memory.py`
 
 ---
 
-## Enhanced Features Decisions
+## 16. Session Lifecycle — Hashed Refresh Tokens
 
-### 20. 9 backend services in a single `services/` package
+**Decision:** Store refresh tokens as SHA-256 hashes in the database, never raw.
 
-**Decision:** Create 9 new services under `dash_backend/services/` rather than spreading across modules.
+**Why:** If the database is compromised, hashed tokens are useless to attackers. Raw refresh tokens grant full account access. This is a standard security practice (same approach as OAuth 2.0 token storage). The hash is fast enough for the single lookup needed during token refresh.
 
-**Why:**
-- Single directory for all enhanced features makes them easy to find
-- Each service is a single file with focused responsibility
-- Services are stateless singletons — easy to test and reason about
-- No database dependency for most features (in-memory state for MVP)
+**File:** `dash_backend/db/models/session.py`, `dash_backend/auth/session_service.py`
 
-**Alternatives rejected:**
-- Separate packages per feature: Over-structured for the current scope
-- One mega-service: Violates single responsibility
+---
 
-### 21. 84 API routes under a single `/enhanced` prefix
+## 17. Session Revocation — Per-Session and Bulk
 
-**Decision:** All new routes live under `/api/v1/enhanced/` rather than scattered across existing route files.
+**Decision:** Support both `revoke_session(id)` and `revoke_all_sessions()` endpoints.
 
-**Why:**
-- Clear separation between existing features and new additions
-- Easy to disable all enhanced features by removing one router include
-- Consistent URL structure: `/enhanced/workflows`, `/enhanced/plugins`, etc.
-- No risk of breaking existing routes
+**Why:** Per-session revocation lets users remove a specific compromised device. Bulk revocation is essential for "I think my account is hacked" scenarios. Both are needed for a complete security story.
 
-### 22. In-memory state for analytics and tracking
+**File:** `dash_backend/api/routes/security.py`, `dash_backend/auth/session_service.py`
 
-**Decision:** Token tracker, activity dashboard, performance profiler use in-memory lists rather than database tables.
+---
 
-**Why:**
-- Immediate functionality without schema migrations
-- Fast reads and writes (no database overhead)
-- Data persists for the lifetime of the process
-- Can be backed by database later without API changes
+## 18. Privacy Policy — Local-by-Default, Cloud-Opt-In
 
-### 23. Plugin permissions model with 24 granular permissions
+**Decision:** Clearly state that DASH processes data locally by default, and cloud AI providers only receive data when explicitly configured by the user.
 
-**Decision:** Fine-grained permission model rather than coarse "admin" or "user" roles.
+**Why:** This is the honest truth — DASH's default config uses Ollama (local). The privacy policy must accurately reflect actual behavior. Section 3.1 was initially misleading ("All data processing occurs on your local machine" without qualification). Fixed to "By default, DASH processes all data on your local machine. DASH does not send your personal data to any external service unless you explicitly configure a cloud AI provider."
 
-**Why:**
-- Security: plugins only get exactly what they need
-- Transparency: users can see and control what each plugin accesses
-- Extensible: new permissions can be added without breaking existing plugins
-- Follows principle of least privilege
+**File:** `dash_backend/legal/privacy.py`
 
-### 24. Confidence scoring with 5 independent signals
+---
 
-**Decision:** Multi-signal confidence scoring rather than single LLM-based scoring.
+## 19. Legal Documents — Backend-Served Markdown
 
-**Why:**
-- No additional API calls needed (no cost)
-- Deterministic — same input always produces same score
-- Each signal is independently interpretable
-- Combines orthogonal evidence (length, sources, hedging, specificity, context)
+**Decision:** Serve legal documents as Python string constants in `dash_backend/legal/*.py`, exposed via API routes, not as static HTML files.
 
-### 25. Workflow engine with visual node/edge graph model
+**Why:** Backend-served documents can be versioned programmatically, tested for accuracy, and served with proper content-type headers. They're part of the application logic, not static assets. An alternative was serving from `/static/`, but that would bypass the API layer and make versioning harder.
 
-**Decision:** Graph-based workflow model (nodes + edges) rather than sequential step list.
+**Files:** `dash_backend/legal/privacy.py`, `dash_backend/legal/terms.py`, `dash_backend/legal/accessibility.py`, `dash_backend/api/routes/legal.py`
 
-**Why:**
-- Supports branching (conditions), parallel execution, and loops
-- Visual representation maps directly to UI drag-and-drop
-- Industry standard (similar to n8n, Zapier, GitHub Actions)
-- Easy to serialize/deserialize as JSON
+---
 
-### 26. Forgetting curve for memory lifecycle
+## 20. Legal Endpoints — No Authentication Required
 
-**Decision:** Implement human-memory-inspired forgetting curve rather than simple TTL.
+**Decision:** Legal document endpoints (`/legal/*`) require no authentication.
 
-**Why:**
-- More nuanced than "delete after N days"
-- Important memories persist longer
-- Frequently accessed memories stay fresh
-- Provides actionable recommendations (keep/consolidate/forget)
+**Why:** Users must be able to read the privacy policy and terms before creating an account. Requiring auth to read the terms would be a catch-22. This matches standard practice for privacy policies (spec Part 35).
 
-### 27. Conversation branching with fork/compare
+**File:** `dash_backend/api/routes/legal.py`
 
-**Decision:** Full branching model (like Git) rather than linear conversation history.
+---
 
-**Why:**
-- Users can explore "what if" scenarios
-- Compare different AI responses to same question
-- No data loss — all branches preserved
-- Natural extension of the existing conversation model
+## 21. Command Center — Promise.allSettled for Panel Resilience
+
+**Decision:** Use `Promise.allSettled()` instead of `Promise.all()` when fetching Command Center data from 5 endpoints.
+
+**Why:** If one endpoint fails (e.g., backend is partially down), the other panels should still render. `Promise.all()` would fail the entire page. `Promise.allSettled()` lets each panel handle its own loading/error state independently.
+
+**File:** `apps/desktop/src/pages/CommandCenterPage.tsx`
+
+---
+
+## 22. Command Center — Quick-Create Goal Form
+
+**Decision:** Add an inline goal creation form directly in the Command Center, not a modal or separate page.
+
+**Why:** The Command Center is the "at-a-glance" view. Forcing users to navigate to `/planner` to create a goal breaks the flow. An inline form (expand/collapse) keeps the user in context. The form is deliberately minimal (name, priority, deadline) — full editing happens on the goals page.
+
+**File:** `apps/desktop/src/pages/CommandCenterPage.tsx`
+
+---
+
+## 23. Sidebar Badges — Combined Dashboard Badge
+
+**Decision:** Show a single combined badge on the Dashboard nav item (deadlines + suggestions), not separate badges on multiple items.
+
+**Why:** Separate badges on multiple nav items would create visual noise. A single badge on the home icon draws attention to "there's something to look at" without cluttering the sidebar. The badge color shifts based on urgency (deadlines = warning, suggestions only = accent-secondary).
+
+**Files:** `apps/desktop/src/stores/badgeStore.ts`, `apps/desktop/src/components/DASHSidebar.tsx`
+
+---
+
+## 24. Badge Polling — 60-Second Interval
+
+**Decision:** Poll badge counts every 60 seconds, not every 5 seconds like system stats.
+
+**Why:** Badge counts (deadlines, suggestions) change infrequently — goals are created/deleted on human timescales. Polling every 5 seconds would waste resources. 60 seconds is a reasonable balance between freshness and efficiency.
+
+**File:** `apps/desktop/src/stores/badgeStore.ts`
+
+---
+
+## 25. Accessibility — Global :focus-visible Ring, No outline:none
+
+**Decision:** Use a global `:focus-visible` CSS rule for focus rings, and remove all `outline: none` from interactive elements.
+
+**Why:** `outline: none` destroys keyboard accessibility. The global `:focus-visible` rule provides consistent focus indication across all interactive elements. This is the standard WCAG-compliant approach — focus rings appear only for keyboard users, not mouse clicks.
+
+**File:** `apps/desktop/src/index.css`, all page components
+
+---
+
+## 26. Accessibility — Semantic HTML + ARIA Labels
+
+**Decision:** Use `<nav>`, `<main>`, `<aside>`, `<section>`, `<h1>`-`<h3>` semantic elements, and add `aria-label` to all icon-only buttons and form inputs.
+
+**Why:** Screen readers rely on semantic HTML to convey page structure. Icon-only buttons without `aria-label` are invisible to screen readers. Form inputs without labels are inaccessible. This is WCAG 2.1 Level AA compliance (spec Parts 28-35).
+
+**Files:** All desktop app pages and components
+
+---
+
+## 27. Content Audit — No Fake Claims Policy
+
+**Decision:** Ensure every user-facing claim (plugin descriptions, analytics stats, legal documents) corresponds to real implementation, with no placeholder text, mock data, or unsupported statistics.
+
+**Why:** Fake claims erode trust. If the Plugins page says "Memory Engine" exists, the `dash_backend/memory/` directory must exist with real code. If the privacy policy says "no cookies," DASH must not use cookies. This is fundamental to spec Parts 37-40.
+
+**Files:** All public-facing content
+
+---
+
+## 28. Orbitron Font — Google Fonts CDN (SIL OFL)
+
+**Decision:** Load the Orbitron font from Google Fonts CDN for the boot animation, disclosed in the Privacy Policy.
+
+**Why:** Orbitron gives the boot screen its sci-fi aesthetic. The SIL Open Font License permits free commercial use. Google Fonts CDN is reliable and widely cached. The alternative was self-hosting the font, but that would add ~50KB to the bundle for a purely cosmetic element. The privacy policy was updated to honestly disclose this external resource.
+
+**Files:** `apps/desktop/src/components/BootScreen.css`, `apps/desktop/src/components/JarvisHUD.css`, `dash_backend/legal/privacy.py`
+
+---
+
+## 29. Electron — HashRouter for Desktop App
+
+**Decision:** Use `HashRouter` instead of `BrowserRouter` for the React routing in Electron.
+
+**Why:** Electron serves files from `file://` protocol. `BrowserRouter` requires a server to handle fallback routes. `HashRouter` uses URL fragments (`/#/chat`) that work without a server, making it the standard choice for Electron + React apps.
+
+**File:** `apps/desktop/src/App.tsx`
+
+---
+
+## 30. WebSocket Client — Generation-Based Stale Socket Detection
+
+**Decision:** Use a `socketGeneration` counter to detect stale WebSocket connections during reconnection, rather than comparing socket references.
+
+**Why:** During rapid reconnection (network flap), multiple `new WebSocket()` calls may be in flight. A generation counter ensures only the most recent connection handles messages, preventing race conditions where an old socket's messages arrive after a new socket is established.
+
+**File:** `apps/desktop/src/lib/wsClient.ts`
+
+---
+
+## 31. Supabase Outbox — Column Filtering + Tombstone Deletes
+
+**Decision:** The outbox delivery worker now filters each payload to the columns that actually exist in the cloud tables (`_TABLE_COLUMNS` in `sync/supabase_outbox_worker.py`), injects NOT-NULL defaults (`status`, `created_at`, `updated_at`) for legacy events, and hard local deletes (`delete_goal`) are mirrored as `tombstone` operations (cloud soft-delete via `deleted_at`) instead of an unsupported `"delete"` operation.
+
+**Why:** Local goal/task payloads carry `priority`, `deadline`, and `depends_on`, but the cloud `dash_projects`/`dash_tasks` tables deliberately omit those columns — PostgREST rejects unknown columns with HTTP 400, so 296+ events were dead-lettering and local↔cloud sync silently stalled. Rather than migrating the cloud schema (breaking change for existing rows), delivery strips unknown keys at the boundary — the outbox contract already treats payloads as opaque delivery envelopes. The `delete` operation was never part of the outbox contract (`upsert`/`tombstone` only); enqueuing it created events the worker could never deliver.
+
+**Files:** `apps/backend/dash_backend/sync/supabase_outbox_worker.py`, `apps/backend/dash_backend/executive/service.py` (`delete_goal`), `apps/backend/tests/test_supabase_outbox.py` (new regression test `test_delivery_strips_columns_missing_from_cloud_schema`)
+
+**Result:** Outbox went from 296 dead-lettered / 70 stuck-invalid to **1,416 completed, 0 pending, 0 dead-lettered** — verified live against the real Supabase project.

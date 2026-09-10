@@ -348,13 +348,20 @@ async def update_goal(
 
 
 async def delete_goal(session: AsyncSession, goal: executive_models.Goal) -> None:
-    """Remove the goal and its tasks. Enqueues outbox deletes for sync relays."""
+    """Remove the goal and its tasks. Enqueues outbox tombstones for sync relays.
+
+    The outbox contract only supports "upsert" and "tombstone" operations —
+    the cloud tables use deleted_at soft-deletes, so a hard local delete is
+    mirrored as a tombstone (never a "delete" operation, which the delivery
+    worker rejects and dead-letters).
+    """
     tasks = await get_tasks_for_goal(session, goal.id)
     for task in tasks:
-        await _queue_task_sync(session, task, goal.user_id, operation="delete")
+        await _queue_task_sync(session, task, goal.user_id, operation="tombstone")
         await session.delete(task)
     await session.delete(goal)
     await session.commit()
+    await _queue_goal_sync(session, goal, operation="tombstone")
 
 
 async def goal_progress(session: AsyncSession, goal: executive_models.Goal) -> Dict[str, Any]:

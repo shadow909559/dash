@@ -21,6 +21,15 @@ from dash_backend.sync.outbox import (
 
 logger = get_logger(__name__)
 
+# Columns accepted by the cloud tables (supabase/migrations/202608230001_...).
+# Local payloads may carry extra fields (priority, deadline, depends_on) that
+# the cloud schema intentionally omits — PostgREST rejects unknown columns
+# with HTTP 400, so delivery strips everything not listed here.
+_TABLE_COLUMNS: dict[str, frozenset[str]] = {
+    "dash_projects": frozenset({"id", "owner_id", "name", "description", "status", "created_at", "updated_at", "deleted_at"}),
+    "dash_tasks": frozenset({"id", "owner_id", "project_id", "title", "description", "status", "created_at", "updated_at", "deleted_at"}),
+}
+
 
 class SupabaseOutboxWorker:
     """Delivers project/task events; it never reads cloud data back into DASH."""
@@ -35,7 +44,7 @@ class SupabaseOutboxWorker:
                 try:
                     await self._deliver(event)
                 except ValueError as exc:
-                    # Invalid payloads are not transient; exhaust immediately.
+                    # Invalid payloads/operations are not transient; exhaust immediately.
                     event.attempt_count = 4
                     await fail_event(session, event, str(exc))
                 except Exception as exc:
@@ -77,7 +86,16 @@ class SupabaseOutboxWorker:
         if table is None or event.operation not in {OPERATION_UPSERT, OPERATION_TOMBSTONE}:
             raise ValueError("Invalid sync outbox event")
 
-        payload: dict[str, Any] = {**event.payload, "id": str(event.record_id), "owner_id": owner_id}
+        payload: dict[str, Any] = {
+            key: value
+            for key, value in {**event.payload, "id": str(event.record_id), "owner_id": owner_id}.items()
+            if key in _TABLE_COLUMNS[table]
+        }
+        # Legacy events may predate the status column in local payloads; the
+        # cloud columns are NOT NULL, so inject the local default.
+        payload.setdefault("status", "pending")
+        payload.setdefault("created_at", datetime.now(UTC).isoformat())
+        payload.setdefault("updated_at", payload["created_at"])
         if event.operation == OPERATION_TOMBSTONE:
             payload = {"id": str(event.record_id), "owner_id": owner_id, "deleted_at": datetime.now(UTC).isoformat()}
         await asyncio.to_thread(

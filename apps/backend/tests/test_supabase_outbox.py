@@ -117,6 +117,35 @@ async def test_success_duplicate_and_tombstone_delivery_are_idempotent(db_sessio
 
 
 @pytest.mark.asyncio
+async def test_delivery_strips_columns_missing_from_cloud_schema(db_session, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Local payloads carry fields the cloud tables don't have (priority,
+    deadline, depends_on); PostgREST rejects unknown columns with HTTP 400,
+    so delivery must strip them before upserting."""
+    monkeypatch.setattr(outbox, "sync_is_enabled", lambda: True)
+    record_id = uuid.uuid4()
+    await enqueue_event(
+        db_session, record_type="task", record_id=record_id, owner_id=uuid.uuid4(),
+        operation=OPERATION_UPSERT,
+        payload={"project_id": str(uuid.uuid4()), "title": "t", "priority": 2, "deadline": "2026-01-01T00:00:00", "depends_on": "[]"},
+    )
+
+    cloud: dict[str, dict] = {}
+    settings = SimpleNamespace(supabase_sync_enabled=True, supabase_sync_owner_id=str(uuid.uuid4()))
+    service = SimpleNamespace(sync_configuration_error=lambda: None, get_sync_client=lambda: _FakeSupabaseClient(cloud))
+    import dash_backend.sync.supabase_outbox_worker as worker_module
+
+    monkeypatch.setattr(worker_module, "AsyncSessionLocal", lambda: db_session)
+    monkeypatch.setattr(worker_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(worker_module, "get_supabase_service", lambda: service)
+    assert await SupabaseOutboxWorker().deliver_once() == 1
+    delivered = cloud[str(record_id)]
+    assert delivered["title"] == "t"
+    assert "priority" not in delivered
+    assert "deadline" not in delivered
+    assert "depends_on" not in delivered
+
+
+@pytest.mark.asyncio
 async def test_unavailable_cloud_does_not_lose_local_event(db_session, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(outbox, "sync_is_enabled", lambda: True)
     event = await enqueue_event(
