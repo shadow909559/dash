@@ -51,6 +51,7 @@ from dash_backend.api.routes.phase2_features import router as phase2_features_ro
 from dash_backend.api.routes.phase3_features import router as phase3_features_router
 from dash_backend.api.routes.phase4_features import router as phase4_features_router
 from dash_backend.api.routes.integrations_all import router as integrations_all_router
+from dash_backend.api.routes.integration_connectors import router as integration_connectors_router
 
 
 api_router = APIRouter()
@@ -325,4 +326,10 @@ api_router.include_router(
 api_router.include_router(
     integrations_all_router,
     tags=["integrations"],
+)
+
+# Slack / Telegram / Notion connectors with verified webhook receivers
+api_router.include_router(
+    integration_connectors_router,
+    tags=["connectors"],
 )

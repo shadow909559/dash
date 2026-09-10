@@ -916,3 +916,48 @@ with one instance and reading with a *fresh* instance on the same file, plus:
 - raw `execute(sql)` / `query(sql)` for indexed/columnar tables
   (`emails.folder`, `comments(entity_type, entity_id)`, `biometric_audit`)
 - `LocalStore.instance()` = process-wide shared file; `open_store(path)` = explicit path for tests
+
+## 22. Connector Webhook Flow (Slack / Telegram / Notion)
+
+### Inbound (platform → DASH)
+```
+Platform (Slack/Telegram/Notion servers)
+  └─ POST /api/v1/connectors/{platform}/events   [no DASH JWT — platform-verified]
+       └─ routes/integration_connectors.py
+            ├─ Slack:    ingest_slack(ts, raw_body, X-Slack-Signature)
+            ├─ Telegram: ingest_telegram(payload, X-Telegram-…-Secret-Token | path token)
+            └─ Notion:   ingest_notion(payload, X-Notion-Signature | verification_token)
+                 └─ verify (HMAC / constant-time compare) → FAIL ⇒ 401, event logged, no state change
+            ├─ Slack url_verification ⇒ plain-text challenge response
+            ├─ parse_{slack,telegram,notion}_* → {event_id, author, channel, text, …}
+            └─ ConnectorService._record_inbound()
+                 ├─ dedup by platform event id (Slack event_id / TG update_id / Notion request_id)
+                 │    └─ seen ⇒ {ok, duplicate: true}, nothing stored twice
+                 ├─ append message + kv_set(connector_msgs_<svc>)   [LocalStore #36]
+                 └─ rules[svc].to_dash? ⇒ _notify_dash()
+                      └─ get_notification_service().send(title="Slack #C9: U1", body=text)
+                           └─ push service applies its own quiet hours/cooldown
+```
+
+### Outbound (DASH → platform)
+```
+Desktop/API client — POST /api/v1/connectors/forward  [JWT required]
+  {service, text, channel?}
+       └─ ConnectorService.forward_out()
+            ├─ connector not configured/disabled ⇒ 400 (no silent no-op)
+            ├─ Slack:    POST <incoming-webhook-url> {text}
+            ├─ Telegram: POST api.telegram.org/bot<token>/sendMessage {chat_id, text}
+            ├─ Notion:   POST configured relay webhook {content}
+            └─ status: sent (2xx) | recorded (no credentials configured — honest)
+                       | failed (platform error, stored with error code)
+                 └─ message + status persisted (kv_set connector_msgs_<svc>)
+```
+
+### Configuration & persistence
+```
+POST /connectors/configure  [JWT] → secrets AES-256-GCM encrypted (connector_secrets.key
+  beside dash_local.db) before kv_set(connector_cfg_<svc>)
+Backend start → ConnectorService() singleton hydrates configs (decrypts), rules, messages
+  from LocalStore — restarts keep credentials, forwarding rules, and history
+GET /connectors/status | /rules | /messages/{svc} | /events  [JWT — booleans only, secrets never returned]
+```
