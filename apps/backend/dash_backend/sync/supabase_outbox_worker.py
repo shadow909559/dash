@@ -97,7 +97,17 @@ class SupabaseOutboxWorker:
         payload.setdefault("created_at", datetime.now(UTC).isoformat())
         payload.setdefault("updated_at", payload["created_at"])
         if event.operation == OPERATION_TOMBSTONE:
-            payload = {"id": str(event.record_id), "owner_id": owner_id, "deleted_at": datetime.now(UTC).isoformat()}
+            # Soft-delete an existing cloud row via PATCH semantics. An upsert
+            # would INSERT a bare row when the record was never synced,
+            # violating NOT NULL constraints (e.g. dash_tasks.project_id).
+            client = service.get_sync_client().table(table)
+            await asyncio.to_thread(
+                lambda: client
+                .update({"deleted_at": datetime.now(UTC).isoformat()})
+                .match({"id": str(event.record_id), "owner_id": owner_id})
+                .execute()
+            )
+            return
         await asyncio.to_thread(
             lambda: service.get_sync_client().table(table).upsert(payload, on_conflict="id").execute()
         )

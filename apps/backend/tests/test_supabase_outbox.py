@@ -73,7 +73,20 @@ class _FakeTable:
         self._state[payload["id"]] = payload
         return self
 
+    def update(self, payload: dict):
+        self._update_payload = payload
+        return self
+
+    def match(self, filters: dict):
+        self._match_filters = filters
+        return self
+
     def execute(self) -> None:
+        if hasattr(self, "_update_payload"):
+            # PATCH semantics: only touch rows that already exist.
+            target = self._state.get(self._match_filters["id"])
+            if target is not None:
+                target.update(self._update_payload)
         return None
 
 
@@ -112,6 +125,32 @@ async def test_success_duplicate_and_tombstone_delivery_are_idempotent(db_sessio
     assert delivered == 3
     assert len(cloud) == 1
     assert cloud[str(record_id)]["deleted_at"] is not None
+    events = list((await db_session.execute(select(SyncOutboxEvent))).scalars())
+    assert all(event.status == STATUS_COMPLETED for event in events)
+
+
+@pytest.mark.asyncio
+async def test_tombstone_for_never_synced_record_is_a_noop(db_session, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A tombstone for a record the cloud has never seen must NOT insert a
+    bare row (POSTgREST upsert would violate dash_tasks.project_id NOT NULL);
+    PATCH semantics make it a harmless no-op."""
+    monkeypatch.setattr(outbox, "sync_is_enabled", lambda: True)
+    record_id = uuid.uuid4()
+    await enqueue_event(
+        db_session, record_type="task", record_id=record_id, owner_id=uuid.uuid4(),
+        operation=OPERATION_TOMBSTONE, payload={},
+    )
+
+    cloud: dict[str, dict] = {}  # cloud has never seen this task
+    settings = SimpleNamespace(supabase_sync_enabled=True, supabase_sync_owner_id=str(uuid.uuid4()))
+    service = SimpleNamespace(sync_configuration_error=lambda: None, get_sync_client=lambda: _FakeSupabaseClient(cloud))
+    import dash_backend.sync.supabase_outbox_worker as worker_module
+
+    monkeypatch.setattr(worker_module, "AsyncSessionLocal", lambda: db_session)
+    monkeypatch.setattr(worker_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(worker_module, "get_supabase_service", lambda: service)
+    assert await SupabaseOutboxWorker().deliver_once() == 1
+    assert cloud == {}  # nothing was inserted
     events = list((await db_session.execute(select(SyncOutboxEvent))).scalars())
     assert all(event.status == STATUS_COMPLETED for event in events)
 
