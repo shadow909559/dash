@@ -858,3 +858,61 @@ Clear cache → POST /features/infra/cache/clear → refetch stats
 ```
 
 **Convention applied to all seven pages:** no fabricated fallback data — failures render an explicit error banner; real empty states when the backend has no data; all create/delete actions surface real success/failure via notifications.
+
+## 21. Local SQLite Persistence Flow (services/local_store.py)
+
+### Startup path (migration time)
+```
+backend starts
+  └─ imports services (email_calendar, voice_browser, collaboration,
+     advanced_ai, model_ensemble, plugin_service, shortcuts_service,
+     security_hardening)
+       └─ each singleton constructor: LocalStore.instance()
+             └─ LocalStore.__init__ → _open()
+                  ├─ mkdir %LOCALAPPDATA%\DASH
+                  ├─ sqlite3.connect(dash_local.db)  [WAL, synchronous=NORMAL]
+                  └─ _migrate()
+                       ├─ CREATE TABLE IF NOT EXISTS schema_migrations
+                       ├─ SELECT applied versions
+                       └─ for each pending (version, statements):
+                            BEGIN → run DDL → INSERT version → COMMIT
+                            (transaction = all-or-nothing per migration;
+                             OperationalError = another process won the race → rollback, continue)
+       └─ constructor hydrates in-memory state:
+            e.g. EmailService.__init__: _accounts = store.list_docs("email_accounts")
+                 DNDManager.__init__: state = store.kv_get("dnd_state")
+                 BiometricAuthService.__init__: SELECT … FROM biometric_enrollments
+```
+
+### Request path (write-through)
+```
+API route (e.g. POST /features/calendar/events)
+  └─ CalendarService.create_event()
+       ├─ mutate in-memory dict (unchanged service semantics)
+       └─ store.put_doc("calendar_events", id, event, seq=next_seq())
+            └─ INSERT … ON CONFLICT(id) DO UPDATE  [RLock-guarded, committed]
+```
+Reads never hit the store after startup — they serve the hydrated in-memory
+lists, exactly as before; the store is the durability layer, not a query
+engine (except where filtered queries exist: emails by folder, comments by
+entity, biometric audit tail).
+
+### Restart path (the guarantee being tested)
+```
+process dies → process restarts → singletons re-import
+  └─ constructors hydrate from dash_local.db
+       └─ previously-created emails/events/workspaces/plugins/shortcuts/
+          DND/sounds/biometric enrollments reappear
+```
+`tests/test_local_store_persistence.py` proves this per service by writing
+with one instance and reading with a *fresh* instance on the same file, plus:
+- migration idempotence (reopen 3×, no duplicate schema_migrations rows),
+- the no-store-arg production path lands in the shared singleton file,
+- biometric revoke deletes its enrollment row (not just the dict entry).
+
+### Store API (one connection per store, RLock-guarded)
+- `put_doc(table, id, data, seq)` / `delete_doc(table, id)` / `list_docs(table, newest_first=)`
+- `kv_get(key, default)` / `kv_set(key, value)` / `kv_del(key)` → `kv_settings`
+- raw `execute(sql)` / `query(sql)` for indexed/columnar tables
+  (`emails.folder`, `comments(entity_type, entity_id)`, `biometric_audit`)
+- `LocalStore.instance()` = process-wide shared file; `open_store(path)` = explicit path for tests

@@ -382,8 +382,16 @@ class TestBrowserAutomation:
 
 class TestPushNotificationService:
 
-    def setup_method(self):
+    def setup_method(self, method):
         self.svc = get_notification_service()
+        # Deterministic sends: the service defers during its default quiet
+        # hours (23:00-07:00 UTC), which made these tests fail when run at
+        # night. Pin quiet hours off instead of depending on wall clock.
+        self._orig_quiet = type(self.svc)._is_quiet_hours
+        type(self.svc)._is_quiet_hours = lambda s: False
+
+    def teardown_method(self, method):
+        type(self.svc)._is_quiet_hours = self._orig_quiet
 
     def test_send_notification(self):
         result = self.svc.send("Hello", "World")

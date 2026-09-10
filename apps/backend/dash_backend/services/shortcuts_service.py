@@ -1,10 +1,17 @@
-"""Keyboard shortcuts, DND mode, notification sounds, and settings search."""
+"""Keyboard shortcuts, DND mode, notification sounds, and settings search.
+
+All three managers persist user customization to the shared local SQLite
+store (services/local_store.py) so shortcuts, DND state, and sound settings
+survive backend restarts (decisions.md #36). Defaults stay code-seeded.
+"""
 from __future__ import annotations
 
 import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
+
+from dash_backend.services.local_store import LocalStore
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +53,12 @@ _DEFAULT_SHORTCUTS: dict[str, str] = {
 class ShortcutManager:
     """Manages customizable keyboard shortcuts."""
 
-    def __init__(self) -> None:
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
         self._defaults = dict(_DEFAULT_SHORTCUTS)
         self._custom: dict[str, str] = {}
+        self._store = store if store is not None else LocalStore.instance()
+        for action, shortcut in (self._store.kv_get("shortcuts_custom", {}) or {}).items():
+            self._custom[action] = shortcut
 
     def get_all(self) -> list[dict]:
         result = []
@@ -66,6 +76,7 @@ class ShortcutManager:
         if not shortcut:
             return {"ok": False, "reason": "Shortcut cannot be empty"}
         self._custom[action] = shortcut
+        self._store.kv_set("shortcuts_custom", self._custom)
         return {"ok": True, "action": action, "shortcut": shortcut}
 
     def reset(self, action: Optional[str] = None) -> dict:
@@ -73,6 +84,7 @@ class ShortcutManager:
             self._custom.pop(action, None)
         else:
             self._custom.clear()
+        self._store.kv_set("shortcuts_custom", self._custom)
         return {"ok": True}
 
     def search(self, query: str) -> list[dict]:
@@ -86,11 +98,13 @@ class ShortcutManager:
 class DNDManager:
     """Do Not Disturb mode management."""
 
-    def __init__(self) -> None:
-        self._enabled = False
-        self._schedule: dict[str, str] = {"start": "22:00", "end": "07:00"}
-        self._exceptions: list[str] = []  # actions that bypass DND
-        self._history: list[dict] = []
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        state = self._store.kv_get("dnd_state") or {}
+        self._enabled = bool(state.get("enabled", False))
+        self._schedule: dict[str, str] = state.get("schedule") or {"start": "22:00", "end": "07:00"}
+        self._exceptions: list[str] = state.get("exceptions") or []
+        self._history: list[dict] = self._store.kv_get("dnd_history", []) or []
 
     def get_state(self) -> dict:
         now = datetime.now(timezone.utc)
@@ -103,26 +117,37 @@ class DNDManager:
 
     def toggle(self, enabled: Optional[bool] = None) -> dict:
         self._enabled = enabled if enabled is not None else not self._enabled
-        self._history.append({
-            "enabled": self._enabled,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        self._persist_state()
+        ts = datetime.now(timezone.utc).isoformat()
+        self._history.append({"enabled": self._enabled, "timestamp": ts})
         if len(self._history) > 100:
             self._history = self._history[-100:]
+        self._store.kv_set("dnd_history", self._history)
         return {"ok": True, "enabled": self._enabled}
 
     def set_schedule(self, start: str, end: str) -> dict:
         self._schedule = {"start": start, "end": end}
+        self._persist_state()
         return {"ok": True, "schedule": self._schedule}
 
     def add_exception(self, action: str) -> dict:
         if action not in self._exceptions:
             self._exceptions.append(action)
+            self._persist_state()
         return {"ok": True}
 
     def remove_exception(self, action: str) -> dict:
-        self._exceptions = [e for e in self._exceptions if e != action]
+        if action in self._exceptions:
+            self._exceptions = [e for e in self._exceptions if e != action]
+            self._persist_state()
         return {"ok": True}
+
+    def _persist_state(self) -> None:
+        self._store.kv_set("dnd_state", {
+            "enabled": self._enabled,
+            "schedule": self._schedule,
+            "exceptions": self._exceptions,
+        })
 
     def should_suppress(self, action: str) -> bool:
         if not self._enabled:
@@ -152,7 +177,7 @@ class NotificationSounds:
         {"id": "error", "label": "Error"},
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
         self._settings: dict[str, str] = {
             "message": "default",
             "mention": "bell",
@@ -165,6 +190,11 @@ class NotificationSounds:
         }
         self._volume = 0.7
         self._enabled = True
+        self._store = store if store is not None else LocalStore.instance()
+        saved = self._store.kv_get("sound_state") or {}
+        self._settings.update(saved.get("sounds") or {})
+        self._volume = saved.get("volume", self._volume)
+        self._enabled = saved.get("enabled", self._enabled)
 
     def get_settings(self) -> dict:
         return {
@@ -174,19 +204,29 @@ class NotificationSounds:
             "options": self._SOUND_OPTIONS,
         }
 
+    def _persist(self) -> None:
+        self._store.kv_set("sound_state", {
+            "sounds": self._settings,
+            "volume": self._volume,
+            "enabled": self._enabled,
+        })
+
     def set_sound(self, event_type: str, sound_id: str) -> dict:
         valid_ids = {s["id"] for s in self._SOUND_OPTIONS}
         if sound_id not in valid_ids:
             return {"ok": False, "reason": f"Invalid sound: {sound_id}"}
         self._settings[event_type] = sound_id
+        self._persist()
         return {"ok": True}
 
     def set_volume(self, volume: float) -> dict:
         self._volume = max(0.0, min(1.0, volume))
+        self._persist()
         return {"ok": True, "volume": self._volume}
 
     def toggle(self, enabled: Optional[bool] = None) -> dict:
         self._enabled = enabled if enabled is not None else not self._enabled
+        self._persist()
         return {"ok": True, "enabled": self._enabled}
 
 

@@ -30,6 +30,8 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
+from dash_backend.services.local_store import LocalStore
+
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -626,10 +628,24 @@ class BiometricAuthService:
 
     CHALLENGE_TTL_SECONDS = 120
 
-    def __init__(self) -> None:
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        # Enrollments persist (they must survive restarts or the desktop
+        # client silently loses its enrollment); challenges are
+        # deliberately ephemeral (120s TTL) and audit is capped in-store.
         self._enrolled: dict[str, dict] = {}
+        for row in self._store.query("SELECT user_id, data FROM biometric_enrollments"):
+            self._enrolled[row["user_id"]] = json.loads(row["data"])
         self._challenges: dict[str, dict] = {}
-        self._attempts: list[dict] = []
+        self._attempts: list[dict] = [
+            {
+                **json.loads(r["data"]),
+                "_rowid": r["id"],
+            }
+            for r in self._store.query(
+                "SELECT id, data FROM biometric_audit ORDER BY id DESC LIMIT 200"
+            )
+        ][::-1]
 
     def availability(self) -> dict:
         import platform
@@ -651,6 +667,11 @@ class BiometricAuthService:
             "enabled": True,
         }
         self._enrolled[user_id] = record
+        self._store.execute(
+            "INSERT INTO biometric_enrollments (user_id, data) VALUES (?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET data = excluded.data",
+            (user_id, json.dumps(record)),
+        )
         self._audit(user_id, "enroll", True)
         return {"ok": True, "enrollment": record}
 
@@ -688,17 +709,26 @@ class BiometricAuthService:
 
     def revoke(self, user_id: str) -> dict:
         self._enrolled.pop(user_id, None)
+        self._store.execute("DELETE FROM biometric_enrollments WHERE user_id = ?", (user_id,))
         self._audit(user_id, "revoke", True)
         return {"ok": True}
 
     def _audit(self, user_id: str, event: str, ok: bool, detail: str = "") -> None:
-        self._attempts.append({
+        entry = {
             "user_id": user_id,
             "event": event,
             "ok": ok,
             "detail": detail,
             "at": datetime.now(timezone.utc).isoformat(),
-        })
+        }
+        with self._store._lock:
+            cur = self._store._conn.execute(
+                "INSERT INTO biometric_audit (user_id, data) VALUES (?, ?)",
+                (user_id, json.dumps(entry)),
+            )
+            entry["_rowid"] = cur.lastrowid
+            self._store._conn.commit()
+        self._attempts.append(entry)
         if len(self._attempts) > 200:
             self._attempts = self._attempts[-200:]
 

@@ -1,9 +1,16 @@
-"""Collaboration: multi-user, shared workspaces, roles, comments, mentions."""
+"""Collaboration: multi-user, shared workspaces, roles, comments, mentions.
+
+Workspaces, memberships, comments, and the activity feed persist to the
+shared local SQLite store and survive backend restarts.
+"""
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
+
+from dash_backend.services.local_store import LocalStore, new_id
 
 logger = logging.getLogger(__name__)
 
@@ -11,17 +18,30 @@ ROLES = ["admin", "editor", "viewer"]
 
 
 class WorkspaceService:
-    """Shared workspaces and role-based access."""
+    """Shared workspaces and role-based access (persisted)."""
 
-    def __init__(self) -> None:
-        self._workspaces: list[dict] = []
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        self._workspaces: list[dict] = self._store.list_docs("workspaces")
         self._members: dict[str, list[dict]] = {}
+        for row in self._store.query("SELECT workspace_id, user_id, data FROM workspace_members ORDER BY rowid"):
+            self._members.setdefault(row["workspace_id"], []).append(json.loads(row["data"]))
+
+    def _persist_members(self, ws_id: str) -> None:
+        self._store.execute("DELETE FROM workspace_members WHERE workspace_id = ?", (ws_id,))
+        for m in self._members.get(ws_id, []):
+            self._store.execute(
+                "INSERT INTO workspace_members (workspace_id, user_id, data) VALUES (?, ?, ?)",
+                (ws_id, m["user_id"], json.dumps(m)),
+            )
 
     def create(self, name: str, owner_id: str, description: str = "") -> dict:
-        ws = {"id": f"ws_{len(self._workspaces)}", "name": name, "description": description,
+        ws = {"id": new_id("ws"), "name": name, "description": description,
               "owner": owner_id, "created_at": datetime.now(timezone.utc).isoformat()}
         self._workspaces.append(ws)
         self._members[ws["id"]] = [{"user_id": owner_id, "role": "admin", "joined_at": ws["created_at"]}]
+        self._store.put_doc("workspaces", ws["id"], ws, seq=self._store.next_seq("workspaces"))
+        self._persist_members(ws["id"])
         return {"ok": True, "workspace": ws}
 
     def list_all(self) -> list[dict]:
@@ -33,6 +53,8 @@ class WorkspaceService:
     def delete(self, ws_id: str) -> dict:
         self._workspaces = [w for w in self._workspaces if w["id"] != ws_id]
         self._members.pop(ws_id, None)
+        self._store.delete_doc("workspaces", ws_id)
+        self._store.execute("DELETE FROM workspace_members WHERE workspace_id = ?", (ws_id,))
         return {"ok": True}
 
     def add_member(self, ws_id: str, user_id: str, role: str = "viewer") -> dict:
@@ -43,10 +65,12 @@ class WorkspaceService:
             return {"ok": False, "reason": "Already a member"}
         members.append({"user_id": user_id, "role": role, "joined_at": datetime.now(timezone.utc).isoformat()})
         self._members[ws_id] = members
+        self._persist_members(ws_id)
         return {"ok": True}
 
     def remove_member(self, ws_id: str, user_id: str) -> dict:
         self._members[ws_id] = [m for m in self._members.get(ws_id, []) if m["user_id"] != user_id]
+        self._persist_members(ws_id)
         return {"ok": True}
 
     def update_role(self, ws_id: str, user_id: str, new_role: str) -> dict:
@@ -55,6 +79,7 @@ class WorkspaceService:
         for m in self._members.get(ws_id, []):
             if m["user_id"] == user_id:
                 m["role"] = new_role
+                self._persist_members(ws_id)
                 return {"ok": True}
         return {"ok": False, "reason": "Member not found"}
 
@@ -70,16 +95,18 @@ class WorkspaceService:
 
 
 class CommentService:
-    """Comments on memories, goals, code, and any entity."""
+    """Comments on memories, goals, code, and any entity (persisted)."""
 
-    def __init__(self) -> None:
-        self._comments: list[dict] = []
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        self._comments: list[dict] = self._store.list_docs("comments")
 
     def add(self, entity_type: str, entity_id: str, author_id: str, content: str) -> dict:
-        comment = {"id": f"cmt_{len(self._comments)}", "entity_type": entity_type, "entity_id": entity_id,
+        comment = {"id": new_id("cmt"), "entity_type": entity_type, "entity_id": entity_id,
                    "author_id": author_id, "content": content, "created_at": datetime.now(timezone.utc).isoformat(),
                    "edited": False, "mentions": self._extract_mentions(content)}
         self._comments.append(comment)
+        self._store.put_doc("comments", comment["id"], comment, seq=self._store.next_seq("comments"))
         return {"ok": True, "comment": comment}
 
     def get_for_entity(self, entity_type: str, entity_id: str) -> list[dict]:
@@ -91,11 +118,13 @@ class CommentService:
                 c["content"] = new_content
                 c["edited"] = True
                 c["edited_at"] = datetime.now(timezone.utc).isoformat()
+                self._store.put_doc("comments", c["id"], c)
                 return {"ok": True, "comment": c}
         return {"ok": False, "reason": "Comment not found"}
 
     def delete(self, comment_id: str) -> dict:
         self._comments = [c for c in self._comments if c["id"] != comment_id]
+        self._store.delete_doc("comments", comment_id)
         return {"ok": True}
 
     def get_mentions_for_user(self, user_id: str) -> list[dict]:
@@ -108,19 +137,30 @@ class CommentService:
 
 
 class ActivityFeedService:
-    """Collaborative activity feed across workspaces."""
+    """Collaborative activity feed across workspaces (persisted)."""
 
-    def __init__(self) -> None:
-        self._events: list[dict] = []
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        rows = self._store.query("SELECT data FROM activity_events ORDER BY id ASC")
+        self._events: list[dict] = [json.loads(r["data"]) for r in rows]
 
     def record(self, user_id: str, action: str, entity_type: str = "", entity_id: str = "",
                details: str = "", workspace_id: str = "") -> dict:
-        event = {"id": f"evt_{len(self._events)}", "user_id": user_id, "action": action,
+        event = {"id": new_id("evt"), "user_id": user_id, "action": action,
                  "entity_type": entity_type, "entity_id": entity_id, "details": details,
                  "workspace_id": workspace_id, "timestamp": datetime.now(timezone.utc).isoformat()}
         self._events.append(event)
         if len(self._events) > 5000:
             self._events = self._events[-2500:]
+            self._store.execute("DELETE FROM activity_events")
+            for e in self._events:
+                self._store.execute(
+                    "INSERT INTO activity_events (workspace_id, user_id, data) VALUES (?, ?, ?)",
+                    (e.get("workspace_id", ""), e.get("user_id", ""), json.dumps(e)),
+                )
+            return {"ok": True, "event": event}
+        self._store.execute("INSERT INTO activity_events (workspace_id, user_id, data) VALUES (?, ?, ?)",
+                            (workspace_id, user_id, json.dumps(event)))
         return {"ok": True, "event": event}
 
     def get_feed(self, workspace_id: Optional[str] = None, limit: int = 50) -> list[dict]:

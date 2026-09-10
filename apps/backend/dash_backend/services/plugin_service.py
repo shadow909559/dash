@@ -40,13 +40,28 @@ PLUGIN_PERMISSIONS = {
 
 
 class PluginRegistry:
-    """Plugin registration, management, and marketplace."""
+    """Plugin registration, management, and marketplace.
 
-    def __init__(self) -> None:
+    Installed plugins and their enabled state persist to the shared local
+    SQLite store; the marketplace catalogue stays code-seeded.
+    """
+
+    def __init__(self, store=None) -> None:
+        import json as _json
+        self._store = store if store is not None else __import__(
+            "dash_backend.services.local_store", fromlist=["LocalStore"]
+        ).LocalStore.instance()
         self._plugins: dict[str, dict] = {}
         self._installed: dict[str, dict] = {}
         self._enabled: dict[str, bool] = {}
         self._ratings: dict[str, list[float]] = {}
+        # Restore installs before seeding (rows carry their own snapshot)
+        for row in self._store.query("SELECT plugin_id, enabled, data FROM plugin_installs"):
+            try:
+                self._installed[row["plugin_id"]] = _json.loads(row["data"])
+                self._enabled[row["plugin_id"]] = bool(row["enabled"])
+            except Exception:
+                logger.debug("bad plugin install row %s", row["plugin_id"])
 
         # Seed with sample marketplace plugins
         self._marketplace = [
@@ -192,14 +207,27 @@ class PluginRegistry:
         }
         self._installed[plugin_id] = install_record
         self._enabled[plugin_id] = True
+        self._persist_install(plugin_id)
 
         return {"ok": True, "plugin": install_record}
+
+    def _persist_install(self, plugin_id: str) -> None:
+        import json as _json
+        if plugin_id in self._installed:
+            self._store.execute(
+                "INSERT INTO plugin_installs (plugin_id, enabled, data) VALUES (?, ?, ?) "
+                "ON CONFLICT(plugin_id) DO UPDATE SET enabled = excluded.enabled, data = excluded.data",
+                (plugin_id, 1 if self._enabled.get(plugin_id) else 0, _json.dumps(self._installed[plugin_id])),
+            )
+        else:
+            self._store.execute("DELETE FROM plugin_installs WHERE plugin_id = ?", (plugin_id,))
 
     def uninstall(self, plugin_id: str) -> dict:
         if plugin_id not in self._installed:
             return {"ok": False, "reason": "Plugin not installed"}
         del self._installed[plugin_id]
         self._enabled.pop(plugin_id, None)
+        self._persist_install(plugin_id)
         return {"ok": True}
 
     def get_installed(self) -> list[dict]:
@@ -215,6 +243,7 @@ class PluginRegistry:
         if plugin_id not in self._installed:
             return {"ok": False, "reason": "Plugin not installed"}
         self._enabled[plugin_id] = enabled if enabled is not None else not self._enabled.get(plugin_id, False)
+        self._persist_install(plugin_id)
         return {"ok": True, "enabled": self._enabled[plugin_id]}
 
     # ── Permissions ─────────────────────────────────────────────────

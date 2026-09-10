@@ -391,3 +391,23 @@ Every meaningful technical decision, why it was made, and what alternatives were
 
 **Verified:** 25 new tests pass; full backend suite 479 passed; desktop `tsc -b` + vite build clean; ciphertext-at-rest asserted in tests (disk files must not contain plaintext); TOTP verified against independently computed RFC 4226 codes including drift window and replay rejection.
 
+
+## 36. SQLite Persistence for All Feature Services (local_store.py)
+
+**Decision:** A single shared SQLite database (`%LOCALAPPDATA%\DASH\dash_local.db`, override with `DASH_LOCAL_STORE`) now backs every feature service that previously lived only in process memory: email accounts/messages/rules, calendars/events/reminders, contacts, voice memos, browser tabs/bookmarks/history/summaries, workspaces/members/comments/activity, prompts/evaluations/learning, model hot-swap history + active model, plugin installs/permissions/ratings, custom shortcuts, sounds settings, DND state, and biometric enrollments/audit.
+
+**Why this approach:**
+- *Why SQLite + one shared file, not per-service JSON:* the repo already had two persistence idioms — raw `sqlite3` (device_state_manager) and ad-hoc JSON files (workflow_state.json, knowledge_graph_state.json, predictive_state.json). JSON files race when two services write, have no schema evolution, and scattered files are undeletable as a unit. One SQLite file with a `schema_migrations` table gives real versioned migrations that run automatically on first connection — i.e., at backend startup when service singletons import. Idempotent by construction (applied versions recorded; re-open is a no-op).
+- *Why document rows (`id, seq, data` JSON):* the services are dict-oriented (lists of dicts with `seq`-style ordering). Persisting JSON documents kept every service's in-memory semantics *exactly* — no dataclass refactors, no ORM coupling — while gaining durability. Where queries need filtering (emails by folder, comments by entity), real columns + indexes were added.
+- *Why WAL + one connection per store with an RLock:* FastAPI runs sync route bodies on a worker pool, so concurrent access is real; WAL keeps the read-heavy path cheap, the lock keeps writes serialized without per-call connection churn.
+- *Why kv helpers (`kv_get/kv_set`):* shortcut/sound/DND state is a handful of small config blobs, not queryable documents — a key-value table is the honest shape.
+- *What deliberately did NOT persist:* biometric challenges (single-use, 120s TTL — ephemeral by design) and messenger/TOTP secrets (already persisted via their own encrypted files from #34).
+- *Len-based IDs removed:* services that generated `email_0`, `ws_1`-style ids got collision-free `prefix_<12hex>` ids, because persisted data makes "next integer = count" ids collide across restarts.
+
+**Migration pattern (services):** constructor takes `store: Optional[LocalStore] = None`, defaults to `LocalStore.instance()`; hydrates in-memory lists from the store in `__init__`; every mutating method writes through (`put_doc`/`delete_doc`/`kv_set`) alongside the in-memory update. Tests construct with an explicit temp-path store.
+
+**Files:** `apps/backend/dash_backend/services/local_store.py` (new), `email_calendar.py`, `voice_browser.py`, `collaboration.py`, `advanced_ai.py`, `model_ensemble.py`, `plugin_service.py`, `shortcuts_service.py`, `security_hardening.py` (biometric), `tests/test_local_store_persistence.py` (new — 14 tests).
+
+**Verified:** 14 persistence tests prove every migrated service survives a simulated restart (fresh instance on the same file sees the data), migrations are idempotent, and the no-arg production constructor path actually hits the shared file. Full suite: **544 passed**.
+
+**Pre-existing flaky test fixed:** `TestPushNotificationService` failed whenever the suite ran during the push service's default quiet hours (23:00–07:00 UTC) because `send()` defers notifications at night — time-of-day-dependent test outcome. The tests now pin `_is_quiet_hours` off (setup/teardown) instead of depending on wall clock.

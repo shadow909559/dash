@@ -1,4 +1,8 @@
-"""Voice system and browser management."""
+"""Voice system and browser management.
+
+Memos and custom voice commands persist to the shared local SQLite store;
+browser tabs, bookmarks, history, and summaries survive backend restarts.
+"""
 from __future__ import annotations
 
 import json
@@ -7,15 +11,15 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from dash_backend.services.local_store import LocalStore, new_id
+
 logger = logging.getLogger(__name__)
 
 
 class VoiceService:
     """Voice wake word, continuous listening, voice commands, voice memo."""
 
-    def __init__(self) -> None:
-        self._wake_words = ["hey dash", "dash", "ok dash"]
-        self._commands: dict[str, dict] = {
+    _DEFAULT_COMMANDS: dict[str, dict] = {
             "open_settings": {"patterns": ["open settings", "show settings"], "action": "navigate", "target": "/settings"},
             "new_chat": {"patterns": ["new chat", "start conversation"], "action": "chat", "target": "new"},
             "search_memory": {"patterns": ["search memory", "find memory", "remember when"], "action": "memory", "target": "search"},
@@ -29,11 +33,25 @@ class VoiceService:
             "minimize": {"patterns": ["minimize", "hide window"], "action": "window", "target": "minimize"},
             "maximize": {"patterns": ["maximize", "full screen"], "action": "window", "target": "maximize"},
             "summarize": {"patterns": ["summarize this", "tldr", "too long"], "action": "ai", "target": "summarize"},
-            "code_review": {"patterns": ["review code", "check code", "code review"], "action": "ai", "target": "code_review"},
-        }
-        self._memos: list[dict] = []
+        "code_review": {"patterns": ["review code", "check code", "code review"], "action": "ai", "target": "code_review"},
+    }
+
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        self._wake_words = ["hey dash", "dash", "ok dash"]
+        # Defaults + custom commands loaded from the store (custom ones
+        # added at runtime survive restarts).
+        self._commands: dict[str, dict] = dict(self._DEFAULT_COMMANDS)
+        for row in self._store.query("SELECT id, data FROM voice_custom_commands"):
+            try:
+                cmd = json.loads(row["data"])
+                self._commands[row["id"]] = cmd
+            except Exception:
+                logger.debug("bad voice command row %s", row["id"])
+        self._memos: list[dict] = self._store.list_docs("voice_memos", newest_first=True)
         self._listening = False
-        self._language = "en"
+        lang = self._store.query("SELECT data FROM kv_settings WHERE key = 'voice_language'")
+        self._language = json.loads(lang[0]["data"]).get("language", "en") if lang else "en"
 
     def detect_wake_word(self, text: str) -> bool:
         text_lower = text.lower().strip()
@@ -54,6 +72,12 @@ class VoiceService:
 
     def add_command(self, command_id: str, patterns: list[str], action: str, target: str) -> dict:
         self._commands[command_id] = {"patterns": patterns, "action": action, "target": target}
+        if command_id not in self._DEFAULT_COMMANDS:
+            self._store.execute(
+                "INSERT INTO voice_custom_commands (id, data) VALUES (?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET data = excluded.data",
+                (command_id, json.dumps(self._commands[command_id])),
+            )
         return {"ok": True}
 
     def get_commands(self) -> dict:
@@ -61,7 +85,7 @@ class VoiceService:
 
     def record_memo(self, title: str, transcript: str, duration_seconds: float = 0) -> dict:
         memo = {
-            "id": f"memo_{len(self._memos)}",
+            "id": new_id("memo"),
             "title": title,
             "transcript": transcript,
             "duration_seconds": duration_seconds,
@@ -69,6 +93,7 @@ class VoiceService:
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         self._memos.append(memo)
+        self._store.put_doc("voice_memos", memo["id"], memo, seq=self._store.next_seq("voice_memos"))
         return {"ok": True, "memo": memo}
 
     def get_memos(self, limit: int = 20) -> list[dict]:
@@ -80,6 +105,11 @@ class VoiceService:
 
     def set_language(self, language: str) -> dict:
         self._language = language
+        self._store.execute(
+            "INSERT INTO kv_settings (key, data) VALUES ('voice_language', ?) "
+            "ON CONFLICT(key) DO UPDATE SET data = excluded.data",
+            (json.dumps({"language": language}),),
+        )
         return {"ok": True, "language": language}
 
     def get_config(self) -> dict:
@@ -98,15 +128,21 @@ class VoiceService:
 class BrowserService:
     """Browser tab management, page summarization, web scraping, bookmark AI."""
 
-    def __init__(self) -> None:
-        self._tabs: list[dict] = []
-        self._bookmarks: list[dict] = []
-        self._history: list[dict] = []
-        self._summaries: dict[str, dict] = {}
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        self._tabs: list[dict] = self._store.list_docs("browser_tabs")
+        self._bookmarks: list[dict] = self._store.list_docs("browser_bookmarks")
+        self._history: list[dict] = list(reversed(
+            [json.loads(r["data"]) for r in self._store.query("SELECT data FROM browser_history ORDER BY id DESC")]
+        ))
+        self._summaries: dict[str, dict] = {
+            r["tab_id"]: json.loads(r["data"])
+            for r in self._store.query("SELECT tab_id, data FROM browser_summaries")
+        }
 
     def open_tab(self, url: str, title: str = "", active: bool = True) -> dict:
         tab = {
-            "id": f"tab_{len(self._tabs)}",
+            "id": new_id("tab"),
             "url": url,
             "title": title or url.split("//")[-1][:50],
             "active": active,
@@ -115,12 +151,16 @@ class BrowserService:
         if active:
             for t in self._tabs:
                 t["active"] = False
+                self._store.put_doc("browser_tabs", t["id"], t)
         self._tabs.append(tab)
+        self._store.put_doc("browser_tabs", tab["id"], tab, seq=self._store.next_seq("browser_tabs"))
         self._history.append({"url": url, "title": tab["title"], "timestamp": tab["loaded_at"]})
+        self._store.execute("INSERT INTO browser_history (data) VALUES (?)", (json.dumps(self._history[-1]),))
         return {"ok": True, "tab": tab}
 
     def close_tab(self, tab_id: str) -> dict:
         self._tabs = [t for t in self._tabs if t["id"] != tab_id]
+        self._store.delete_doc("browser_tabs", tab_id)
         return {"ok": True}
 
     def get_tabs(self) -> list[dict]:
@@ -128,7 +168,10 @@ class BrowserService:
 
     def switch_tab(self, tab_id: str) -> dict:
         for t in self._tabs:
+            was = t["active"]
             t["active"] = t["id"] == tab_id
+            if was != t["active"]:
+                self._store.put_doc("browser_tabs", t["id"], t)
         return {"ok": True}
 
     def navigate(self, tab_id: str, url: str) -> dict:
@@ -136,7 +179,10 @@ class BrowserService:
             if t["id"] == tab_id:
                 t["url"] = url
                 t["loaded_at"] = datetime.now(timezone.utc).isoformat()
-                self._history.append({"url": url, "title": t["title"], "timestamp": t["loaded_at"]})
+                self._store.put_doc("browser_tabs", t["id"], t)
+                entry = {"url": url, "title": t["title"], "timestamp": t["loaded_at"]}
+                self._history.append(entry)
+                self._store.execute("INSERT INTO browser_history (data) VALUES (?)", (json.dumps(entry),))
                 return {"ok": True, "tab": t}
         return {"ok": False, "reason": "Tab not found"}
 
@@ -152,14 +198,20 @@ class BrowserService:
         result = {"tab_id": tab_id, "url": tab["url"], "summary": summary,
                   "word_count": word_count, "sentence_count": len(sentences)}
         self._summaries[tab_id] = result
+        self._store.execute(
+            "INSERT INTO browser_summaries (tab_id, data) VALUES (?, ?) "
+            "ON CONFLICT(tab_id) DO UPDATE SET data = excluded.data",
+            (tab_id, json.dumps(result)),
+        )
         return result
 
     def add_bookmark(self, url: str, title: str, folder: str = "default", tags: list[str] | None = None) -> dict:
         bookmark = {
-            "id": f"bm_{len(self._bookmarks)}", "url": url, "title": title,
+            "id": new_id("bm"), "url": url, "title": title,
             "folder": folder, "tags": tags or [], "created_at": datetime.now(timezone.utc).isoformat(),
         }
         self._bookmarks.append(bookmark)
+        self._store.put_doc("browser_bookmarks", bookmark["id"], bookmark, seq=self._store.next_seq("browser_bookmarks"))
         return {"ok": True, "bookmark": bookmark}
 
     def get_bookmarks(self, folder: Optional[str] = None) -> list[dict]:
@@ -174,6 +226,7 @@ class BrowserService:
 
     def delete_bookmark(self, bookmark_id: str) -> dict:
         self._bookmarks = [b for b in self._bookmarks if b["id"] != bookmark_id]
+        self._store.delete_doc("browser_bookmarks", bookmark_id)
         return {"ok": True}
 
     def get_history(self, limit: int = 50) -> list[dict]:

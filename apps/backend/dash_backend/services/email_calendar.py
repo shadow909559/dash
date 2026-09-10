@@ -1,26 +1,33 @@
-"""Email, calendar, and contact management integration."""
+"""Email, calendar, and contact management integration.
+
+All state persists to the shared local SQLite store (local_store.py) so
+accounts, mail, events, reminders, contacts, and rules survive backend
+restarts.
+"""
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Any, Optional
+from typing import Optional
+
+from dash_backend.services.local_store import LocalStore, new_id
 
 logger = logging.getLogger(__name__)
 
 
 class EmailService:
-    """Email read/send/search integration."""
+    """Email read/send/search integration (persisted)."""
 
-    def __init__(self) -> None:
-        self._accounts: list[dict] = []
-        self._inbox: list[dict] = []
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        self._accounts: list[dict] = self._store.list_docs("email_accounts")
+        self._inbox: list[dict] = self._store.list_docs("emails", newest_first=True)
         self._sent: list[dict] = []
-        self._rules: list[dict] = []
+        self._rules: list[dict] = self._store.list_docs("email_rules")
 
     def add_account(self, email: str, provider: str = "imap", display_name: str = "") -> dict:
         account = {
-            "id": f"acct_{len(self._accounts)}",
+            "id": new_id("acct"),
             "email": email,
             "provider": provider,
             "display_name": display_name or email.split("@")[0],
@@ -28,6 +35,7 @@ class EmailService:
             "status": "connected",
         }
         self._accounts.append(account)
+        self._store.put_doc("email_accounts", account["id"], account, seq=self._store.next_seq("email_accounts"))
         return {"ok": True, "account": account}
 
     def list_accounts(self) -> list[dict]:
@@ -36,7 +44,7 @@ class EmailService:
     def receive_email(self, from_addr: str, subject: str, body: str,
                       importance: float = 0.5, labels: list[str] | None = None) -> dict:
         email = {
-            "id": f"email_{len(self._inbox)}",
+            "id": new_id("email"),
             "from": from_addr,
             "subject": subject,
             "body": body,
@@ -46,6 +54,7 @@ class EmailService:
             "received_at": datetime.now(timezone.utc).isoformat(),
         }
         self._inbox.append(email)
+        self._store.put_doc("emails", email["id"], email, seq=self._store.next_seq("emails"))
         return {"ok": True, "email": email}
 
     def search(self, query: str, folder: str = "inbox") -> list[dict]:
@@ -63,12 +72,13 @@ class EmailService:
         for e in self._inbox:
             if e["id"] == email_id:
                 e["read"] = True
+                self._store.put_doc("emails", e["id"], e)
                 return {"ok": True}
         return {"ok": False, "reason": "Email not found"}
 
     def add_rule(self, name: str, condition: dict, action: str, action_config: dict) -> dict:
         rule = {
-            "id": f"rule_{len(self._rules)}",
+            "id": new_id("rule"),
             "name": name,
             "condition": condition,
             "action": action,
@@ -77,6 +87,7 @@ class EmailService:
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         self._rules.append(rule)
+        self._store.put_doc("email_rules", rule["id"], rule, seq=self._store.next_seq("email_rules"))
         return {"ok": True, "rule": rule}
 
     def get_rules(self) -> list[dict]:
@@ -93,16 +104,17 @@ class EmailService:
 
 
 class CalendarService:
-    """Calendar sync, event management, scheduling."""
+    """Calendar sync, event management, scheduling (persisted)."""
 
-    def __init__(self) -> None:
-        self._calendars: list[dict] = []
-        self._events: list[dict] = []
-        self._reminders: list[dict] = []
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        self._calendars: list[dict] = self._store.list_docs("calendars")
+        self._events: list[dict] = self._store.list_docs("calendar_events")
+        self._reminders: list[dict] = self._store.list_docs("calendar_reminders")
 
     def add_calendar(self, name: str, provider: str = "local", color: str = "#22c55e") -> dict:
         cal = {
-            "id": f"cal_{len(self._calendars)}",
+            "id": new_id("cal"),
             "name": name,
             "provider": provider,
             "color": color,
@@ -110,6 +122,7 @@ class CalendarService:
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         self._calendars.append(cal)
+        self._store.put_doc("calendars", cal["id"], cal, seq=self._store.next_seq("calendars"))
         return {"ok": True, "calendar": cal}
 
     def list_calendars(self) -> list[dict]:
@@ -119,7 +132,7 @@ class CalendarService:
                      description: str = "", location: str = "", recurrence: str = "",
                      attendees: list[str] | None = None) -> dict:
         event = {
-            "id": f"evt_{len(self._events)}",
+            "id": new_id("evt"),
             "title": title,
             "start": start,
             "end": end,
@@ -133,9 +146,11 @@ class CalendarService:
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         self._events.append(event)
+        self._store.put_doc("calendar_events", event["id"], event, seq=self._store.next_seq("calendar_events"))
         for cal in self._calendars:
             if cal["id"] == calendar_id:
                 cal["event_count"] += 1
+                self._store.put_doc("calendars", cal["id"], cal)
         return {"ok": True, "event": event}
 
     def get_events(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> list[dict]:
@@ -154,7 +169,7 @@ class CalendarService:
 
     def add_reminder(self, event_id: str, minutes_before: int = 30) -> dict:
         reminder = {
-            "id": f"rem_{len(self._reminders)}",
+            "id": new_id("rem"),
             "event_id": event_id,
             "minutes_before": minutes_before,
             "fired": False,
@@ -163,6 +178,8 @@ class CalendarService:
         for e in self._events:
             if e["id"] == event_id:
                 e["reminders"].append(reminder["id"])
+                self._store.put_doc("calendar_events", e["id"], e)
+        self._store.put_doc("calendar_reminders", reminder["id"], reminder, seq=self._store.next_seq("calendar_reminders"))
         return {"ok": True, "reminder": reminder}
 
     def update_event(self, event_id: str, **kwargs) -> dict:
@@ -171,12 +188,14 @@ class CalendarService:
                 for k, v in kwargs.items():
                     if k in ("title", "start", "end", "description", "location", "status"):
                         e[k] = v
+                self._store.put_doc("calendar_events", e["id"], e)
                 return {"ok": True, "event": e}
         return {"ok": False, "reason": "Event not found"}
 
     def delete_event(self, event_id: str) -> dict:
         before = len(self._events)
         self._events = [e for e in self._events if e["id"] != event_id]
+        self._store.delete_doc("calendar_events", event_id)
         return {"ok": True, "deleted": before - len(self._events)}
 
     def search(self, query: str) -> list[dict]:
@@ -195,16 +214,17 @@ class CalendarService:
 
 
 class ContactService:
-    """Contact management with AI-powered organization."""
+    """Contact management (persisted)."""
 
-    def __init__(self) -> None:
-        self._contacts: list[dict] = []
-        self._groups: list[dict] = []
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        self._contacts: list[dict] = self._store.list_docs("contacts")
+        self._groups: list[dict] = self._store.list_docs("contact_groups")
 
     def add_contact(self, name: str, email: str = "", phone: str = "",
                     company: str = "", notes: str = "", tags: list[str] | None = None) -> dict:
         contact = {
-            "id": f"contact_{len(self._contacts)}",
+            "id": new_id("contact"),
             "name": name,
             "email": email,
             "phone": phone,
@@ -216,6 +236,7 @@ class ContactService:
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         self._contacts.append(contact)
+        self._store.put_doc("contacts", contact["id"], contact, seq=self._store.next_seq("contacts"))
         return {"ok": True, "contact": contact}
 
     def search(self, query: str) -> list[dict]:
@@ -231,11 +252,13 @@ class ContactService:
                 for k, v in kwargs.items():
                     if k in ("name", "email", "phone", "company", "notes", "tags"):
                         c[k] = v
+                self._store.put_doc("contacts", c["id"], c)
                 return {"ok": True, "contact": c}
         return {"ok": False, "reason": "Contact not found"}
 
     def delete_contact(self, contact_id: str) -> dict:
         self._contacts = [c for c in self._contacts if c["id"] != contact_id]
+        self._store.delete_doc("contacts", contact_id)
         return {"ok": True}
 
     def record_interaction(self, contact_id: str, interaction_type: str = "message") -> dict:
@@ -243,12 +266,14 @@ class ContactService:
             if c["id"] == contact_id:
                 c["interaction_count"] += 1
                 c["last_interaction"] = datetime.now(timezone.utc).isoformat()
+                self._store.put_doc("contacts", c["id"], c)
                 return {"ok": True}
         return {"ok": False, "reason": "Contact not found"}
 
     def add_group(self, name: str, description: str = "") -> dict:
-        group = {"id": f"group_{len(self._groups)}", "name": name, "description": description, "members": []}
+        group = {"id": new_id("group"), "name": name, "description": description, "members": []}
         self._groups.append(group)
+        self._store.put_doc("contact_groups", group["id"], group, seq=self._store.next_seq("contact_groups"))
         return {"ok": True, "group": group}
 
     def add_to_group(self, group_id: str, contact_id: str) -> dict:
@@ -256,6 +281,7 @@ class ContactService:
             if g["id"] == group_id:
                 if contact_id not in g["members"]:
                     g["members"].append(contact_id)
+                    self._store.put_doc("contact_groups", g["id"], g)
                 return {"ok": True}
         return {"ok": False, "reason": "Group not found"}
 

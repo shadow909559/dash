@@ -1,4 +1,9 @@
-"""Advanced AI: prompt engineering, model evaluation, learning, multi-modal, curriculum."""
+"""Advanced AI: prompt engineering, model evaluation, learning, multi-modal, curriculum.
+
+Prompts, evaluations, skills, and corrections persist to the shared local
+SQLite store and survive backend restarts. Prompt templates stay code-seeded
+(read-only canon; duplicate-to-customize).
+"""
 from __future__ import annotations
 
 import json
@@ -6,15 +11,15 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from dash_backend.services.local_store import LocalStore, new_id
+
 logger = logging.getLogger(__name__)
 
 
 class PromptStudio:
-    """Prompt engineering: versioning, A/B testing, templates."""
+    """Prompt engineering: versioning, A/B testing, templates (persisted)."""
 
-    def __init__(self) -> None:
-        self._prompts: list[dict] = []
-        self._templates: list[dict] = [
+    _TEMPLATES: list[dict] = [
             {"id": "tpl_summarize", "name": "Summarize", "template": "Summarize the following text concisely:\n\n{text}", "category": "content"},
             {"id": "tpl_code_review", "name": "Code Review", "template": "Review this code for bugs, performance, and style:\n\n```{language}\n{code}\n```", "category": "code"},
             {"id": "tpl_explain", "name": "Explain", "template": "Explain the following concept clearly and simply:\n\n{concept}", "category": "education"},
@@ -24,15 +29,21 @@ class PromptStudio:
             {"id": "tpl_data_analysis", "name": "Data Analysis", "template": "Analyze this data and provide insights:\n\n{data}\n\nFocus on patterns, anomalies, and recommendations.", "category": "analytics"},
             {"id": "tpl_bug_fix", "name": "Bug Fix", "template": "I'm getting this error:\n\n{error}\n\nIn this code:\n```{language}\n{code}\n```\n\nWhat's wrong and how do I fix it?", "category": "code"},
         ]
+
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        self._prompts: list[dict] = self._store.list_docs("prompts")
+        self._templates: list[dict] = self._TEMPLATES
         self._ab_tests: list[dict] = []
 
     def create_prompt(self, name: str, content: str, category: str = "custom",
                       variables: list[str] | None = None, tags: list[str] | None = None) -> dict:
-        prompt = {"id": f"prompt_{len(self._prompts)}", "name": name, "content": content,
+        prompt = {"id": new_id("prompt"), "name": name, "content": content,
                   "category": category, "variables": variables or [], "tags": tags or [],
                   "version": 1, "versions": [{"v": 1, "content": content, "created_at": datetime.now(timezone.utc).isoformat()}],
                   "usage_count": 0, "avg_score": 0.0, "created_at": datetime.now(timezone.utc).isoformat()}
         self._prompts.append(prompt)
+        self._store.put_doc("prompts", prompt["id"], prompt, seq=self._store.next_seq("prompts"))
         return {"ok": True, "prompt": prompt}
 
     def update_prompt(self, prompt_id: str, new_content: str) -> dict:
@@ -41,6 +52,7 @@ class PromptStudio:
                 p["version"] += 1
                 p["content"] = new_content
                 p["versions"].append({"v": p["version"], "content": new_content, "created_at": datetime.now(timezone.utc).isoformat()})
+                self._store.put_doc("prompts", p["id"], p)
                 return {"ok": True, "prompt": p}
         return {"ok": False, "reason": "Prompt not found"}
 
@@ -62,6 +74,7 @@ class PromptStudio:
                 p["usage_count"] += 1
                 total = p["avg_score"] * (p["usage_count"] - 1) + score
                 p["avg_score"] = round(total / p["usage_count"], 2)
+                self._store.put_doc("prompts", p["id"], p)
                 return {"ok": True, "avg_score": p["avg_score"]}
         return {"ok": False, "reason": "Prompt not found"}
 
@@ -77,10 +90,11 @@ class PromptStudio:
 
 
 class ModelEvaluator:
-    """Benchmark and evaluate model performance."""
+    """Benchmark and evaluate model performance (persisted)."""
 
-    def __init__(self) -> None:
-        self._evaluations: list[dict] = []
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        self._evaluations: list[dict] = self._store.list_docs("prompt_evaluations")
         self._benchmarks: dict[str, dict] = {
             "accuracy": {"description": "Correctness of responses", "weight": 0.3},
             "relevance": {"description": "How well response addresses the query", "weight": 0.25},
@@ -95,10 +109,11 @@ class ModelEvaluator:
         for metric, score in scores.items():
             weight = self._benchmarks.get(metric, {}).get("weight", 0.1)
             weighted_total += score * weight
-        evaluation = {"id": f"eval_{len(self._evaluations)}", "model_id": model_id, "query": query[:200],
+        evaluation = {"id": new_id("eval"), "model_id": model_id, "query": query[:200],
                       "response_preview": response[:200], "scores": scores, "weighted_score": round(weighted_total, 3),
                       "timestamp": datetime.now(timezone.utc).isoformat()}
         self._evaluations.append(evaluation)
+        self._store.put_doc("prompt_evaluations", evaluation["id"], evaluation, seq=self._store.next_seq("prompt_evaluations"))
         return {"ok": True, "evaluation": evaluation}
 
     def get_leaderboard(self) -> list[dict]:
@@ -122,29 +137,32 @@ class ModelEvaluator:
 
 
 class LearningService:
-    """Learning from corrections, skill acquisition, active learning."""
+    """Learning from corrections, skill acquisition, active learning (persisted)."""
 
-    def __init__(self) -> None:
-        self._corrections: list[dict] = []
-        self._skills: list[dict] = []
+    def __init__(self, store: Optional[LocalStore] = None) -> None:
+        self._store = store if store is not None else LocalStore.instance()
+        self._corrections: list[dict] = self._store.list_docs("learning_corrections")
+        self._skills: list[dict] = self._store.list_docs("learning_skills")
         self._learned_patterns: list[dict] = []
 
     def record_correction(self, original_response: str, corrected_response: str, context: str = "",
                           user_id: str = "system") -> dict:
-        correction = {"id": f"corr_{len(self._corrections)}", "original": original_response[:500],
+        correction = {"id": new_id("corr"), "original": original_response[:500],
                       "corrected": corrected_response[:500], "context": context[:500], "user_id": user_id,
                       "timestamp": datetime.now(timezone.utc).isoformat()}
         self._corrections.append(correction)
+        self._store.put_doc("learning_corrections", correction["id"], correction, seq=self._store.next_seq("learning_corrections"))
         return {"ok": True, "correction": correction}
 
     def get_corrections(self, limit: int = 50) -> list[dict]:
         return list(reversed(self._corrections[-limit:]))
 
     def acquire_skill(self, name: str, description: str, examples: list[dict]) -> dict:
-        skill = {"id": f"skill_{len(self._skills)}", "name": name, "description": description,
+        skill = {"id": new_id("skill"), "name": name, "description": description,
                  "examples": examples, "confidence": 0.5, "usage_count": 0,
                  "created_at": datetime.now(timezone.utc).isoformat()}
         self._skills.append(skill)
+        self._store.put_doc("learning_skills", skill["id"], skill, seq=self._store.next_seq("learning_skills"))
         return {"ok": True, "skill": skill}
 
     def get_skills(self) -> list[dict]:
@@ -158,6 +176,7 @@ class LearningService:
                     s["confidence"] = min(1.0, s["confidence"] + 0.05)
                 else:
                     s["confidence"] = max(0.0, s["confidence"] - 0.1)
+                self._store.put_doc("learning_skills", s["id"], s)
                 return {"ok": True, "confidence": s["confidence"]}
         return {"ok": False, "reason": "Skill not found"}
 

@@ -221,9 +221,15 @@ class ConversationBranching:
 
 
 class ModelHotSwap:
-    """Hot-swap AI providers without losing context."""
+    """Hot-swap AI providers without losing context.
 
-    def __init__(self) -> None:
+    Active model and swap history persist to the shared local SQLite store.
+    """
+
+    def __init__(self, store=None) -> None:
+        self._store = store if store is not None else __import__(
+            "dash_backend.services.local_store", fromlist=["LocalStore"]
+        ).LocalStore.instance()
         self._available_models: list[dict] = [
             {"id": "openai/gpt-4o", "provider": "openai", "name": "GPT-4o", "active": True, "tier": "premium"},
             {"id": "openai/gpt-4o-mini", "provider": "openai", "name": "GPT-4o Mini", "active": True, "tier": "fast"},
@@ -233,8 +239,19 @@ class ModelHotSwap:
             {"id": "groq/llama-3-70b", "provider": "groq", "name": "Llama 3 70B", "active": True, "tier": "fast"},
             {"id": "ollama/local", "provider": "ollama", "name": "Local Ollama", "active": True, "tier": "local"},
         ]
-        self._active_model: str = "openai/gpt-4o"
-        self._swap_history: list[dict] = []
+        self._active_model: str = self._load_active_model()
+        self._swap_history: list[dict] = [
+            __import__("json").loads(r["data"])
+            for r in self._store.query("SELECT data FROM model_swap_history ORDER BY id ASC")
+        ]
+
+    def _load_active_model(self) -> str:
+        rows = self._store.query("SELECT data FROM kv_settings WHERE key = 'active_model'")
+        if rows:
+            saved = __import__("json").loads(rows[0]["data"]).get("model")
+            if saved in [m["id"] for m in self._available_models]:
+                return saved
+        return "openai/gpt-4o"
 
     def get_models(self) -> list[dict]:
         return self._available_models
@@ -248,11 +265,21 @@ class ModelHotSwap:
             return {"ok": False, "reason": f"Unknown model. Available: {valid}"}
         old = self._active_model
         self._active_model = model_id
-        self._swap_history.append({
+        entry = {
             "from": old,
             "to": model_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        }
+        self._swap_history.append(entry)
+        import json as _json
+        self._store.execute(
+            "INSERT INTO model_swap_history (data) VALUES (?)", (_json.dumps(entry),)
+        )
+        self._store.execute(
+            "INSERT INTO kv_settings (key, data) VALUES ('active_model', ?) "
+            "ON CONFLICT(key) DO UPDATE SET data = excluded.data",
+            (_json.dumps({"model": model_id}),),
+        )
         return {"ok": True, "from": old, "to": model_id}
 
     def get_history(self) -> list[dict]:
