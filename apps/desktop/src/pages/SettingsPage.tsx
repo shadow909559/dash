@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { aiOs, health } from "@/lib/api";
+import { aiOs, health, authFetch } from "@/lib/api";
 import {
   Settings,
   RefreshCw,
@@ -25,6 +25,11 @@ import {
   AlertTriangle,
   Rocket,
   Power,
+  Keyboard,
+  Volume2,
+  BellOff,
+  Plus,
+  X,
 } from "lucide-react";
 import { GlassCard, StatusIndicator } from "@/components/ultron";
 import { PrivacySection } from "@/components/PrivacySection";
@@ -43,6 +48,95 @@ export const SettingsPage: React.FC = () => {
     startAsOrb: false,
   });
   const [startupBusy, setStartupBusy] = useState(false);
+
+  // Shortcuts / Sounds / DND state (backed by /enhanced endpoints)
+  const [shortcuts, setShortcuts] = useState<any[]>([]);
+  const [editingShortcut, setEditingShortcut] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
+  const [sounds, setSounds] = useState<any>(null);
+  const [dnd, setDnd] = useState<any>(null);
+  const [dndException, setDndException] = useState("");
+
+  const loadShortcutSettings = useCallback(async () => {
+    try {
+      const [s, snd, d] = await Promise.all([
+        authFetch("/enhanced/shortcuts"),
+        authFetch("/enhanced/sounds"),
+        authFetch("/enhanced/dnd"),
+      ]);
+      if (s?.ok) setShortcuts((await s.json()).shortcuts || []);
+      if (snd?.ok) setSounds(await snd.json());
+      if (d?.ok) setDnd(await d.json());
+    } catch {
+      /* backend unreachable — sections show empty states */
+    }
+  }, []);
+
+  useEffect(() => {
+    loadShortcutSettings();
+  }, [loadShortcutSettings]);
+
+  const saveShortcut = async (action: string, shortcut: string) => {
+    await authFetch("/enhanced/shortcuts/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, shortcut }),
+    }).catch(() => null);
+    setEditingShortcut(null);
+    loadShortcutSettings();
+  };
+
+  const resetShortcut = async (action: string) => {
+    await authFetch(`/enhanced/shortcuts/reset?action=${encodeURIComponent(action)}`, {
+      method: "POST",
+    }).catch(() => null);
+    loadShortcutSettings();
+  };
+
+  const setSound = async (eventType: string, soundId: string) => {
+    await authFetch("/enhanced/sounds/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_type: eventType, sound_id: soundId }),
+    }).catch(() => null);
+    loadShortcutSettings();
+  };
+
+  const setVolume = async (volume: number) => {
+    setSounds((prev: any) => (prev ? { ...prev, volume } : prev));
+    await authFetch(`/enhanced/sounds/volume?volume=${volume}`, { method: "POST" }).catch(() => null);
+  };
+
+  const toggleSounds = async () => {
+    if (!sounds) return;
+    const next = !sounds.enabled;
+    setSounds({ ...sounds, enabled: next });
+    await authFetch(`/enhanced/sounds/toggle?enabled=${next}`, { method: "POST" }).catch(() => null);
+    loadShortcutSettings();
+  };
+
+  const toggleDnd = async () => {
+    if (!dnd) return;
+    setDnd({ ...dnd, enabled: !dnd.enabled });
+    await authFetch(`/enhanced/dnd/toggle?enabled=${!dnd.enabled}`, { method: "POST" }).catch(() => null);
+    loadShortcutSettings();
+  };
+
+  const saveDndSchedule = async (start: string, end: string) => {
+    await authFetch(`/enhanced/dnd/schedule?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`, {
+      method: "POST",
+    }).catch(() => null);
+    loadShortcutSettings();
+  };
+
+  const addDndException = async (action: string) => {
+    if (!action.trim()) return;
+    await authFetch(`/enhanced/dnd/exception?action=${encodeURIComponent(action.trim())}`, {
+      method: "POST",
+    }).catch(() => null);
+    setDndException("");
+    loadShortcutSettings();
+  };
 
   // Load startup settings from Electron (login item) when available.
   useEffect(() => {
@@ -97,6 +191,9 @@ export const SettingsPage: React.FC = () => {
     { id: "ai", label: "AI Providers", icon: Cpu },
     { id: "voice", label: "Voice", icon: Mic },
     { id: "appearance", label: "Appearance", icon: Palette },
+    { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
+    { id: "sounds", label: "Sounds", icon: Volume2 },
+    { id: "dnd", label: "Do Not Disturb", icon: BellOff },
     { id: "security", label: "Security", icon: Shield },
     { id: "privacy", label: "Privacy", icon: ShieldCheck },
     { id: "integrations", label: "Integrations", icon: Globe },
@@ -630,6 +727,338 @@ export const SettingsPage: React.FC = () => {
                 configured)
               </div>
             </GlassCard>
+          </div>
+        )}
+
+        {activeSection === "shortcuts" && (
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--dash-text)", marginBottom: 4 }}>
+              Keyboard Shortcuts
+            </h2>
+            <p style={{ fontSize: 12, color: "var(--dash-text-secondary)", marginBottom: 20 }}>
+              Customize the global shortcuts for DASH actions. Changes apply to the running app.
+            </p>
+            {shortcuts.length === 0 ? (
+              <GlassCard padding={18}>
+                <div style={{ fontSize: 12, color: "var(--dash-text-muted)" }}>
+                  Could not load shortcuts. Is the backend running?
+                </div>
+              </GlassCard>
+            ) : (
+              shortcuts.map((sc) => (
+                <GlassCard key={sc.action} padding={14} style={{ marginBottom: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Keyboard size={15} style={{ color: "var(--dash-accent)", flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, color: "var(--dash-text)", fontWeight: 500 }}>
+                        {sc.action}
+                      </div>
+                      {sc.is_custom && (
+                        <div style={{ fontSize: 10, color: "var(--dash-text-muted)", marginTop: 2 }}>
+                          Custom (default: {sc.default})
+                        </div>
+                      )}
+                    </div>
+                    {editingShortcut === sc.action ? (
+                      <>
+                        <input
+                          autoFocus
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && editingValue.trim()) saveShortcut(sc.action, editingValue.trim());
+                            if (e.key === "Escape") setEditingShortcut(null);
+                          }}
+                          aria-label={`New shortcut for ${sc.action}`}
+                          placeholder="e.g. CommandOrControl+Shift+K"
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "var(--dash-radius-sm)",
+                            border: "1px solid var(--dash-border)",
+                            background: "var(--dash-bg)",
+                            color: "var(--dash-text)",
+                            fontSize: 12,
+                            width: 220,
+                            fontFamily: "'JetBrains Mono', monospace",
+                          }}
+                        />
+                        <button onClick={() => editingValue.trim() && saveShortcut(sc.action, editingValue.trim())} className="dash-btn-ghost" title="Save" aria-label={`Save shortcut for ${sc.action}`} style={{ minHeight: 24, minWidth: 24, color: "var(--dash-success)" }}>
+                          <CheckCircle size={14} />
+                        </button>
+                        <button onClick={() => setEditingShortcut(null)} className="dash-btn-ghost" title="Cancel" aria-label={`Cancel editing ${sc.action}`} style={{ minHeight: 24, minWidth: 24 }}>
+                          <X size={14} />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <code
+                          style={{
+                            fontSize: 11,
+                            fontFamily: "'JetBrains Mono', monospace",
+                            padding: "4px 10px",
+                            borderRadius: "var(--dash-radius-sm)",
+                            background: "var(--dash-bg-subtle)",
+                            border: "1px solid var(--dash-border-subtle)",
+                            color: "var(--dash-text)",
+                          }}
+                        >
+                          {sc.shortcut}
+                        </code>
+                        <button
+                          onClick={() => {
+                            setEditingShortcut(sc.action);
+                            setEditingValue(sc.shortcut);
+                          }}
+                          className="dash-btn-ghost"
+                          title="Edit shortcut"
+                          aria-label={`Edit shortcut for ${sc.action}`}
+                          style={{ minHeight: 24, minWidth: 24 }}
+                        >
+                          <Sliders size={13} />
+                        </button>
+                        {sc.is_custom && (
+                          <button onClick={() => resetShortcut(sc.action)} className="dash-btn-ghost" title="Reset to default" aria-label={`Reset shortcut for ${sc.action}`} style={{ minHeight: 24, minWidth: 24 }}>
+                            <RefreshCw size={13} />
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </GlassCard>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeSection === "sounds" && (
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--dash-text)", marginBottom: 4 }}>
+              Notification Sounds
+            </h2>
+            <p style={{ fontSize: 12, color: "var(--dash-text-secondary)", marginBottom: 20 }}>
+              Choose which sound plays for each DASH event and set the master volume.
+            </p>
+            {!sounds ? (
+              <GlassCard padding={18}>
+                <div style={{ fontSize: 12, color: "var(--dash-text-muted)" }}>
+                  Could not load sound settings. Is the backend running?
+                </div>
+              </GlassCard>
+            ) : (
+              <>
+                <GlassCard padding={18} style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <Volume2 size={16} style={{ color: "var(--dash-accent)" }} />
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "var(--dash-text)", flex: 1 }}>
+                      Sounds {sounds.enabled ? "enabled" : "disabled"}
+                    </span>
+                    <button
+                      onClick={toggleSounds}
+                      role="switch"
+                      aria-checked={!!sounds.enabled}
+                      aria-label="Enable or disable notification sounds"
+                      style={{
+                        width: 40,
+                        height: 22,
+                        borderRadius: 11,
+                        border: "none",
+                        cursor: "pointer",
+                        background: sounds.enabled ? "var(--dash-accent)" : "var(--dash-border)",
+                        position: "relative",
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: 3,
+                          left: sounds.enabled ? 21 : 3,
+                          width: 16,
+                          height: 16,
+                          borderRadius: "50%",
+                          background: "#fff",
+                          transition: "left var(--dash-transition-fast)",
+                        }}
+                      />
+                    </button>
+                  </div>
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--dash-text-muted)", marginBottom: 6 }}>
+                      <span>Master volume</span>
+                      <span>{Math.round((sounds.volume ?? 0.7) * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={sounds.volume ?? 0.7}
+                      onChange={(e) => setVolume(parseFloat(e.target.value))}
+                      aria-label="Master notification volume"
+                      style={{ width: "100%", accentColor: "var(--dash-accent)" }}
+                    />
+                  </div>
+                </GlassCard>
+                {Object.entries(sounds.sounds || {}).map(([eventType, soundId]) => (
+                  <GlassCard key={eventType} padding={14} style={{ marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <Volume2 size={14} style={{ color: "var(--dash-text-muted)" }} />
+                      <span style={{ fontSize: 12, color: "var(--dash-text)", flex: 1, textTransform: "capitalize" }}>
+                        {eventType.replace(/_/g, " ")}
+                      </span>
+                      <select
+                        value={String(soundId)}
+                        onChange={(e) => setSound(eventType, e.target.value)}
+                        aria-label={`Sound for ${eventType.replace(/_/g, " ")} events`}
+                        style={{
+                          padding: "5px 8px",
+                          borderRadius: "var(--dash-radius-sm)",
+                          border: "1px solid var(--dash-border)",
+                          background: "var(--dash-bg)",
+                          color: "var(--dash-text)",
+                          fontSize: 12,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {(sounds.options || []).map((o: any) => (
+                          <option key={o.id} value={o.id}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </GlassCard>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+
+        {activeSection === "dnd" && (
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--dash-text)", marginBottom: 4 }}>
+              Do Not Disturb
+            </h2>
+            <p style={{ fontSize: 12, color: "var(--dash-text-secondary)", marginBottom: 20 }}>
+              Suppress notifications during focused work. Scheduled hours and exceptions control what still gets through.
+            </p>
+            {!dnd ? (
+              <GlassCard padding={18}>
+                <div style={{ fontSize: 12, color: "var(--dash-text-muted)" }}>
+                  Could not load DND settings. Is the backend running?
+                </div>
+              </GlassCard>
+            ) : (
+              <>
+                <GlassCard padding={18} style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <BellOff size={16} style={{ color: dnd.enabled ? "var(--dash-warning)" : "var(--dash-accent)" }} />
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "var(--dash-text)", flex: 1 }}>
+                      Do Not Disturb is {dnd.enabled ? "on" : "off"}
+                    </span>
+                    <button
+                      onClick={toggleDnd}
+                      role="switch"
+                      aria-checked={!!dnd.enabled}
+                      aria-label="Enable or disable Do Not Disturb"
+                      style={{
+                        width: 40,
+                        height: 22,
+                        borderRadius: 11,
+                        border: "none",
+                        cursor: "pointer",
+                        background: dnd.enabled ? "var(--dash-warning)" : "var(--dash-border)",
+                        position: "relative",
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: 3,
+                          left: dnd.enabled ? 21 : 3,
+                          width: 16,
+                          height: 16,
+                          borderRadius: "50%",
+                          background: "#fff",
+                          transition: "left var(--dash-transition-fast)",
+                        }}
+                      />
+                    </button>
+                  </div>
+                </GlassCard>
+
+                <GlassCard padding={18} style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dash-text)", marginBottom: 12 }}>
+                    Scheduled hours
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <input
+                      type="time"
+                      value={dnd.schedule?.start || "22:00"}
+                      onChange={(e) => saveDndSchedule(e.target.value, dnd.schedule?.end || "07:00")}
+                      aria-label="Do Not Disturb start time"
+                      style={{ padding: "6px 10px", borderRadius: "var(--dash-radius-sm)", border: "1px solid var(--dash-border)", background: "var(--dash-bg)", color: "var(--dash-text)", fontSize: 12 }}
+                    />
+                    <span style={{ fontSize: 12, color: "var(--dash-text-muted)" }}>to</span>
+                    <input
+                      type="time"
+                      value={dnd.schedule?.end || "07:00"}
+                      onChange={(e) => saveDndSchedule(dnd.schedule?.start || "22:00", e.target.value)}
+                      aria-label="Do Not Disturb end time"
+                      style={{ padding: "6px 10px", borderRadius: "var(--dash-radius-sm)", border: "1px solid var(--dash-border)", background: "var(--dash-bg)", color: "var(--dash-text)", fontSize: 12 }}
+                    />
+                  </div>
+                </GlassCard>
+
+                <GlassCard padding={18}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dash-text)", marginBottom: 10 }}>
+                    Exceptions (bypass DND)
+                  </div>
+                  {(dnd.exceptions || []).length === 0 && (
+                    <div style={{ fontSize: 11, color: "var(--dash-text-muted)", marginBottom: 8 }}>
+                      No exceptions — all notifications are suppressed during DND.
+                    </div>
+                  )}
+                  {(dnd.exceptions || []).map((ex: string) => (
+                    <div key={ex} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <code style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "var(--dash-text)", background: "var(--dash-bg-subtle)", padding: "3px 8px", borderRadius: "var(--dash-radius-sm)" }}>
+                        {ex}
+                      </code>
+                      <button
+                        onClick={async () => {
+                          await authFetch(`/enhanced/dnd/exception/remove?action=${encodeURIComponent(ex)}`, { method: "POST" }).catch(() => null);
+                          loadShortcutSettings();
+                        }}
+                        className="dash-btn-ghost"
+                        title={`Remove exception ${ex}`}
+                        aria-label={`Remove exception ${ex}`}
+                        style={{ minHeight: 22, minWidth: 22 }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <input
+                      value={dndException}
+                      onChange={(e) => setDndException(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addDndException(dndException)}
+                      aria-label="New exception action"
+                      placeholder="action, e.g. approval"
+                      style={{ flex: 1, padding: "6px 10px", borderRadius: "var(--dash-radius-sm)", border: "1px solid var(--dash-border)", background: "var(--dash-bg)", color: "var(--dash-text)", fontSize: 12 }}
+                    />
+                    <button
+                      onClick={() => addDndException(dndException)}
+                      className="dash-btn-ghost"
+                      title="Add exception"
+                      aria-label="Add DND exception"
+                      style={{ minHeight: 24, minWidth: 24 }}
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                </GlassCard>
+              </>
+            )}
           </div>
         )}
 

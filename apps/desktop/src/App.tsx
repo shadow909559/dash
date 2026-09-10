@@ -36,6 +36,7 @@ const SystemMonitorPage = lazy(() => import("@/pages/SystemMonitorPage"));
 const VoicePage = lazy(() => import("@/pages/VoicePage"));
 const WorkflowBuilderPage = lazy(() => import("@/pages/WorkflowBuilderPage"));
 const TokenUsagePage = lazy(() => import("@/pages/TokenUsagePage"));
+const ModelSelectorPage = lazy(() => import("@/pages/ModelSelectorPage"));
 const SecurityHardeningPage = lazy(() => import("@/pages/SecurityHardeningPage"));
 const EmailPage = lazy(() => import("@/pages/EmailPage"));
 const CalendarPage = lazy(() => import("@/pages/CalendarPage"));
@@ -238,6 +239,7 @@ export function App() {
                   <Route path="/settings" element={<Suspense fallback={<PageSkeleton />}><SettingsPage /></Suspense>} />
                   <Route path="/workflows" element={<Suspense fallback={<PageSkeleton />}><WorkflowBuilderPage /></Suspense>} />
                   <Route path="/token-usage" element={<Suspense fallback={<PageSkeleton />}><TokenUsagePage /></Suspense>} />
+                  <Route path="/models" element={<Suspense fallback={<PageSkeleton />}><ModelSelectorPage /></Suspense>} />
                   <Route path="/security-hardening" element={<Suspense fallback={<PageSkeleton />}><SecurityHardeningPage /></Suspense>} />
                   <Route path="/email" element={<Suspense fallback={<PageSkeleton />}><EmailPage /></Suspense>} />
                   <Route path="/calendar" element={<Suspense fallback={<PageSkeleton />}><CalendarPage /></Suspense>} />

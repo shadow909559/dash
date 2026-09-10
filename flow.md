@@ -625,3 +625,75 @@ AutomationPage (BuilderTab)
 ```
 
 Cycle warning: DFS over edges inside BuilderTab flags loops before save.
+
+## 18. Knowledge Graph & Enhanced Settings UI Flow
+
+### Knowledge graph (Knowledge page → Graph tab)
+
+```
+KnowledgePage.tsx
+  └─ tab "graph" → components/KnowledgeGraphView.tsx
+       ├─ GET /enhanced/knowledge-graph?max_nodes=250      → { nodes, edges }
+       │    └─ KnowledgeGraph.get_graph()                   (in-memory + state file)
+       ├─ POST /enhanced/knowledge-graph/rebuild
+       │    └─ enhanced_features.rebuild_knowledge_graph()
+       │         ├─ SELECT * FROM memories ORDER BY created_at DESC LIMIT 500
+       │         └─ KnowledgeGraph.build_graph_from_memories(memories)
+       │              ├─ extract_entities(title + content)   → ent_* nodes (NER + tech terms + dates)
+       │              ├─ tags                                → tag_* nodes
+       │              ├─ co_mentioned edges per memory pair   (_has_edge dedupe)
+       │              └─ _save_state() → %LOCALAPPDATA%\DASH\knowledge_graph_state.json
+       ├─ GET /enhanced/knowledge-graph/node/{id}            → node + neighbors (details panel)
+       └─ requestAnimationFrame loop
+            ├─ physics: repulsion(O(n²)) + springs + center pull, alpha decay
+            └─ render: edges → nodes (type color, mention-count radius, selection halo, search dimming)
+```
+
+Interactions: drag node (pins during drag), drag empty space (pan), wheel (zoom-at-cursor), click node (details panel + neighbor navigation), type chips toggle visibility, search dims non-matches (Enter selects first match).
+
+### Model Selector (ModelSelectorPage.tsx)
+
+```
+GET /enhanced/models/available → { models[], active }
+GET /enhanced/models/history   → { history[] }
+click card → POST /enhanced/models/swap?model_id=… → refresh history
+model_ensemble.model_hotswap.swap() mutates the active model for all subsequent AI requests
+```
+
+### Plugins marketplace (PluginsPage.tsx → Marketplace tab)
+
+```
+GET /enhanced/plugins/marketplace → registry catalogue (id, rating, installs, permissions)
+GET /enhanced/plugins/installed   → user registry with status
+Install/Uninstall/Toggle → POST /enhanced/plugins/{id}/{action} → plugin_registry mutates → refetch both
+```
+
+### Settings: Shortcuts / Sounds / DND (SettingsPage.tsx)
+
+```
+loadShortcutSettings():
+  GET /enhanced/shortcuts → shortcut_manager.get_all()      (action, shortcut, default, is_custom)
+  GET /enhanced/sounds     → notification_sounds.get_settings() (sounds map, volume, enabled, options)
+  GET /enhanced/dnd        → dnd_manager.get_state()            (enabled, schedule, exceptions)
+
+Shortcuts: edit inline → POST /enhanced/shortcuts/update {action, shortcut}
+           reset  → POST /enhanced/shortcuts/reset?action=…
+Sounds:    per-event select → POST /enhanced/sounds/update {event_type, sound_id}
+           volume slider    → POST /enhanced/sounds/volume?volume=…
+           master toggle    → POST /enhanced/sounds/toggle?enabled=…   (route added this session)
+DND:       toggle           → POST /enhanced/dnd/toggle?enabled=…
+           schedule         → POST /enhanced/dnd/schedule?start=…&end=…
+           exceptions       → POST /enhanced/dnd/exception?action=…
+                            → POST /enhanced/dnd/exception/remove?action=…  (route added this session)
+```
+
+### Analytics activity row (AnalyticsPage.tsx)
+
+```
+fetchMetrics() now also fetches:
+  GET /enhanced/activity/productivity → { score, tasks_completed, messages_sent, … }
+  GET /enhanced/activity/daily        → { total_events, by_type, hourly_distribution }
+Rendered as a 4-stat row only when the backend responds (no fake fallbacks).
+```
+
+**Session additions to backend:** `POST /enhanced/knowledge-graph/rebuild`, `POST /enhanced/sounds/toggle`, `POST /enhanced/dnd/exception/remove`, `KnowledgeGraph.build_graph_from_memories/_save_state/_load_state/_has_edge`; KG state now persists across backend restarts.

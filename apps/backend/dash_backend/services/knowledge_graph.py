@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -17,6 +18,121 @@ class KnowledgeGraph:
         self._nodes: dict[str, dict] = {}
         self._edges: list[dict] = []
         self._entity_types = ["person", "project", "technology", "concept", "location", "organization", "date", "file"]
+        self._load_state()
+
+    # ── Persistence (custom entities/edges survive restarts) ───────
+
+    @staticmethod
+    def _state_path() -> Any:
+        """Graph state file. Override with DASH_KG_STATE for tests."""
+        from pathlib import Path as _Path
+
+        override = os.environ.get("DASH_KG_STATE")
+        if override:
+            return _Path(override)
+        base = os.environ.get("LOCALAPPDATA") or str(_Path.home() / "AppData" / "Local")
+        return _Path(base) / "DASH" / "knowledge_graph_state.json"
+
+    def _load_state(self) -> None:
+        try:
+            path = self._state_path()
+            if path.exists():
+                import json as _json
+
+                data = _json.loads(path.read_text(encoding="utf-8"))
+                self._nodes = data.get("nodes", {})
+                self._edges = data.get("edges", [])
+        except Exception:
+            logger.debug("Knowledge graph state load failed", exc_info=True)
+
+    def _save_state(self) -> None:
+        try:
+            import json as _json
+
+            path = self._state_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                _json.dumps(
+                    {"version": 1, "nodes": self._nodes, "edges": self._edges},
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except Exception:
+            logger.debug("Knowledge graph state save failed", exc_info=True)
+
+    # ── Memory seeding ─────────────────────────────────────────────
+
+    def build_graph_from_memories(self, memories: list[dict]) -> dict:
+        """Seed the graph from memory dicts (keys: content/title/tags/type).
+
+        Extracts entities per memory, links co-occurring entities with a
+        'co_mentioned' edge and tags as 'tagged' edges. Idempotent:
+        repeated mentions bump mention_count instead of duplicating nodes.
+        Returns extraction stats.
+        """
+        extracted = 0
+        links = 0
+        memories_scanned = 0
+        for mem in memories:
+            text = " ".join(
+                str(part) for part in (mem.get("title"), mem.get("content")) if part
+            )
+            if not text.strip():
+                continue
+            memories_scanned += 1
+            found = self.extract_entities(text)
+            extracted += len(found)
+            ids: list[str] = []
+            for ent in found:
+                node_id = f"ent_{ent['name'].lower().replace(' ', '_')}"
+                if node_id in self._nodes:
+                    ids.append(node_id)
+            # Tag nodes (typed per memory type when tags exist)
+            for tag in mem.get("tags") or []:
+                tag_name = str(tag).strip()
+                if not tag_name:
+                    continue
+                tag_id = f"tag_{tag_name.lower().replace(' ', '_')}"
+                if tag_id not in self._nodes:
+                    self._nodes[tag_id] = {
+                        "id": tag_id,
+                        "name": tag_name,
+                        "type": "tag",
+                        "properties": {},
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "mention_count": 0,
+                    }
+                self._nodes[tag_id]["mention_count"] = self._nodes[tag_id].get("mention_count", 0) + 1
+                ids.append(tag_id)
+            # Link every co-occurring entity pair
+            for i, a in enumerate(ids):
+                for b in ids[i + 1:]:
+                    if a != b and not self._has_edge(a, b):
+                        self._edges.append({
+                            "source": a,
+                            "target": b,
+                            "relationship": "co_mentioned",
+                            "weight": 1.0,
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                        })
+                        links += 1
+        self._save_state()
+        return {
+            "ok": True,
+            "memories_scanned": memories_scanned,
+            "entities_extracted": extracted,
+            "edges_created": links,
+            "total_nodes": len(self._nodes),
+            "total_edges": len(self._edges),
+        }
+
+    def _has_edge(self, source_id: str, target_id: str) -> bool:
+        return any(
+            (e["source"] == source_id and e["target"] == target_id)
+            or (e["source"] == target_id and e["target"] == source_id)
+            for e in self._edges
+        )
 
     def add_entity(self, name: str, entity_type: str, properties: dict | None = None) -> dict:
         if entity_type not in self._entity_types:
@@ -114,6 +230,7 @@ class KnowledgeGraph:
         count = len(self._nodes)
         self._nodes.clear()
         self._edges.clear()
+        self._save_state()
         return {"ok": True, "cleared_nodes": count}
 
 

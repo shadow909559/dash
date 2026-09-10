@@ -24,11 +24,13 @@ export const AnalyticsPage: React.FC = () => {
   const [healthStatus, setHealthStatus] = useState<any>(null);
   const [conversationCount, setConversationCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [productivity, setProductivity] = useState<any>(null);
+  const [daily, setDaily] = useState<any>(null);
 
   const fetchMetrics = useCallback(async () => {
     setLoading(true);
     try {
-      const [r, h, c] = await Promise.all([
+      const [r, h, c, prod, day] = await Promise.all([
         authFetch(`${API}/status/overview`).then((r) => r.json()),
         authFetch(`${API.replace("/api/v1", "")}/health`)
           .then((r) => r.json())
@@ -36,10 +38,18 @@ export const AnalyticsPage: React.FC = () => {
         authFetch(`${API}/conversations?limit=1`)
           .then((r) => r.json())
           .catch(() => ({ total: 0 })),
+        authFetch(`${API}/enhanced/activity/productivity`)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+        authFetch(`${API}/enhanced/activity/daily`)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
       ]);
       setMetrics(r.details || {});
       setHealthStatus(h);
       setConversationCount(c.total || 0);
+      setProductivity(prod);
+      setDaily(day);
     } catch {}
     setLoading(false);
   }, []);
@@ -219,6 +229,85 @@ export const AnalyticsPage: React.FC = () => {
             );
           })}
         </div>
+
+        {/* Activity & productivity */}
+        {productivity && (
+          <SectionTitle>Activity</SectionTitle>
+        )}
+        {productivity && (
+          <div
+            className="dash-stagger"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: 12,
+            }}
+          >
+            {[
+              {
+                label: "Productivity Score",
+                value: productivity.score ?? 0,
+                icon: Activity,
+                color: "var(--dash-success)",
+              },
+              {
+                label: "Tasks Completed",
+                value: productivity.tasks_completed ?? 0,
+                icon: Zap,
+                color: "var(--dash-accent)",
+              },
+              {
+                label: "Messages Sent",
+                value: productivity.messages_sent ?? 0,
+                icon: MessageSquare,
+                color: "var(--dash-accent-secondary)",
+              },
+              {
+                label: "Events Today",
+                value: daily?.total_events ?? 0,
+                icon: Database,
+                color: "var(--dash-cyan)",
+              },
+            ].map((stat) => {
+              const Icon = stat.icon;
+              return (
+                <GlassCard key={stat.label} padding={14}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <Icon size={14} style={{ color: stat.color }} />
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: "var(--dash-text-muted)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        fontFamily: "'JetBrains Mono', monospace",
+                      }}
+                    >
+                      {stat.label}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 700,
+                      color: "var(--dash-text)",
+                      fontFamily: "'JetBrains Mono', monospace",
+                    }}
+                  >
+                    {stat.value}
+                  </div>
+                </GlassCard>
+              );
+            })}
+          </div>
+        )}
 
         {/* Detailed metrics */}
         <div

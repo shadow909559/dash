@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
 from dash_backend.auth.dependencies import get_current_user
+from dash_backend.db.session import get_db_session
 
 router = APIRouter(prefix="/enhanced", tags=["Enhanced Features"])
 
@@ -107,6 +109,12 @@ async def add_dnd_exception(action: str, _user=Depends(get_current_user)):
     return dnd_manager.add_exception(action)
 
 
+@router.post("/dnd/exception/remove")
+async def remove_dnd_exception(action: str, _user=Depends(get_current_user)):
+    from dash_backend.services.shortcuts_service import dnd_manager
+    return dnd_manager.remove_exception(action)
+
+
 # ── Notification Sounds Routes ─────────────────────────────────────────────
 
 @router.get("/sounds")
@@ -130,6 +138,12 @@ async def update_sound(body: SoundUpdateRequest, _user=Depends(get_current_user)
 async def set_volume(volume: float = 0.7, _user=Depends(get_current_user)):
     from dash_backend.services.shortcuts_service import notification_sounds
     return notification_sounds.set_volume(volume)
+
+
+@router.post("/sounds/toggle")
+async def toggle_sounds(enabled: Optional[bool] = None, _user=Depends(get_current_user)):
+    from dash_backend.services.shortcuts_service import notification_sounds
+    return notification_sounds.toggle(enabled)
 
 
 # ── Settings Search Routes ─────────────────────────────────────────────────
@@ -461,6 +475,30 @@ async def get_knowledge_node(node_id: str, _user=Depends(get_current_user)):
         return {"ok": False, "reason": "Node not found"}
     neighbors = knowledge_graph.get_neighbors(node_id)
     return {"node": node, "neighbors": neighbors}
+
+
+@router.post("/knowledge-graph/rebuild")
+async def rebuild_knowledge_graph(
+    _user=Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Seed the graph from all stored memories (entities + co-mention links)."""
+    from sqlalchemy import select
+
+    from dash_backend.db.models.memory import Memory
+    from dash_backend.services.knowledge_graph import knowledge_graph
+
+    result = await session.execute(select(Memory).order_by(Memory.created_at.desc()).limit(500))
+    memories = [
+        {
+            "title": m.title,
+            "content": m.content,
+            "tags": m.tags,
+            "type": m.type,
+        }
+        for m in result.scalars()
+    ]
+    return knowledge_graph.build_graph_from_memories(memories)
 
 
 # ── Chain of Thought Routes ────────────────────────────────────────────────
