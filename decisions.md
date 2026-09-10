@@ -315,3 +315,19 @@ Every meaningful technical decision, why it was made, and what alternatives were
 **Result:** Outbox went from 296 dead-lettered / 70 stuck-invalid to **1,416 completed, 0 pending, 0 dead-lettered** — verified live against the real Supabase project.
 
 **Follow-up (same day):** Sustained operation exposed a second flaw — an upsert-based tombstone INSERTed a bare cloud row when the record had never been synced, violating `dash_tasks.project_id` NOT NULL. Tombstones now use PATCH semantics (`update().match({id, owner_id})`), making them no-ops for unknown cloud records. Regression test: `test_tombstone_for_never_synced_record_is_a_noop`. Verified stable at 1,452 completed / 0 dead-lettered under sustained load.
+
+---
+
+## 32. Workflow Builder — Zero-Dependency SVG Canvas + JSON State File
+
+**Decision:** Built the drag-and-drop workflow builder as two pieces: (1) a self-contained `WorkflowCanvas` React component (drag nodes, drag port→port to wire edges, SVG bezier paths, grid snapping, Delete-key support, pan) using native pointer events and SVG — **no react-flow/React Flow library**; (2) a redesigned `AutomationPage` with a Rules | Builder tab split, a node palette (Trigger / Action / If-Else / Delay), and a properties panel. Backend gained `PUT /enhanced/workflows/{id}` (route + `WorkflowUpdateRequest`) and the engine now persists **custom** workflows to `%LOCALAPPDATA%\DASH\workflow_state.json` (override: `DASH_WORKFLOW_STATE`), reloaded on startup; templates stay code-seeded and immutable.
+
+**Why:**
+- *No React Flow:* the canvas needs ~450 lines for our scope (4 node types, 2 branch ports, one-edge-per-port rule). React Flow drags in ~50 dependencies, its own styling system that fights the DASH tokens, and license considerations — not worth it for a single-screen feature. Native pointer capture gives us grid snapping and port-hit logic exactly matching the backend's edge model.
+- *If/Else as one node with TRUE/FALSE ports (not separate branch nodes):* mirrors the backend edge model (`edge.condition = "true"|"false"` from the existing template schema), so the UI saves exactly what the engine consumes — no translation layer.
+- *JSON file over SQLite:* the predictive sampler already uses this exact pattern (`predictive_state.json`); workflows are few, read-mostly, and small — a table + migration for <10 objects is overhead. State file survives backend restarts (the in-memory engine silently lost user workflows on every restart — discovered when the test workflow vanished after a task restart).
+- *One outgoing edge per port:* prevents accidental multi-fan-out that the engine's sequential executor can't honor; dragging a new wire to an occupied port replaces the old edge (predictable, like n8n).
+
+**Files:** `apps/desktop/src/components/WorkflowCanvas.tsx` (new), `apps/desktop/src/pages/AutomationPage.tsx` (rewritten, tabs), `apps/desktop/src/lib/api.ts` (`workflows` client + types), `apps/backend/dash_backend/api/routes/enhanced_features.py` (PUT route), `apps/backend/dash_backend/services/workflow_builder.py` (persistence), `apps/backend/tests/test_workflow_builder_canvas.py` (7 tests).
+
+**Verified:** live E2E against running backend — create → PUT if/else graph (4 nodes, TRUE/FALSE edges) → reload → execute (`completed`, nodes n1→n4) → delete; engine restarted via scheduled task and reloaded state from disk. Desktop `tsc -b` + vite build clean; backend suite 446 passed.

@@ -286,6 +286,34 @@ async def create_workflow(body: WorkflowCreateRequest, _user=Depends(get_current
     return workflow_engine.create(body.name, body.nodes, body.edges, body.description, body.category)
 
 
+class WorkflowUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    nodes: Optional[list] = None
+    edges: Optional[list] = None
+    enabled: Optional[bool] = None
+
+
+@router.put("/workflows/{workflow_id}")
+async def update_workflow(workflow_id: str, body: WorkflowUpdateRequest, _user=Depends(get_current_user)):
+    """Persist canvas edits (nodes/edges/layout) for a custom workflow."""
+    from dash_backend.services.workflow_builder import workflow_engine
+    changes = {
+        key: value
+        for key, value in {
+            "name": body.name,
+            "description": body.description,
+            "category": body.category,
+            "nodes": body.nodes,
+            "edges": body.edges,
+            "enabled": body.enabled,
+        }.items()
+        if value is not None
+    }
+    return workflow_engine.update(workflow_id, **changes)
+
+
 @router.get("/workflows/{workflow_id}")
 async def get_workflow(workflow_id: str, _user=Depends(get_current_user)):
     from dash_backend.services.workflow_builder import workflow_engine

@@ -105,10 +105,30 @@ WORKFLOW_TEMPLATES: list[dict] = [
 ]
 
 
+# ── Persistence ────────────────────────────────────────────────────────────
+
+import os
+from pathlib import Path as _Path
+
+
+def _state_path() -> _Path:
+    """Custom-workflow state file. Override with DASH_WORKFLOW_STATE for tests."""
+    override = os.environ.get("DASH_WORKFLOW_STATE")
+    if override:
+        return _Path(override)
+    base = os.environ.get("LOCALAPPDATA") or str(_Path.home() / "AppData" / "Local")
+    return _Path(base) / "DASH" / "workflow_state.json"
+
+
 # ── Workflow Engine ────────────────────────────────────────────────────────
 
 class WorkflowEngine:
-    """Core workflow execution engine."""
+    """Core workflow execution engine.
+
+    Custom (user-built) workflows persist to a JSON state file so canvas
+    edits survive backend restarts; templates are always re-seeded from
+    code and never persisted.
+    """
 
     def __init__(self) -> None:
         self._workflows: dict[str, dict] = {}
@@ -124,6 +144,36 @@ class WorkflowEngine:
                 "is_template": True,
                 "enabled": True,
             }
+        self._load_custom()
+
+    # ── State file I/O (custom workflows only) ─────────────────────
+
+    def _load_custom(self) -> None:
+        try:
+            path = _state_path()
+            if path.exists():
+                import json as _json
+
+                data = _json.loads(path.read_text(encoding="utf-8"))
+                for wf in data.get("custom_workflows", []):
+                    wf.setdefault("is_template", False)
+                    self._workflows[wf["id"]] = wf
+        except Exception:
+            logger.debug("No prior workflow state loaded", exc_info=True)
+
+    def _save_custom(self) -> None:
+        try:
+            import json as _json
+
+            custom = [wf for wf in self._workflows.values() if not wf.get("is_template")]
+            path = _state_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                _json.dumps({"version": 1, "custom_workflows": custom}, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:
+            logger.debug("Workflow state save failed", exc_info=True)
 
     # ── CRUD ────────────────────────────────────────────────────────
 
@@ -145,6 +195,7 @@ class WorkflowEngine:
             "is_template": False,
         }
         self._workflows[wf_id] = workflow
+        self._save_custom()
         return {"ok": True, "workflow": workflow}
 
     def update(self, workflow_id: str, **kwargs) -> dict:
@@ -157,6 +208,7 @@ class WorkflowEngine:
             if key in kwargs:
                 wf[key] = kwargs[key]
         wf["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self._save_custom()
         return {"ok": True, "workflow": wf}
 
     def delete(self, workflow_id: str) -> dict:
@@ -168,6 +220,7 @@ class WorkflowEngine:
         del self._workflows[workflow_id]
         self._schedules.pop(workflow_id, None)
         self._webhooks.pop(workflow_id, None)
+        self._save_custom()
         return {"ok": True}
 
     def get(self, workflow_id: str) -> Optional[dict]:

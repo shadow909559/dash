@@ -159,6 +159,75 @@ export const automation = {
     request<void>(`/automation/rules/${id}`, { method: "DELETE" }),
 };
 
+// Workflow Builder (visual canvas workflows — /enhanced/workflows)
+export interface WorkflowNode {
+  id: string;
+  type: "trigger" | "action" | "condition" | "delay";
+  config: Record<string, string | number | boolean>;
+  x: number;
+  y: number;
+}
+
+export interface WorkflowEdge {
+  from: string;
+  to: string;
+  condition?: string; // "true" | "false" branch label on condition nodes
+}
+
+export interface Workflow {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  enabled: boolean;
+  run_count: number;
+  last_run: string | null;
+  is_template: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const workflows = {
+  list: () =>
+    request<{ workflows: Workflow[] }>("/enhanced/workflows"),
+
+  listTemplates: () =>
+    request<{ templates: Workflow[] }>("/enhanced/workflows/templates"),
+
+  get: (id: string) =>
+    request<Workflow>(`/enhanced/workflows/${id}`),
+
+  create: (data: { name: string; description?: string; category?: string; nodes: WorkflowNode[]; edges: WorkflowEdge[] }) =>
+    request<{ ok: boolean; workflow: Workflow }>("/enhanced/workflows/create", {
+      method: "POST",
+      body: data,
+    }),
+
+  /** Persist canvas edits (nodes/edges/layout/name/enabled) on a custom workflow. */
+  update: (
+    id: string,
+    data: Partial<{ name: string; description: string; category: string; nodes: WorkflowNode[]; edges: WorkflowEdge[]; enabled: boolean }>
+  ) =>
+    request<{ ok: boolean; workflow: Workflow }>(`/enhanced/workflows/${id}`, {
+      method: "PUT",
+      body: data,
+    }),
+
+  delete: (id: string) =>
+    request<{ ok: boolean }>(`/enhanced/workflows/${id}`, { method: "DELETE" }),
+
+  execute: (id: string) =>
+    request<{ ok: boolean; execution: { id: string; status: string; nodes_executed: string[]; duration_ms: number } }>(
+      `/enhanced/workflows/${id}/execute`,
+      { method: "POST" }
+    ),
+
+  duplicate: (id: string) =>
+    request<{ ok: boolean; workflow: Workflow }>(`/enhanced/workflows/${id}/duplicate`, { method: "POST" }),
+};
+
 // Notifications
 export const notifications = {
   getAll: () =>

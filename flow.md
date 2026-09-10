@@ -594,3 +594,34 @@ Desktop App
 | `sync/supabase_outbox_worker.py` | `_TABLE_COLUMNS` payload filter, NOT-NULL defaults, ValueError exhaustion comment | #31 |
 | `executive/service.py` | `delete_goal` now enqueues `tombstone` (was invalid `delete`), also tombstones the goal itself | #31 |
 | `tests/test_supabase_outbox.py` | Regression test: extra columns stripped before delivery | #31 |
+| `apps/desktop/src/components/WorkflowCanvas.tsx` | New: drag-and-drop canvas (pointer events, SVG edges, grid snap, port wiring, Delete-key) | #17 |
+| `apps/desktop/src/pages/AutomationPage.tsx` | Rewritten: Rules | Builder tabs, node palette, properties panel, save/run/duplicate/delete | #17 |
+| `apps/desktop/src/lib/api.ts` | Added `workflows` client (list/templates/get/create/update/delete/execute/duplicate) + types | #17 |
+| `api/routes/enhanced_features.py` | Added `PUT /enhanced/workflows/{id}` (WorkflowUpdateRequest) for canvas saves | #17 |
+| `services/workflow_builder.py` | Custom workflows persist to `%LOCALAPPDATA%\DASH\workflow_state.json`, reloaded in `__init__` | #17 |
+| `tests/test_workflow_builder_canvas.py` | 7 tests: CRUD persistence, template immutability, PUT route, if/else E2E | #17 |
+
+---
+
+## 17. Workflow Builder Canvas Flow
+
+**Entry point:** Sidebar → `/automation` → `AutomationPage` (tab "builder") → `WorkflowCanvas`.
+
+```
+AutomationPage (BuilderTab)
+  ├─ mount: workflowsApi.list() + listTemplates()        → GET /enhanced/workflows[/templates]
+  ├─ select workflow → setNodes/setEdges from its shape
+  ├─ palette drag → dataTransfer("application/dash-node-type") → canvas onDrop → new node (grid-snapped)
+  ├─ node drag (pointer capture) → onPointerMove → snap(x,y) → onChange(nodes, edges) → dirty flag
+  ├─ wire edge: port pointerdown → ghost path follows cursor → drop near target node
+  │     → nearest-port hit → edge {from, to, condition: true|false|undefined}
+  │     → replaces same-branch edge (one edge per output port)
+  ├─ properties panel → updateNodeConfig(key, value) → node.config
+  ├─ Save → PUT /enhanced/workflows/{id} {nodes, edges}
+  │     → enhanced_features.update_workflow → workflow_engine.update() → _save_custom()
+  │     → %LOCALAPPDATA%\DASH\workflow_state.json (custom only; templates excluded)
+  ├─ Run → POST /enhanced/workflows/{id}/execute → engine.execute() → nodes_executed
+  └─ backend restart → WorkflowEngine.__init__ → _load_custom() → workflows restored
+```
+
+Cycle warning: DFS over edges inside BuilderTab flags loops before save.
