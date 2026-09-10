@@ -21,6 +21,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     deviceToken: (): Promise<{ ok: boolean; token?: string; reason?: string }> =>
       ipcRenderer.invoke("auth:device-token"),
   },
+  biometric: {
+    availability: (): Promise<{ ok: boolean; available: boolean; authenticator: string | null; reason?: string }> =>
+      ipcRenderer.invoke("biometric:availability"),
+    prompt: (reason: string): Promise<{ ok: boolean; success: boolean; reason?: string }> =>
+      ipcRenderer.invoke("biometric:prompt", reason),
+  },
   updater: {
     status: (): Promise<{
       checkInProgress: boolean;

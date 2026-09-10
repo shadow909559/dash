@@ -103,59 +103,133 @@ async def contact_stats(_user=Depends(get_current_user)):
     from dash_backend.services.email_calendar import contact_service
     return contact_service.get_stats()
 
-# ── 2FA ────────────────────────────────────────────────────────────────────
+# ── 2FA (RFC 6238 TOTP) ────────────────────────────────────────────────────
 
 @router.post("/security/2fa/enroll")
 async def enroll_2fa(_user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import totp_service
-    user_id = str(id(_user))
-    return totp_service.enroll(user_id)
+    return totp_service.enroll(str(_user.id))
 
 class TOTPVerifyReq(BaseModel):
     code: str
+    confirm: bool = False
 
 @router.post("/security/2fa/verify")
 async def verify_2fa(body: TOTPVerifyReq, _user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import totp_service
-    return totp_service.verify(str(id(_user)), body.code)
+    return totp_service.verify(str(_user.id), body.code, confirm=body.confirm)
 
 @router.post("/security/2fa/enable")
 async def enable_2fa(_user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import totp_service
-    return totp_service.enable(str(id(_user)))
+    return totp_service.enable(str(_user.id))
 
 @router.post("/security/2fa/disable")
 async def disable_2fa(_user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import totp_service
-    return totp_service.disable(str(id(_user)))
+    return totp_service.disable(str(_user.id))
 
 @router.get("/security/2fa/status")
 async def get_2fa_status(_user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import totp_service
-    return totp_service.get_status(str(id(_user)))
+    return totp_service.get_status(str(_user.id))
 
 @router.post("/security/2fa/regenerate-backup")
 async def regenerate_backup_codes(_user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import totp_service
-    return totp_service.regenerate_backup_codes(str(id(_user)))
+    return totp_service.regenerate_backup_codes(str(_user.id))
 
-# ── Password Manager ───────────────────────────────────────────────────────
+
+# ── Biometric authentication (Windows Hello / Touch ID) ────────────────────
+
+@router.get("/security/biometric/availability")
+async def biometric_availability(_user=Depends(get_current_user)):
+    from dash_backend.services.security_hardening import biometric_service
+    return biometric_service.availability()
+
+@router.post("/security/biometric/enroll")
+async def biometric_enroll(_user=Depends(get_current_user)):
+    from dash_backend.services.security_hardening import biometric_service
+    return biometric_service.enroll(str(_user.id))
+
+@router.get("/security/biometric/status")
+async def biometric_status(_user=Depends(get_current_user)):
+    from dash_backend.services.security_hardening import biometric_service
+    return biometric_service.get_status(str(_user.id))
+
+class BiometricChallengeReq(BaseModel):
+    action: str = "unlock"
+
+@router.post("/security/biometric/challenge")
+async def biometric_challenge(body: BiometricChallengeReq, _user=Depends(get_current_user)):
+    from dash_backend.services.security_hardening import biometric_service
+    return biometric_service.create_challenge(str(_user.id), body.action)
+
+class BiometricVerifyReq(BaseModel):
+    challenge: str
+    success: bool
+
+@router.post("/security/biometric/verify")
+async def biometric_verify(body: BiometricVerifyReq, _user=Depends(get_current_user)):
+    from dash_backend.services.security_hardening import biometric_service
+    return biometric_service.verify_challenge(body.challenge, body.success, str(_user.id))
+
+@router.post("/security/biometric/revoke")
+async def biometric_revoke(_user=Depends(get_current_user)):
+    from dash_backend.services.security_hardening import biometric_service
+    return biometric_service.revoke(str(_user.id))
+
+@router.get("/security/biometric/audit")
+async def biometric_audit(_user=Depends(get_current_user)):
+    from dash_backend.services.security_hardening import biometric_service
+    return {"events": biometric_service.get_audit_log(str(_user.id))}
+
+
+# ── Password Manager (AES-256-GCM vault) ─────────────────────────────────
 
 class VaultEntryReq(BaseModel):
     category: str = "login"
     title: str
     fields: dict = {}
     notes: str = ""
+    tags: list[str] = []
 
 @router.post("/vault/entries")
 async def add_vault_entry(body: VaultEntryReq, _user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import password_manager
-    return password_manager.add_entry(body.category, body.title, body.fields, body.notes)
+    return password_manager.add_entry(body.category, body.title, body.fields, body.notes, body.tags)
 
 @router.get("/vault/entries")
 async def get_vault_entries(category: Optional[str] = None, _user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import password_manager
-    return {"entries": password_manager.get_by_category(category) if category else password_manager.vault if hasattr(password_manager, 'vault') else []}
+    entries = password_manager.get_by_category(category) if category else password_manager.list_entries()
+    return {"entries": entries}
+
+class VaultUpdateReq(BaseModel):
+    title: Optional[str] = None
+    fields: Optional[dict] = None
+    notes: Optional[str] = None
+    tags: Optional[list[str]] = None
+    favorite: Optional[bool] = None
+
+@router.patch("/vault/entries/{entry_id}")
+async def update_vault_entry(entry_id: str, body: VaultUpdateReq, _user=Depends(get_current_user)):
+    from dash_backend.services.security_hardening import password_manager
+    changes = {k: v for k, v in body.model_dump().items() if v is not None}
+    return password_manager.update_entry(entry_id, **changes)
+
+@router.delete("/vault/entries/{entry_id}")
+async def delete_vault_entry(entry_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.security_hardening import password_manager
+    return password_manager.delete_entry(entry_id)
+
+@router.get("/vault/entries/{entry_id}")
+async def get_vault_entry(entry_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.security_hardening import password_manager
+    entry = password_manager.get_entry(entry_id)
+    if not entry:
+        return {"ok": False, "reason": "Entry not found"}
+    return {"ok": True, "entry": entry}
 
 @router.get("/vault/search")
 async def search_vault(q: str = "", _user=Depends(get_current_user)):
@@ -176,18 +250,20 @@ async def vault_stats(_user=Depends(get_current_user)):
 
 class AnonymizeReq(BaseModel):
     text: str
+    mask_types: Optional[list[str]] = None
 
 @router.post("/privacy/anonymize")
 async def anonymize_text(body: AnonymizeReq, _user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import data_anonymizer
-    return data_anonymizer.anonymize(body.text)
+    return data_anonymizer.anonymize(body.text, body.mask_types)
 
 @router.post("/privacy/scan")
 async def scan_pii(body: AnonymizeReq, _user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import data_anonymizer
     return data_anonymizer.scan_text(body.text)
 
-# ── Encrypted Messenger ────────────────────────────────────────────────────
+
+# ── Encrypted Messenger (AES-256-GCM, per-conversation keys) ───────────────
 
 class MessageReq(BaseModel):
     recipient: str
@@ -196,18 +272,27 @@ class MessageReq(BaseModel):
 @router.post("/messenger/send")
 async def send_message(body: MessageReq, _user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import encrypted_messenger
-    sender = str(id(_user))
+    sender = str(_user.id)
     return encrypted_messenger.send_message(sender, body.recipient, body.content)
+
+class MessengerConversationReq(BaseModel):
+    other_user: str
+
+@router.post("/messenger/messages")
+async def get_messenger_messages(body: MessengerConversationReq, _user=Depends(get_current_user)):
+    from dash_backend.services.security_hardening import encrypted_messenger
+    me = str(_user.id)
+    return {"messages": encrypted_messenger.get_messages(me, body.other_user)}
 
 @router.get("/messenger/conversations")
 async def get_conversations(_user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import encrypted_messenger
-    return {"conversations": encrypted_messenger.get_conversations(str(id(_user)))}
+    return {"conversations": encrypted_messenger.get_conversations(str(_user.id))}
 
 @router.get("/messenger/unread")
 async def get_unread(_user=Depends(get_current_user)):
     from dash_backend.services.security_hardening import encrypted_messenger
-    return {"unread": encrypted_messenger.get_unread_count(str(id(_user)))}
+    return {"unread": encrypted_messenger.get_unread_count(str(_user.id))}
 
 # ── Voice ──────────────────────────────────────────────────────────────────
 

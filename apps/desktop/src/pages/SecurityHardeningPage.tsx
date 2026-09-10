@@ -2,21 +2,25 @@ import { useState, useEffect } from "react";
 import { authFetch } from "@/lib/api";
 import { useNotifier } from "@/components/NotificationProvider";
 import { PageShell, PageHeader, GlassCard } from "@/components/ultron";
-import { Shield, Key, Lock, Scan, MessageSquare, AlertTriangle, CheckCircle, RefreshCw, Plus } from "lucide-react";
+import { Shield, Key, Lock, Scan, MessageSquare, AlertTriangle, CheckCircle, RefreshCw, Plus, Fingerprint } from "lucide-react";
 
-type Tab = "2fa" | "vault" | "anonymize" | "messenger";
+type Tab = "2fa" | "biometric" | "vault" | "anonymize" | "messenger";
 
 export default function SecurityHardeningPage() {
   const { addNotification } = useNotifier();
   const [tab, setTab] = useState<Tab>("2fa");
-  const [twoFA, setTwoFA] = useState({ enrolled: false, enabled: false, backup_codes_remaining: 0 });
+  const [twoFA, setTwoFA] = useState({ enrolled: false, enabled: false, confirmed: false, backup_codes_remaining: 0 });
   const [vaultCount, setVaultCount] = useState(0);
   const [piiText, setPiiText] = useState("");
   const [piiResult, setPiiResult] = useState<any>(null);
+  const [biometric, setBiometric] = useState<{ enrolled: boolean; enabled: boolean; authenticator: string | null }>({ enrolled: false, enabled: false, authenticator: null });
+  const [biometricBusy, setBiometricBusy] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
 
   useEffect(() => {
     authFetch("/features/security/2fa/status").then(r => r?.json()).then(d => d && setTwoFA(d)).catch(() => {});
     authFetch("/features/vault/stats").then(r => r?.json()).then(d => d && setVaultCount(d.total || 0)).catch(() => {});
+    authFetch("/features/security/biometric/status").then(r => r?.json()).then(d => d && setBiometric(d)).catch(() => {});
   }, []);
 
   const enroll2FA = async () => {
@@ -24,10 +28,56 @@ export default function SecurityHardeningPage() {
     setTwoFA({ ...twoFA, enrolled: true });
   };
 
-  const enable2FA = async () => {
-    try { await authFetch("/features/security/2fa/enable", { method: "POST" }); } catch {}
-    setTwoFA({ ...twoFA, enabled: true });
-    addNotification({ type: "success", title: "2FA Enabled", message: "Two-factor authentication is now active" });
+  const verifyAndEnable2FA = async () => {
+    if (!totpCode.trim()) return;
+    try {
+      const r = await authFetch("/features/security/2fa/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: totpCode.trim(), confirm: true }) });
+      if (r?.ok) {
+        const d = await r.json();
+        if (!d.ok) { addNotification({ type: "error", title: "Invalid code", message: d.reason || "Verification failed" }); return; }
+        const en = await authFetch("/features/security/2fa/enable", { method: "POST" });
+        if (en?.ok) { setTwoFA({ ...twoFA, enabled: true }); addNotification({ type: "success", title: "2FA Enabled", message: "Two-factor authentication is now active" }); }
+      }
+    } catch {}
+    setTotpCode("");
+  };
+
+  const enrollBiometric = async () => {
+    setBiometricBusy(true);
+    try {
+      const api = (window as any).electronAPI?.biometric;
+      if (api?.availability) {
+        const avail = await api.availability();
+        if (!avail.available) {
+          addNotification({ type: "error", title: "Not available", message: avail.reason || "No platform authenticator on this device" });
+          setBiometricBusy(false);
+          return;
+        }
+      }
+      const r = await authFetch("/features/security/biometric/enroll", { method: "POST" });
+      if (r?.ok) {
+        setBiometric({ ...biometric, enrolled: true, enabled: true });
+        addNotification({ type: "success", title: "Biometric enrolled", message: "Platform authenticator linked to DASH" });
+      }
+    } catch {}
+    setBiometricBusy(false);
+  };
+
+  const testBiometric = async () => {
+    setBiometricBusy(true);
+    try {
+      const ch = await authFetch("/features/security/biometric/challenge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "unlock" }) });
+      if (ch?.ok) {
+        const challenge = (await ch.json()).challenge;
+        const api = (window as any).electronAPI?.biometric;
+        let success = false;
+        if (api?.prompt) { const p = await api.prompt("Unlock DASH"); success = !!p.success; }
+        const v = await authFetch("/features/security/biometric/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challenge, success }) });
+        const d = await v.json();
+        addNotification(d.ok ? { type: "success", title: "Verified", message: "Biometric check passed" } : { type: "error", title: "Failed", message: d.reason || "Biometric check failed" });
+      }
+    } catch {}
+    setBiometricBusy(false);
   };
 
   const scanPII = async () => {
@@ -55,6 +105,7 @@ export default function SecurityHardeningPage() {
 
   const tabs: { id: Tab; label: string; I: typeof Shield }[] = [
     { id: "2fa", label: "Two-Factor Auth", I: Shield },
+    { id: "biometric", label: "Biometric", I: Fingerprint },
     { id: "vault", label: "Password Vault", I: Lock },
     { id: "anonymize", label: "PII Scanner", I: Scan },
     { id: "messenger", label: "Encrypted Chat", I: MessageSquare },
@@ -85,9 +136,34 @@ export default function SecurityHardeningPage() {
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             {!twoFA.enrolled && <button className="btn btn--primary" onClick={enroll2FA} style={{ fontSize: 12 }}>Enroll 2FA</button>}
-            {twoFA.enrolled && !twoFA.enabled && <button className="btn btn--primary" onClick={enable2FA} style={{ fontSize: 12 }}>Enable 2FA</button>}
+            {twoFA.enrolled && !twoFA.enabled && (
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input value={totpCode} onChange={e => setTotpCode(e.target.value)} onKeyDown={e => e.key === "Enter" && verifyAndEnable2FA()} placeholder="6-digit code" aria-label="TOTP verification code" inputMode="numeric" maxLength={8} style={{ width: 120, padding: "6px 10px", background: "var(--bg-secondary, #1a1a2e)", border: "1px solid var(--border, #333)", borderRadius: 6, color: "var(--text)", fontSize: 12, fontFamily: "monospace" }} />
+                <button className="btn btn--primary" onClick={verifyAndEnable2FA} style={{ fontSize: 12 }}>Verify & Enable</button>
+              </div>
+            )}
             {twoFA.enabled && <button onClick={() => { setTwoFA({ ...twoFA, enabled: false }); addNotification({ type: "info", title: "Disabled", message: "2FA disabled" }); }} style={{ background: "none", border: "1px solid var(--border, #333)", borderRadius: 6, padding: "6px 12px", color: "var(--text)", cursor: "pointer", fontSize: 12 }}>Disable</button>}
             {twoFA.enrolled && <button onClick={() => addNotification({ type: "success", title: "Regenerated", message: "New backup codes generated" })} style={{ background: "none", border: "none", color: "var(--text-muted, #999)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><RefreshCw size={12} /> Regenerate Codes</button>}
+          </div>
+        </GlassCard>
+      )}
+
+      {tab === "biometric" && (
+        <GlassCard>
+          <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Biometric Authentication</h3>
+          <p style={{ fontSize: 12, color: "var(--text-muted, #666)", margin: "0 0 16px" }}>Gate sensitive actions behind Windows Hello / Touch ID. Biometric data never leaves your device — the backend only sees challenge results.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            {[{ l: "Enrolled", v: biometric.enrolled }, { l: "Authenticator", v: biometric.authenticator || "none" }].map(s => (
+              <div key={s.l} style={{ padding: 12, background: "var(--bg-secondary, #1a1a2e)", borderRadius: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                {s.v && s.v !== "none" ? <CheckCircle size={14} style={{ color: "var(--accent, #22c55e)" }} /> : <AlertTriangle size={14} style={{ color: "var(--text-muted, #666)" }} />}
+                <span style={{ fontSize: 12, fontWeight: 500 }}>{s.l}: {typeof s.v === "boolean" ? (s.v ? "Yes" : "No") : s.v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {!biometric.enrolled && <button className="btn btn--primary" onClick={enrollBiometric} disabled={biometricBusy} style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5 }}><Fingerprint size={13} /> Enroll Biometric</button>}
+            {biometric.enrolled && <button className="btn btn--primary" onClick={testBiometric} disabled={biometricBusy} style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5 }}><Fingerprint size={13} /> Test Verification</button>}
+            {biometric.enrolled && <button onClick={async () => { await authFetch("/features/security/biometric/revoke", { method: "POST" }); setBiometric({ enrolled: false, enabled: false, authenticator: null }); addNotification({ type: "info", title: "Revoked", message: "Biometric enrollment removed" }); }} style={{ background: "none", border: "1px solid var(--border, #333)", borderRadius: 6, padding: "6px 12px", color: "var(--text)", cursor: "pointer", fontSize: 12 }}>Revoke</button>}
           </div>
         </GlassCard>
       )}

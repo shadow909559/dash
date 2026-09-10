@@ -697,3 +697,95 @@ Rendered as a 4-stat row only when the backend responds (no fake fallbacks).
 ```
 
 **Session additions to backend:** `POST /enhanced/knowledge-graph/rebuild`, `POST /enhanced/sounds/toggle`, `POST /enhanced/dnd/exception/remove`, `KnowledgeGraph.build_graph_from_memories/_save_state/_load_state/_has_edge`; KG state now persists across backend restarts.
+
+## 19. Security Services Flow (2FA, Biometrics, Vault, Chat, Anonymization)
+
+### TOTP 2FA enrollment & verification
+
+```
+SecurityHardeningPage (2FA tab)
+  ├─ GET  /features/security/2fa/status        → TOTPService.get_status(user_id)
+  ├─ POST /features/security/2fa/enroll        → TOTPService.enroll(user_id)
+  │    ├─ secret = base32(os.urandom(20))
+  │    ├─ backup codes → SHA-256 hashes stored (plaintext shown once)
+  │    ├─ _save() → %LOCALAPPDATA%\DASH\twofactor_state.json
+  │    └─ returns otpauth:// URL (scan into authenticator app)
+  ├─ POST /features/security/2fa/verify {code, confirm:true}
+  │    └─ TOTPService.verify(user_id, code)
+  │         ├─ normalize (strip spaces, 6/8 digits)
+  │         ├─ backup-code check: SHA-256(code) in stored hashes → burn it
+  │         └─ TOTP check: _hotp(key, counter) for counters now-1/now/now+1
+  │              ├─ hmac.compare_digest against candidate
+  │              ├─ replay guard: "counter:code" set (last 50 kept)
+  │              └─ confirm=true sets confirmed → enable() unblocked
+  └─ POST /features/security/2fa/enable        → requires confirmed enrollment
+```
+
+`_hotp`: HMAC-SHA1(key, struct.pack(">Q", counter)) → dynamic truncation (RFC 4226 §5.3) → 6 digits.
+
+### Biometric verification (data never leaves the device)
+
+```
+SecurityHardeningPage (Biometric tab)
+  ├─ GET /features/security/biometric/status   → BiometricAuthService.get_status
+  ├─ Enroll:
+  │    ├─ electronAPI.biometric.availability() → ipcMain "biometric:availability"
+  │    │    └─ systemPreferences.canPromptTouchID() (macOS) / win32 probe
+  │    └─ POST /features/security/biometric/enroll
+  ├─ Test verification:
+  │    ├─ POST /features/security/biometric/challenge {action}
+  │    │    └─ single-use nonce (token_urlsafe(32)), TTL 120s
+  │    ├─ electronAPI.biometric.prompt("Unlock DASH") → ipcMain "biometric:prompt"
+  │    │    └─ macOS: systemPreferences.promptTouchID (native dialog)
+  │    └─ POST /features/security/biometric/verify {challenge, success}
+  │         └─ pops challenge (single use), checks TTL, audits outcome
+  └─ GET /features/security/biometric/audit    → attempt history (last 200)
+```
+
+### Password vault (AES-256-GCM at rest)
+
+```
+PasswordManagerPage → authFetch("/features/vault/*")
+  ├─ POST   /vault/entries              → add_entry(category, title, fields, notes, tags)
+  ├─ GET    /vault/entries[?category=]  → list (decrypted server-side for the owner)
+  ├─ GET    /vault/entries/{id}         → get_entry (access_count++)
+  ├─ PATCH  /vault/entries/{id}         → update_entry (title/fields/notes/tags/favorite)
+  ├─ DELETE /vault/entries/{id}         → delete_entry
+  ├─ GET    /vault/generate-password    → secrets.choice over alphabet
+  └─ GET    /vault/stats                → totals, weak-password count (<12 chars)
+
+Persistence (PasswordManager._save):
+  entry_json → HKDF(master, info=entry_id) → AESGCM.encrypt(nonce, json, aad=entry_id)
+  → vault_state.json {encrypted: {entry_id: nonce+ct b64}}
+  master key: vault_master.key (random per install; PBKDF2 passphrase path reserved)
+```
+
+### Encrypted chat (per-conversation keys)
+
+```
+POST /features/messenger/send {recipient, content}
+  └─ EncryptedMessenger.send_message(sender=user.id, recipient, content)
+       ├─ conv_key = "::".join(sorted([a, b]))
+       ├─ HKDF(root, info="conv:<conv_key>") → AESGCM key
+       ├─ content → ct = AESGCM.encrypt(nonce, content, aad=msg_id)
+       └─ messenger_state.json stores ct only (plaintext asserted absent in tests)
+
+POST /features/messenger/messages {other_user} → get_messages (decrypt for participant)
+GET  /features/messenger/conversations          → inbox with unread counts
+GET  /features/messenger/unread                 → total unread
+root key: messenger_root.key beside state file (survives restarts)
+```
+
+### PII anonymization
+
+```
+POST /features/privacy/scan      → DataAnonymizer.scan_text (report, no mutation)
+POST /features/privacy/anonymize → DataAnonymizer.anonymize(text, mask_types?)
+
+Pattern order (specific → greedy):
+  email → ssn → credit_card → ip_address → api_key → phone (last, no "." in class)
+  email/ip → HMAC-SHA256(pepper, type:value)[:12] deterministic pseudonym
+  ssn/card/key → [TYPE] full mask; phone → [PHONE_...last4]
+```
+
+**Security routes added this session:** biometric (availability/enroll/status/challenge/verify/revoke/audit), vault PATCH/DELETE/{id}, messenger messages-by-conversation; 2FA verify now takes `confirm` and enable requires it; all security endpoints key on stable `user.id` instead of `id(user)`.

@@ -2,6 +2,10 @@ export interface ElectronAPI {
   auth?: {
     deviceToken: () => Promise<{ ok: boolean; token?: string; reason?: string }>;
   };
+  biometric?: {
+    availability: () => Promise<{ ok: boolean; available: boolean; authenticator: string | null; reason?: string }>;
+    prompt: (reason: string) => Promise<{ ok: boolean; success: boolean; reason?: string }>;
+  };
   window?: {
     minimize: () => Promise<{ ok: boolean }>;
     maximize: () => Promise<{ ok: boolean }>;
