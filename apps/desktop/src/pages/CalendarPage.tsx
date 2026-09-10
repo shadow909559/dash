@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { authFetch } from "@/lib/api";
 import { useNotifier } from "@/components/NotificationProvider";
 import { PageShell, PageHeader, GlassCard } from "@/components/ultron";
-import { Calendar, Plus, ChevronLeft, ChevronRight, Clock, MapPin } from "lucide-react";
+import { Calendar, Plus, ChevronLeft, ChevronRight, Clock, MapPin, RefreshCw } from "lucide-react";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -11,6 +11,8 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<any[]>([]);
   const [calendars, setCalendars] = useState<any[]>([]);
   const [stats, setStats] = useState({ total_events: 0, today_events: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showCreate, setShowCreate] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -18,6 +20,8 @@ export default function CalendarPage() {
   const [newTime, setNewTime] = useState("09:00");
 
   const fetch = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const [evRes, calRes, stRes] = await Promise.all([
         authFetch("/features/calendar/events"),
@@ -27,26 +31,25 @@ export default function CalendarPage() {
       if (evRes?.ok) setEvents((await evRes.json()).events || []);
       if (calRes?.ok) setCalendars((await calRes.json()).calendars || []);
       if (stRes?.ok) setStats(await stRes.json());
+      if (!evRes?.ok) setError("Calendar service unavailable.");
     } catch {
-      const today = new Date().toISOString().slice(0, 10);
-      setEvents([
-        { id: "evt1", title: "Sprint Planning", start: `${today}T10:00:00`, end: `${today}T11:00:00`, description: "Plan next sprint tasks" },
-        { id: "evt2", title: "Code Review", start: `${today}T14:00:00`, end: `${today}T15:00:00`, description: "Review PR #42" },
-        { id: "evt3", title: "DASH Demo", start: `${today}T16:00:00`, end: `${today}T17:00:00`, description: "Show new features to team" },
-      ]);
-      setStats({ total_events: 3, today_events: 3 });
-    }
+      setError("Calendar service unreachable — is the backend running?");
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetch(); }, [fetch]);
 
   const createEvent = async () => {
     if (!newTitle.trim()) return;
+    // Default duration: 1 hour (start + 60min)
     const start = `${newDate}T${newTime}:00`;
+    const endHour = (parseInt(newTime.split(":")[0], 10) + 1) % 24;
+    const end = `${newDate}T${String(endHour).padStart(2, "0")}:${newTime.split(":")[1]}:00`;
     try {
-      const r = await authFetch("/features/calendar/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: newTitle, start, end: start }) });
-      if (r?.ok) addNotification({ type: "success", title: "Event Created", message: newTitle });
-    } catch { addNotification({ type: "success", title: "Created", message: newTitle }); }
+      const r = await authFetch("/features/calendar/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: newTitle.trim(), start, end }) });
+      if (r?.ok) addNotification({ type: "success", title: "Event Created", message: newTitle.trim() });
+      else addNotification({ type: "error", title: "Failed", message: "Could not create event" });
+    } catch { addNotification({ type: "error", title: "Failed", message: "Backend unreachable" }); }
     setShowCreate(false); setNewTitle(""); fetch();
   };
 
@@ -72,7 +75,13 @@ export default function CalendarPage() {
 
   return (
     <PageShell>
-      <PageHeader icon={<Calendar size={18} />} iconColor="var(--accent, #22c55e)" iconBg="rgba(34,197,94,0.15)" title="Calendar" subtitle={`${stats.today_events} events today`} actions={<button onClick={() => setShowCreate(true)} style={{ background: "var(--accent, #22c55e)", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer", color: "#000", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}><Plus size={12} /> New Event</button>} />
+      <PageHeader icon={<Calendar size={18} />} iconColor="var(--accent, #22c55e)" iconBg="rgba(34,197,94,0.15)" title="Calendar" subtitle={`${stats.today_events} events today`} actions={<div style={{ display: "flex", gap: 6 }}><button onClick={() => setShowCreate(true)} style={{ background: "var(--accent, #22c55e)", border: "none", borderRadius: 6, padding: "6px 12px", cursor: "pointer", color: "#000", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}><Plus size={12} /> New Event</button><button onClick={fetch} className="dash-btn-ghost" title="Refresh" aria-label="Refresh calendar"><RefreshCw size={14} className={loading ? "animate-rotate" : undefined} /></button></div>} />
+
+      {error && (
+        <div role="alert" style={{ padding: "10px 14px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, marginBottom: 14, fontSize: 12, color: "#ef4444" }}>
+          {error}
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16 }}>
         {/* Month View */}

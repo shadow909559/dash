@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { authFetch } from "@/lib/api";
 import { useNotifier } from "@/components/NotificationProvider";
-import { PageShell, PageHeader, GlassCard } from "@/components/ultron";
-import { Mail, Inbox, Send, Search, RefreshCw, Star, Archive, Trash2 } from "lucide-react";
+import { PageShell, PageHeader, GlassCard, EmptyState } from "@/components/ultron";
+import { Mail, Inbox, Send, Search, RefreshCw, Star, Archive, Trash2, Plus } from "lucide-react";
 
 export default function EmailPage() {
   const { addNotification } = useNotifier();
@@ -11,9 +11,14 @@ export default function EmailPage() {
   const [selected, setSelected] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [newAccount, setNewAccount] = useState("");
   const [stats, setStats] = useState({ total_inbox: 0, unread: 0, total_sent: 0 });
 
   const fetch = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const [accRes, inboxRes, statsRes] = await Promise.all([
         authFetch("/features/email/accounts"),
@@ -23,13 +28,9 @@ export default function EmailPage() {
       if (accRes?.ok) setAccounts((await accRes.json()).accounts || []);
       if (inboxRes?.ok) setInbox((await inboxRes.json()).emails || []);
       if (statsRes?.ok) setStats(await statsRes.json());
+      if (!inboxRes?.ok) setError("Email service unavailable.");
     } catch {
-      setInbox([
-        { id: "e1", from: "team@dash.dev", subject: "DASH v1.1 Released", body: "New features include workflow builder, token tracking, and security hardening.", importance: 0.8, read: false, received_at: new Date().toISOString() },
-        { id: "e2", from: "notifications@github.com", subject: "PR #42 merged", body: "Your pull request has been merged into main.", importance: 0.5, read: true, received_at: new Date(Date.now() - 3600000).toISOString() },
-        { id: "e3", from: "digest@dash.dev", subject: "Weekly Digest", body: "Here's what happened this week in your DASH workspace.", importance: 0.3, read: false, received_at: new Date(Date.now() - 7200000).toISOString() },
-      ]);
-      setStats({ total_inbox: 3, unread: 2, total_sent: 12 });
+      setError("Email service unreachable — is the backend running?");
     } finally { setLoading(false); }
   }, []);
 
@@ -41,14 +42,63 @@ export default function EmailPage() {
   };
 
   const markRead = async (id: string) => {
-    try { await authFetch(`/features/email/inbox`, { method: "POST" }); } catch {}
+    try { await authFetch(`/features/email/mark-read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email_id: id }) }); } catch {}
     setInbox(inbox.map(e => e.id === id ? { ...e, read: true } : e));
     setStats(s => ({ ...s, unread: Math.max(0, s.unread - 1) }));
   };
 
+  const addAccount = async () => {
+    if (!newAccount.trim() || !newAccount.includes("@")) {
+      addNotification({ type: "error", title: "Invalid", message: "Enter a valid email address" });
+      return;
+    }
+    try {
+      const r = await authFetch("/features/email/accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: newAccount.trim(), provider: "imap", display_name: "" }) });
+      if (r?.ok) {
+        addNotification({ type: "success", title: "Account added", message: newAccount.trim() });
+        setNewAccount("");
+        setShowAddAccount(false);
+        fetch();
+      }
+    } catch {}
+  };
+
   return (
     <PageShell>
-      <PageHeader icon={<Mail size={18} />} iconColor="var(--accent, #22c55e)" iconBg="rgba(34,197,94,0.15)" title="Email" subtitle={`${stats.unread} unread messages`} />
+      <PageHeader
+        icon={<Mail size={18} />}
+        iconColor="var(--accent, #22c55e)"
+        iconBg="rgba(34,197,94,0.15)"
+        title="Email"
+        subtitle={`${stats.unread} unread messages${accounts.length ? ` • ${accounts.length} account${accounts.length > 1 ? "s" : ""}` : ""}`}
+        actions={
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => setShowAddAccount(!showAddAccount)} style={{ background: "none", border: "1px solid var(--border, #333)", borderRadius: 6, padding: "6px 12px", cursor: "pointer", color: "var(--text)", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Plus size={12} /> Add Account</button>
+            <button onClick={fetch} className="dash-btn-ghost" title="Refresh" aria-label="Refresh inbox"><RefreshCw size={14} className={loading ? "animate-rotate" : undefined} /></button>
+          </div>
+        }
+      />
+
+      {showAddAccount && (
+        <GlassCard padding={12} style={{ marginBottom: 14, display: "flex", gap: 8 }}>
+          <input
+            value={newAccount}
+            onChange={(e) => setNewAccount(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addAccount()}
+            placeholder="you@example.com"
+            aria-label="Email account address"
+            type="email"
+            style={{ flex: 1, padding: "7px 10px", background: "var(--bg-secondary, #1a1a2e)", border: "1px solid var(--border, #333)", borderRadius: 6, color: "var(--text)", fontSize: 12 }}
+          />
+          <button onClick={addAccount} style={{ background: "var(--accent, #22c55e)", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", color: "#000", fontSize: 12, fontWeight: 600 }}>Connect</button>
+        </GlassCard>
+      )}
+
+      {error && (
+        <div role="alert" style={{ padding: "10px 14px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, marginBottom: 14, fontSize: 12, color: "#ef4444" }}>
+          {error}
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 16, height: "calc(100vh - 160px)" }}>
         {/* Sidebar */}
         <GlassCard style={{ overflow: "auto" }}>
@@ -84,9 +134,16 @@ export default function EmailPage() {
                   <p style={{ fontSize: 12, color: "var(--text-muted, #666)", margin: "3px 0 0" }}>From: {selected.from} • {new Date(selected.received_at).toLocaleString()}</p>
                 </div>
                 <div style={{ display: "flex", gap: 4 }}>
-                  <button style={{ background: "none", border: "1px solid var(--border, #333)", borderRadius: 4, padding: "4px 8px", cursor: "pointer", color: "var(--text-muted, #666)" }}><Star size={12} /></button>
-                  <button style={{ background: "none", border: "1px solid var(--border, #333)", borderRadius: 4, padding: "4px 8px", cursor: "pointer", color: "var(--text-muted, #666)" }}><Archive size={12} /></button>
-                  <button style={{ background: "none", border: "1px solid var(--border, #333)", borderRadius: 4, padding: "4px 8px", cursor: "pointer", color: "#ef4444" }}><Trash2 size={12} /></button>
+                  <button
+                    onClick={() => addNotification({ type: "success", title: "Starred", message: selected.subject })}
+                    title="Star email"
+                    aria-label="Star email"
+                    style={{ background: "none", border: "1px solid var(--border, #333)", borderRadius: 4, padding: "4px 8px", cursor: "pointer", color: "#f59e0b" }}><Star size={12} /></button>
+                  <button
+                    onClick={() => { setSelected(null); addNotification({ type: "info", title: "Archived", message: selected.subject }); }}
+                    title="Archive email"
+                    aria-label="Archive email"
+                    style={{ background: "none", border: "1px solid var(--border, #333)", borderRadius: 4, padding: "4px 8px", cursor: "pointer", color: "var(--text-muted, #666)" }}><Archive size={12} /></button>
                 </div>
               </div>
               <div style={{ padding: 16, background: "var(--bg-secondary, #1a1a2e)", borderRadius: 8, fontSize: 13, lineHeight: 1.7, color: "var(--text-secondary, #aaa)" }}>{selected.body}</div>

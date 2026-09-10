@@ -31,6 +31,14 @@ async def get_inbox(limit: int = 50, unread_only: bool = False, _user=Depends(ge
     from dash_backend.services.email_calendar import email_service
     return {"emails": email_service.get_inbox(limit, unread_only)}
 
+class EmailMarkReadReq(BaseModel):
+    email_id: str
+
+@router.post("/email/mark-read")
+async def mark_email_read(body: EmailMarkReadReq, _user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar import email_service
+    return email_service.mark_read(body.email_id)
+
 @router.get("/email/search")
 async def search_email(q: str = "", _user=Depends(get_current_user)):
     from dash_backend.services.email_calendar import email_service
@@ -342,6 +350,14 @@ async def open_tab(body: TabReq, _user=Depends(get_current_user)):
     from dash_backend.services.voice_browser import browser_service
     return browser_service.open_tab(body.url, body.title)
 
+class TabCloseReq(BaseModel):
+    tab_id: str
+
+@router.post("/browser/tabs/close")
+async def close_tab(body: TabCloseReq, _user=Depends(get_current_user)):
+    from dash_backend.services.voice_browser import browser_service
+    return browser_service.close_tab(body.tab_id)
+
 @router.get("/browser/bookmarks")
 async def get_bookmarks(folder: Optional[str] = None, _user=Depends(get_current_user)):
     from dash_backend.services.voice_browser import browser_service
@@ -366,7 +382,12 @@ class WsReq(BaseModel):
 @router.post("/workspaces")
 async def create_workspace(body: WsReq, _user=Depends(get_current_user)):
     from dash_backend.services.collaboration import workspace_service
-    return workspace_service.create(body.name, str(id(_user)), body.description)
+    return workspace_service.create(body.name, str(_user.id), body.description)
+
+@router.delete("/workspaces/{workspace_id}")
+async def delete_workspace(workspace_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.collaboration import workspace_service
+    return workspace_service.delete(workspace_id)
 
 @router.get("/workspaces")
 async def list_workspaces(_user=Depends(get_current_user)):
@@ -383,7 +404,7 @@ class CommentReq(BaseModel):
 @router.post("/comments")
 async def add_comment(body: CommentReq, _user=Depends(get_current_user)):
     from dash_backend.services.collaboration import comment_service
-    return comment_service.add(body.entity_type, body.entity_id, str(id(_user)), body.content)
+    return comment_service.add(body.entity_type, body.entity_id, str(_user.id), body.content)
 
 @router.get("/comments/{entity_type}/{entity_id}")
 async def get_comments(entity_type: str, entity_id: str, _user=Depends(get_current_user)):

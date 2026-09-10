@@ -368,5 +368,26 @@ Every meaningful technical decision, why it was made, and what alternatives were
 
 **Files:** `apps/backend/dash_backend/services/security_hardening.py` (rewritten, ~680 lines), `apps/backend/dash_backend/api/routes/phase2_features.py` (biometric routes, vault PATCH/DELETE/GET, stable user ids), `apps/desktop/electron/main.ts` + `preload.ts` + `src/electron.d.ts` (biometric IPC), `apps/desktop/src/pages/PasswordManagerPage.tsx` (rewired), `apps/desktop/src/pages/SecurityHardeningPage.tsx` (biometric tab, real 2FA verify), `apps/backend/tests/test_security_hardening.py` (20 tests) + `tests/test_security_routes.py` (5 route tests).
 
+## 35. Seven Feature Pages Wired to Real Services (Email, Calendar, Voice, Browser, Collaboration, Prompts, Infrastructure)
+
+**Date:** 2026-09-11
+
+**Context:** All seven pages existed but shared a common defect pattern: on any `fetch` failure they populated state with **fabricated sample data** (fake inbox emails, fake events, fake memos, fake cache stats showing 93.4% hit rate) — so a dead backend looked identical to a working one. Individually: EmailPage's mark-read posted to the wrong endpoint (no-op), Star/Archive/Delete buttons were decorative; CalendarPage created zero-duration events (`end = start`); BrowserPage bypassed the real browser service entirely and drove `/ai-os/execute` with a "Browse and summarize" prompt, keeping session history only in React state; CollaborationPage fetched comments for a hardcoded `mem_0` entity that never exists; VoiceCommandsPage's memo recorder saved a hardcoded 30s duration with no actual capture; the workspace/comment creation routes still keyed owners by `id(user)`.
+
+**Decision & reasons:**
+
+- *Fake-data fallbacks removed everywhere; explicit error banners instead:* a page must show "service unreachable" rather than plausible lies. Every list now renders real empty states when the backend genuinely has nothing.
+- *Browser page on the real service:* Tabs / Bookmarks / History tabs over `/features/browser/tabs|bookmarks|history|stats`, open via `POST /browser/tabs/open` (URL normalization: scheme added if missing), close via new `POST /browser/tabs/close` route (service method existed, route didn't), external-link button for system-browser handoff.
+- *Email:* new `POST /features/email/mark-read` route wired to the existing service method; account connect form using the existing `POST /email/accounts`; Star/Archive are honest local actions (service has no folder model yet) instead of silent no-ops; Delete removed rather than faked.
+- *Calendar:* new events default to **1-hour duration** computed client-side (the create dialog had no end field; zero-length events broke the month-view display contract); create surfaces real failures.
+- *Collaboration:* deleted the phantom `mem_0` activity feed — the backend's activity feed service isn't user-reachable yet, so the panel showed hardcoded chats; workspace cards show real owner/member data; new `DELETE /features/workspaces/{id}` route (service method existed unexposed); workspace `create`/comment routes now use stable `str(user.id)`.
+- *Prompt Studio:* template cards are now **create-from-template** actions (prefill the dialog) instead of dead clicks; Test button copies the prompt and points the user at Chat; copy uses the clipboard with feedback.
+- *Voice Commands:* recording toggle is explicit that browser speech capture isn't wired to this page yet — memo save only fires when the user typed a transcript (no more fabricated 30s memos); command list comes from the real registry.
+- *Infrastructure:* 15s auto-refresh (it's a status page), honest hit-rate from the real `CacheService`, and the health panel renders the actual registered checks (empty until services register checks — previously three fake "healthy" rows).
+
+**Files:** `apps/desktop/src/pages/{EmailPage,CalendarPage,BrowserPage,VoiceCommandsPage,CollaborationPage,PromptStudioPage,InfrastructurePage}.tsx`, `apps/backend/dash_backend/api/routes/phase2_features.py` (email mark-read, browser tab close, workspace delete, stable owner ids), `apps/backend/tests/test_feature_page_routes.py` (3 tests).
+
+**Verified:** 482 backend tests pass; desktop `tsc -b` + vite build clean with all 7 page chunks emitted; workspace create→delete round-trip and browser open→close tested in-process.
+
 **Verified:** 25 new tests pass; full backend suite 479 passed; desktop `tsc -b` + vite build clean; ciphertext-at-rest asserted in tests (disk files must not contain plaintext); TOTP verified against independently computed RFC 4226 codes including drift window and replay rejection.
 

@@ -10,8 +10,10 @@ export default function InfrastructurePage() {
   const [cacheStats, setCacheStats] = useState({ size: 0, max_size: 1000, hits: 0, misses: 0, hit_rate: 0 });
   const [health, setHealth] = useState<any>({ overall: "unknown", services: {} });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
+    setError(null);
     try {
       const [bRes, cRes, hRes] = await Promise.all([
         authFetch("/features/infra/circuit-breaker"),
@@ -21,13 +23,17 @@ export default function InfrastructurePage() {
       if (bRes?.ok) setBreakers((await bRes.json()).breakers || {});
       if (cRes?.ok) setCacheStats(await cRes.json());
       if (hRes?.ok) setHealth(await hRes.json());
+      if (!hRes?.ok) setError("Infrastructure service unavailable.");
     } catch {
-      setCacheStats({ size: 42, max_size: 1000, hits: 1250, misses: 89, hit_rate: 0.934 });
-      setHealth({ overall: "healthy", services: { backend: { status: "healthy" }, database: { status: "healthy" }, cache: { status: "healthy" } } });
+      setError("Infrastructure service unreachable — is the backend running?");
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => {
+    fetch();
+    const interval = setInterval(fetch, 15000);
+    return () => clearInterval(interval);
+  }, [fetch]);
 
   const clearCache = async () => {
     try { await authFetch("/features/infra/cache/clear", { method: "POST" }); } catch {}
@@ -37,7 +43,13 @@ export default function InfrastructurePage() {
 
   return (
     <PageShell>
-      <PageHeader icon={<Activity size={18} />} iconColor={health.overall === "healthy" ? "var(--accent, #22c55e)" : "#f59e0b"} iconBg={health.overall === "healthy" ? "rgba(34,197,94,0.15)" : "rgba(245,158,11,0.15)"} title="Infrastructure" subtitle={`Status: ${health.overall}`} />
+      <PageHeader icon={<Activity size={18} />} iconColor={health.overall === "healthy" ? "var(--accent, #22c55e)" : "#f59e0b"} iconBg={health.overall === "healthy" ? "rgba(34,197,94,0.15)" : "rgba(245,158,11,0.15)"} title="Infrastructure" subtitle={`Status: ${health.overall}${error ? " (unreachable)" : ""}`} actions={<button onClick={fetch} className="dash-btn-ghost" title="Refresh now" aria-label="Refresh infrastructure status"><RefreshCw size={14} className={loading ? "animate-rotate" : undefined} /></button>} />
+
+      {error && (
+        <div role="alert" style={{ padding: "10px 14px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, marginBottom: 14, fontSize: 12, color: "#ef4444" }}>
+          {error}
+        </div>
+      )}
 
       {loading ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

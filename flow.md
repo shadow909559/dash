@@ -789,3 +789,72 @@ Pattern order (specific → greedy):
 ```
 
 **Security routes added this session:** biometric (availability/enroll/status/challenge/verify/revoke/audit), vault PATCH/DELETE/{id}, messenger messages-by-conversation; 2FA verify now takes `confirm` and enable requires it; all security endpoints key on stable `user.id` instead of `id(user)`.
+
+## 20. Feature Pages → Services Wiring Map
+
+### Email (EmailPage.tsx)
+
+```
+Promise.all:
+  GET /features/email/accounts  → {accounts}
+  GET /features/email/inbox?limit=50 → {emails}
+  GET /features/email/stats     → {total_inbox, unread, total_sent, accounts, rules}
+select email → optimistic read flag + POST /features/email/mark-read {email_id}
+             → email_service.mark_read (marks in service registry)
+search: Enter → GET /features/email/search?q=… → {results}
+Add Account → POST /features/email/accounts {email, provider:"imap"}
+```
+
+### Calendar (CalendarPage.tsx)
+
+```
+GET /features/calendar/events|list|stats → month grid + today panel + counters
+New Event → POST /features/calendar/events {title, start, end}
+            end = start + 1h (client-side default; dialog has no end field)
+```
+
+### Voice Commands (VoiceCommandsPage.tsx)
+
+```
+GET /features/voice/config     → {wake_words[], language, command_count, listening}
+GET /features/voice/commands   → {commands: {id: {patterns[], action, target}}}
+GET /features/voice/memos      → {memos[]}
+stop recording (with transcript) → POST /features/voice/memos {title, transcript, duration_seconds}
+```
+
+### Browser Management (BrowserPage.tsx)
+
+```
+GET /features/browser/tabs|bookmarks|history?limit=30|stats
+Open URL → normalize (https:// if scheme missing) → POST /features/browser/tabs/open {url, title}
+Close tab → POST /features/browser/tabs/close {tab_id}
+ExternalLink → window.open(url) handoff to system browser
+```
+
+### Collaboration (CollaborationPage.tsx)
+
+```
+GET /features/workspaces → {workspaces}
+New Workspace → POST /features/workspaces {name, description} → owner = str(user.id) (stable)
+Delete → DELETE /features/workspaces/{id}
+```
+
+### Prompt Studio (PromptStudioPage.tsx)
+
+```
+GET /features/prompts           → {prompts}
+GET /features/prompts/templates → {templates}  (click = prefill create dialog)
+Create → POST /features/prompts {name, content, category}
+Copy/Test → clipboard + handoff to Chat
+```
+
+### Infrastructure (InfrastructurePage.tsx, 15s auto-refresh)
+
+```
+GET /features/infra/circuit-breaker → {breakers: {name: {state, failures, total_trips}}}
+GET /features/infra/cache/stats     → {size, max_size, hits, misses, hit_rate}
+GET /features/infra/health          → {overall, services: {name: {status}}}
+Clear cache → POST /features/infra/cache/clear → refetch stats
+```
+
+**Convention applied to all seven pages:** no fabricated fallback data — failures render an explicit error banner; real empty states when the backend has no data; all create/delete actions surface real success/failure via notifications.

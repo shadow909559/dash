@@ -1,39 +1,88 @@
-import React, { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { authFetch } from "@/lib/api";
-import { Globe, Send, AlertCircle, ExternalLink, GlobeLock } from "lucide-react";
-import { PageShell, PageHeader, GlassCard } from "@/components/ultron";
+import { useNotifier } from "@/components/NotificationProvider";
+import { PageShell, PageHeader, GlassCard, TabBar, EmptyState } from "@/components/ultron";
+import { Globe, ExternalLink, X, Plus, Bookmark, History, BarChart3, RefreshCw, Loader2 } from "lucide-react";
 
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api/v1";
+interface Tab {
+  id: string;
+  url: string;
+  title: string;
+  active: boolean;
+  opened_at?: string;
+}
 
 export const BrowserPage: React.FC = () => {
+  const { addNotification } = useNotifier();
+  const [tab, setTab] = useState<"tabs" | "bookmarks" | "history">("tabs");
+  const [tabs, setTabs] = useState<Tab[]>([]);
+  const [bookmarks, setBookmarks] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [url, setUrl] = useState("");
-  const [result, setResult] = useState<string>("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [history, setHistory] = useState<string[]>([]);
 
-  const browse = async () => {
-    if (!url.trim()) return;
+  const load = useCallback(async () => {
     setLoading(true);
-    setResult("");
     setError(null);
     try {
-      const r = await authFetch(`${API}/ai-os/execute`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: `Browse and summarize: ${url}` }),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({ detail: r.statusText }));
-        throw new Error(err.detail || `HTTP ${r.status}`);
-      }
-      const data = await r.json();
-      setResult(data.summary || JSON.stringify(data, null, 2));
-      setHistory((prev) => [url, ...prev.slice(0, 9)]);
-    } catch (e: any) {
-      setError(e.message || "Browse failed");
+      const [t, b, h, s] = await Promise.all([
+        authFetch("/features/browser/tabs"),
+        authFetch("/features/browser/bookmarks"),
+        authFetch("/features/browser/history?limit=30"),
+        authFetch("/features/browser/stats"),
+      ]);
+      if (t?.ok) setTabs((await t.json()).tabs || []);
+      if (b?.ok) setBookmarks((await b.json()).bookmarks || []);
+      if (h?.ok) setHistory((await h.json()).history || []);
+      if (s?.ok) setStats(await s.json());
+      if (!t?.ok) setError("Browser service unavailable.");
+    } catch {
+      setError("Browser service unreachable — is the backend running?");
     }
     setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const openTab = async () => {
+    if (!url.trim()) return;
+    setOpening(true);
+    try {
+      const target = url.trim().match(/^https?:\/\//) ? url.trim() : `https://${url.trim()}`;
+      const r = await authFetch("/features/browser/tabs/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: target, title: "" }),
+      });
+      if (r?.ok) {
+        setUrl("");
+        addNotification({ type: "success", title: "Tab opened", message: target });
+        load();
+      } else {
+        addNotification({ type: "error", title: "Failed", message: "Could not open tab" });
+      }
+    } catch {
+      addNotification({ type: "error", title: "Failed", message: "Backend unreachable" });
+    }
+    setOpening(false);
+  };
+
+  const closeTab = async (tabId: string) => {
+    try {
+      await authFetch("/features/browser/tabs/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tab_id: tabId }),
+      });
+      setTabs((prev) => prev.filter((t) => t.id !== tabId));
+    } catch {
+      /* refetch on next refresh */
+    }
   };
 
   return (
@@ -41,191 +90,121 @@ export const BrowserPage: React.FC = () => {
       <PageHeader
         icon={<Globe size={22} color="var(--dash-accent)" />}
         iconColor="var(--dash-accent)"
-        title="Browser Automation"
-        subtitle="Headless web interaction, session extraction, and exploration"
-        badge={
-          <span
-            className="dash-badge-glow"
-            style={{
-              background: "var(--dash-accent-glow)",
-              color: "var(--dash-accent)",
-              border: "1px solid var(--dash-border-accent)",
-            }}
-          >
-            <GlobeLock size={10} />
-            Headless
-          </span>
+        iconBg="rgba(77,148,255,0.15)"
+        title="Browser Management"
+        subtitle={
+          stats
+            ? `${stats.open_tabs ?? tabs.length} open tabs • ${stats.bookmarks ?? bookmarks.length} bookmarks • ${stats.history_entries ?? history.length} history entries`
+            : "Manage tabs, bookmarks, and browsing history"
+        }
+        actions={
+          <button onClick={load} className="dash-btn-ghost" title="Refresh" aria-label="Refresh browser data">
+            <RefreshCw size={14} className={loading ? "animate-rotate" : undefined} />
+          </button>
         }
       />
 
       <div className="dash-page-content">
-        {/* URL input */}
-        <GlassCard glow padding={16}>
+        {error && (
+          <div role="alert" style={{ padding: "10px 14px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, marginBottom: 14, fontSize: 12, color: "#ef4444" }}>
+            {error}
+          </div>
+        )}
+
+        {/* URL bar */}
+        <GlassCard glow padding={14} style={{ marginBottom: 14 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: "var(--dash-radius-sm)",
-                background: "var(--dash-accent-glow)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Globe size={14} style={{ color: "var(--dash-accent)" }} />
-            </div>
+            <Globe size={15} style={{ color: "var(--dash-accent)", flexShrink: 0 }} />
             <input
               aria-label="Website URL"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && browse()}
-              placeholder="Enter URL or search query..."
+              onKeyDown={(e) => e.key === "Enter" && openTab()}
+              placeholder="Enter URL to open…"
               className="dash-input-ultron"
               style={{ flex: 1, fontFamily: "'JetBrains Mono', monospace" }}
             />
-            <button
-              onClick={browse}
-              disabled={loading || !url.trim()}
-              className="dash-btn-primary"
-            >
-              {loading ? (
-                <span className="animate-rotate">...</span>
-              ) : (
-                <>
-                  <Send size={14} /> Browse
-                </>
-              )}
+            <button onClick={openTab} disabled={opening || !url.trim()} className="dash-btn-primary" aria-label="Open tab">
+              {opening ? <Loader2 size={14} className="spin" /> : <><Plus size={14} /> Open</>}
             </button>
           </div>
         </GlassCard>
 
-        {/* Recent history */}
-        {history.length > 0 && (
-          <GlassCard padding={12}>
-            <div
-              style={{
-                fontSize: 10,
-                fontFamily: "'JetBrains Mono', monospace",
-                color: "var(--dash-text-muted)",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                marginBottom: 8,
-              }}
-            >
-              Recent
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {history.slice(0, 5).map((h, i) => (
-                <button
-                  key={i}
-                  onClick={() => setUrl(h)}
-                  className="dash-btn-ghost"
-                  style={{
-                    fontSize: 10,
-                    padding: "4px 8px",
-                    borderRadius: "var(--dash-radius-full)",
-                    fontFamily: "'JetBrains Mono', monospace",
-                  }}
-                >
-                  <ExternalLink size={9} />
-                  {h.length > 40 ? h.substring(0, 40) + "..." : h}
-                </button>
+        <TabBar
+          tabs={[
+            { id: "tabs", label: "Tabs", count: tabs.length },
+            { id: "bookmarks", label: "Bookmarks", count: bookmarks.length },
+            { id: "history", label: "History", count: history.length },
+          ]}
+          activeTab={tab}
+          onTabChange={(id) => setTab(id as "tabs" | "bookmarks" | "history")}
+        />
+
+        {loading ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {[1, 2, 3].map((i) => (
+              <div key={i} style={{ height: 52, background: "var(--dash-bg)", borderRadius: "var(--dash-radius-md)", opacity: 0.5 }} />
+            ))}
+          </div>
+        ) : tab === "tabs" ? (
+          tabs.length === 0 ? (
+            <EmptyState icon={<Globe size={28} style={{ color: "var(--dash-text-muted)" }} />} title="No open tabs" description="Open a URL above to start browsing." />
+          ) : (
+            <div className="dash-stagger">
+              {tabs.map((t) => (
+                <GlassCard key={t.id} padding={12} className="dash-card-glow">
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: t.active ? "#22c55e" : "var(--dash-text-muted)" }} title={t.active ? "Active" : "Background"} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--dash-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {t.title || t.url}
+                      </div>
+                      <div style={{ fontSize: 10, color: "var(--dash-text-muted)", fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {t.url}
+                      </div>
+                    </div>
+                    <button onClick={() => window.open(t.url, "_blank")} className="dash-btn-ghost" title="Open in system browser" aria-label="Open in system browser" style={{ minHeight: 24, minWidth: 24 }}>
+                      <ExternalLink size={13} />
+                    </button>
+                    <button onClick={() => closeTab(t.id)} className="dash-btn-ghost" title="Close tab" aria-label="Close tab" style={{ minHeight: 24, minWidth: 24, color: "#ef4444" }}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                </GlassCard>
               ))}
             </div>
-          </GlassCard>
-        )}
-
-        {/* Loading */}
-        {loading && (
-          <GlassCard padding={24}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 12,
-                color: "var(--dash-accent)",
-              }}
-            >
-              <Globe size={18} className="animate-rotate" />
-              <span
-                style={{
-                  fontSize: 13,
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}
-              >
-                Browsing...
-              </span>
-              <span className="typing-dot" />
-              <span className="typing-dot" />
-              <span className="typing-dot" />
+          )
+        ) : tab === "bookmarks" ? (
+          bookmarks.length === 0 ? (
+            <EmptyState icon={<Bookmark size={28} style={{ color: "var(--dash-text-muted)" }} />} title="No bookmarks" description="Bookmarked pages will appear here." />
+          ) : (
+            <div className="dash-stagger">
+              {bookmarks.map((b, i) => (
+                <GlassCard key={b.id || i} padding={12} className="dash-card-glow">
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Bookmark size={13} style={{ color: "#f59e0b", flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{b.title || b.url}</div>
+                      <div style={{ fontSize: 10, color: "var(--dash-text-muted)", fontFamily: "'JetBrains Mono', monospace" }}>{b.url}</div>
+                    </div>
+                    {b.folder && <span style={{ fontSize: 10, color: "var(--dash-text-muted)", border: "1px solid var(--dash-border)", borderRadius: 999, padding: "1px 8px" }}>{b.folder}</span>}
+                  </div>
+                </GlassCard>
+              ))}
             </div>
-          </GlassCard>
-        )}
-
-        {/* Error */}
-        {error && (
-          <GlassCard
-            glow
-            padding={14}
-            style={{
-              borderLeft: "3px solid var(--dash-danger)",
-              background: "rgba(63, 169, 245, 0.06)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <AlertCircle
-                size={16}
-                style={{ color: "var(--dash-danger)", flexShrink: 0 }}
-              />
-              <span style={{ fontSize: 13, color: "var(--dash-danger)" }}>
-                {error}
-              </span>
-            </div>
-          </GlassCard>
-        )}
-
-        {/* Result */}
-        {result && (
-          <GlassCard glow padding={0}>
-            <div
-              style={{
-                padding: "14px 18px 10px",
-                borderBottom: "1px solid var(--dash-border-subtle)",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <Globe size={14} style={{ color: "var(--dash-accent)" }} />
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "var(--dash-text)",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  letterSpacing: "0.05em",
-                }}
-              >
-                PAGE SUMMARY
-              </span>
-            </div>
-            <div
-              style={{
-                fontSize: 13,
-                color: "var(--dash-text-secondary)",
-                lineHeight: 1.7,
-                whiteSpace: "pre-wrap",
-                padding: 18,
-                background: "var(--dash-bg)",
-                borderTop: "1px solid var(--dash-border-subtle)",
-              }}
-            >
-              {result}
-            </div>
-          </GlassCard>
+          )
+        ) : history.length === 0 ? (
+          <EmptyState icon={<History size={28} style={{ color: "var(--dash-text-muted)" }} />} title="No history" description="Pages you visit will be recorded here." />
+        ) : (
+          <div className="dash-stagger">
+            {history.map((h, i) => (
+              <div key={h.id || i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 4px", borderBottom: "1px solid var(--dash-border-subtle)" }}>
+                <History size={12} style={{ color: "var(--dash-text-muted)", flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 12, color: "var(--dash-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h.title || h.url}</span>
+                {h.visited_at && <span style={{ fontSize: 10, color: "var(--dash-text-muted)" }}>{new Date(h.visited_at).toLocaleString()}</span>}
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </PageShell>
