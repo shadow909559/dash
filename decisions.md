@@ -313,3 +313,5 @@ Every meaningful technical decision, why it was made, and what alternatives were
 **Files:** `apps/backend/dash_backend/sync/supabase_outbox_worker.py`, `apps/backend/dash_backend/executive/service.py` (`delete_goal`), `apps/backend/tests/test_supabase_outbox.py` (new regression test `test_delivery_strips_columns_missing_from_cloud_schema`)
 
 **Result:** Outbox went from 296 dead-lettered / 70 stuck-invalid to **1,416 completed, 0 pending, 0 dead-lettered** — verified live against the real Supabase project.
+
+**Follow-up (same day):** Sustained operation exposed a second flaw — an upsert-based tombstone INSERTed a bare cloud row when the record had never been synced, violating `dash_tasks.project_id` NOT NULL. Tombstones now use PATCH semantics (`update().match({id, owner_id})`), making them no-ops for unknown cloud records. Regression test: `test_tombstone_for_never_synced_record_is_a_noop`. Verified stable at 1,452 completed / 0 dead-lettered under sustained load.
