@@ -23,7 +23,9 @@ from dash_backend.services.cloud_relay import get_cloud_relay
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/relay", tags=["cloud-relay"])
+# Router-level auth (decisions.md #38): relay routes can trigger Wake-on-LAN
+# and forward commands to the PC — they must never be anonymous.
+router = APIRouter(prefix="/relay", tags=["cloud-relay"], dependencies=[Depends(get_current_user)])
 
 
 # ── Request/Response Models ─────────────────────────────────────

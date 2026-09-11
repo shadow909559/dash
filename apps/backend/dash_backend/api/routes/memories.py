@@ -103,6 +103,49 @@ async def create_memory(
 
 
 # ──────────────────────────────────────────────
+# Literal-path GET routes — MUST be declared before GET /{memory_id},
+# otherwise FastAPI/Starlette matches "stats"/"types"/"continue" as a
+# memory_id and rejects them with a uuid_parsing 422.
+# ──────────────────────────────────────────────
+
+
+    memories = await memory_service.get_project_memories(
+        session, user.id, project_id, memory_type=memory_type, limit=limit,
+    )
+    return [MemoryRead.model_validate(m) for m in memories]
+
+
+@router.get("/continue", response_model=list[MemoryRead])
+async def get_continue_context(
+    project_id: uuid.UUID | None = Query(default=None),
+    limit: int = Query(default=5, ge=1, le=20),
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[MemoryRead]:
+    """Retrieve recent work contexts for resumption."""
+    memories = await memory_service.get_continue_context(
+        session, user.id, project_id=project_id, limit=limit,
+    )
+    return [MemoryRead.model_validate(m) for m in memories]
+
+
+@router.get("/stats", response_model=MemoryStatsResponse)
+async def get_memory_stats(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> MemoryStatsResponse:
+    """Aggregate statistics about the user's memory."""
+    stats = await memory_service.get_memory_stats(session, user.id)
+    return MemoryStatsResponse(**stats)
+
+
+@router.get("/types")
+async def list_memory_types() -> dict[str, dict[str, str]]:
+    """List available typed memory categories."""
+    return {"types": memory_service.MEMORY_TYPES}
+
+
+# ──────────────────────────────────────────────
 # Get memory
 # ──────────────────────────────────────────────
 
@@ -201,10 +244,9 @@ async def create_typed_memory(
     return MemoryRead.model_validate(memory)
 
 
-@router.get("/types")
-async def list_memory_types() -> dict[str, str]:
-    """List available typed memory categories."""
-    return {"types": memory_service.MEMORY_TYPES}
+# ──────────────────────────────────────────────
+# Project Memories
+# ──────────────────────────────────────────────
 
 
 @router.get("/project/{project_id}", response_model=list[MemoryRead])
@@ -263,30 +305,6 @@ async def record_work_context(
     return MemoryRead.model_validate(memory)
 
 
-@router.get("/continue", response_model=list[MemoryRead])
-async def get_continue_context(
-    project_id: uuid.UUID | None = Query(default=None),
-    limit: int = Query(default=5, ge=1, le=20),
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db_session),
-) -> list[MemoryRead]:
-    """Retrieve recent work contexts for resumption."""
-    memories = await memory_service.get_continue_context(
-        session, user.id, project_id=project_id, limit=limit,
-    )
-    return [MemoryRead.model_validate(m) for m in memories]
-
-
 # ──────────────────────────────────────────────
-# Memory Stats
+# Remember This Decision (Part 9-10)
 # ──────────────────────────────────────────────
-
-
-@router.get("/stats", response_model=MemoryStatsResponse)
-async def get_memory_stats(
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db_session),
-) -> MemoryStatsResponse:
-    """Aggregate statistics about the user's memory."""
-    stats = await memory_service.get_memory_stats(session, user.id)
-    return MemoryStatsResponse(**stats)

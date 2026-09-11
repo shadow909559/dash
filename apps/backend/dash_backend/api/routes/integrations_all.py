@@ -1,11 +1,24 @@
 # -*- coding: utf-8 -*-
-"""API Routes for OAuth, Integrations, Voice Engine, Browser Automation, Push Notifications."""
+"""API Routes for OAuth, Integrations, Voice Engine, Browser Automation, Push Notifications.
 
-from fastapi import APIRouter, HTTPException
+Security (decisions.md #38): this router was previously mounted with NO
+authentication — anonymous clients could read and delete browser bookmarks,
+voice memos, notification channels/templates, relay devices, and webhook
+registrations. Router-level auth now protects every endpoint here; the
+verified platform webhook receivers live in integration_connectors.py,
+which deliberately stays unauthenticated (platform credential = auth).
+"""
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-router = APIRouter()
+from dash_backend.auth.dependencies import get_current_user
+
+# Router-wide auth: every route in this module requires a valid DASH token.
+# Handlers that need the identity can still add Depends(get_current_user)
+# individually; FastAPI caches the dependency per-request.
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 # ── Request Models ───────────────────────────────────────────────────────────
@@ -141,17 +154,28 @@ async def oauth_providers():
 @router.get("/oauth/providers/{provider}")
 async def oauth_provider_info(provider: str):
     from dash_backend.services.oauth_social import get_oauth_service
-    return get_oauth_service().get_provider_info(provider)
+    try:
+        return get_oauth_service().get_provider_info(provider)
+    except ValueError as exc:
+        # Unknown provider is a client error, not a server fault.
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.get("/oauth/authorize/{provider}")
 async def oauth_authorize(provider: str, redirect_uri: str = None):
     from dash_backend.services.oauth_social import get_oauth_service
-    return get_oauth_service().get_authorize_url(provider, redirect_uri)
+    try:
+        return get_oauth_service().get_authorize_url(provider, redirect_uri)
+    except ValueError as exc:
+        # Unknown/unconfigured provider is a client error, not a server fault.
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 @router.post("/oauth/exchange")
 async def oauth_exchange(body: OAuthExchange):
     from dash_backend.services.oauth_social import get_oauth_service
-    return await get_oauth_service().exchange_code(body.provider, body.code, body.state)
+    try:
+        return await get_oauth_service().exchange_code(body.provider, body.code, body.state)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 @router.post("/oauth/link/{user_id}")
 async def oauth_link(user_id: str, provider: str, user_info: dict = {}):

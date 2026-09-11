@@ -30,6 +30,11 @@ with open(_IDENTITY_PATH, "w", encoding="utf-8") as f:
         f,
     )
 os.environ.setdefault("DASH_HOST", "127.0.0.1")
+# Hermetic local store: shared feature services (LocalStore consumers) get a
+# temp SQLite file instead of the developer's real %LOCALAPPDATA% database.
+# Per-test overrides (monkeypatch.setenv) still take precedence.
+_TEST_STORE_DIR = tempfile.mkdtemp(prefix="dash-test-store-")
+os.environ.setdefault("DASH_LOCAL_STORE", os.path.join(_TEST_STORE_DIR, "dash_local_test.db"))
 
 AUTH_HEADERS = {"Authorization": f"Bearer {_TEST_TOKEN}"}
 

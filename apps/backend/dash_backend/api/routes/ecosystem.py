@@ -20,7 +20,7 @@ from dash_backend.agents.ecosystem.orchestrator_extension import get_ecosystem_s
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/ecosystem", tags=["ecosystem"])
+router = APIRouter(prefix="/ecosystem", tags=["ecosystem"], dependencies=[Depends(get_current_user)])
 
 
 # ── Request / Response Models ────────────────────────────────

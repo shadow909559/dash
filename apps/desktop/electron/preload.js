@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     auth: {
         deviceToken: () => ipcRenderer.invoke("auth:device-token"),
     },
+    biometric: {
+        availability: () => ipcRenderer.invoke("biometric:availability"),
+        prompt: (reason) => ipcRenderer.invoke("biometric:prompt", reason),
+    },
     updater: {
         status: () => ipcRenderer.invoke("updater:status"),
         check: () => ipcRenderer.invoke("updater:check"),

@@ -16,6 +16,7 @@ from typing import Any, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+
 from dash_backend.auth.dependencies import get_current_user
 from dash_backend.db.models.user import User
 from pydantic import BaseModel
@@ -24,7 +25,10 @@ from dash_backend.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/ollama-tunnel", tags=["ollama-tunnel"])
+# Router-level auth (decisions.md #38): the tunnel proxies chat/model
+# requests to the local Ollama instance — it must not be anonymous.
+# GET query-param style is preserved via Request for /set-url below.
+router = APIRouter(prefix="/ollama-tunnel", tags=["ollama-tunnel"], dependencies=[Depends(get_current_user)])
 
 # Default tunnel URL — updated dynamically from DynamoDB
 _tunnel_url: str = ""
@@ -102,10 +106,18 @@ async def tunnel_models() -> dict[str, Any]:
         raise HTTPException(503, "No tunnel URL configured")
 
     async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(f"{_tunnel_url}/api/tags")
+        try:
+            resp = await client.get(f"{_tunnel_url}/api/tags")
+        except Exception as exc:
+            # Garbage/unreachable tunnel URL (DynamoDB value or bad set-url)
+            # is an upstream failure, not a server fault.
+            raise HTTPException(502, f"Tunnel unreachable: {exc}") from exc
         if resp.status_code != 200:
             raise HTTPException(502, f"Tunnel returned {resp.status_code}")
-        return resp.json()
+        try:
+            return resp.json()
+        except ValueError as exc:
+            raise HTTPException(502, "Tunnel returned invalid JSON") from exc
 
 
 @router.post("/chat")
@@ -116,17 +128,23 @@ async def tunnel_chat(req: TunnelChatRequest) -> dict[str, Any]:
         raise HTTPException(503, "No tunnel URL configured")
 
     async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(
-            f"{_tunnel_url}/api/chat",
-            json={
-                "model": req.model,
-                "messages": req.messages,
-                "stream": req.stream,
-            },
-        )
+        try:
+            resp = await client.post(
+                f"{_tunnel_url}/api/chat",
+                json={
+                    "model": req.model,
+                    "messages": req.messages,
+                    "stream": req.stream,
+                },
+            )
+        except Exception as exc:
+            raise HTTPException(502, f"Tunnel unreachable: {exc}") from exc
         if resp.status_code != 200:
             raise HTTPException(502, f"Tunnel returned {resp.status_code}")
-        return resp.json()
+        try:
+            return resp.json()
+        except ValueError as exc:
+            raise HTTPException(502, "Tunnel returned invalid JSON") from exc
 
 
 @router.post("/set-url")

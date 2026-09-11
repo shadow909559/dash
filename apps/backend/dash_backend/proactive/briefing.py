@@ -86,45 +86,56 @@ def _trend_lines(store: Optional[SampleStore] = None) -> List[str]:
 
     from dash_backend.predictive.predictors import _linear_fit, _span_hours, _fmt_hours
 
+    def _metric(sample_list: List[dict], key: str, from_end: bool = False):
+        """First non-None value of `key`, scanning from the start or end.
+
+        Samples may lack a metric (None) even when the fit succeeded, so a
+        raw samples[-1].get(key) can be None and crash the f-string format.
+        """
+        ordered = reversed(sample_list) if from_end else sample_list
+        for s in ordered:
+            v = s.get(key)
+            if v is not None:
+                return v
+        return None
+
     lines: List[str] = []
 
-    # Disk trend
-    fit = _linear_fit(samples, "disk_free_gb")
-    if fit is not None:
+    def _trend_block(key: str, fit: object, fmt_fn) -> Optional[str]:
+        if fit is None:
+            return None
         slope, _ = fit
-        current = samples[-1].get("disk_free_gb")
-        first = samples[0].get("disk_free_gb")
+        current = _metric(samples, key, from_end=True)
+        first = _metric(samples, key)
+        if current is None or first is None:
+            return None
         span = _span_hours(samples)
         confident = span >= 24
+        suffix = " (confident)" if confident else ""
+        return fmt_fn(slope, first, current, span, suffix)
+
+    # Disk trend
+    def _disk_fmt(slope, first, current, span, suffix):
         if slope < -0.0005:
-            direction = "falling"
-            lines.append(
-                f"Disk: {direction} {first} -> {current:.1f} GB over {_fmt_hours(span)}"
-                f"{" (confident)" if confident else ""}"
-            )
-        elif slope > 0.0005:
-            direction = "rising"
-            lines.append(
-                f"Disk: {direction} {first} -> {current:.1f} GB free over {_fmt_hours(span)}"
-                f"{" (confident)" if confident else ""}"
-            )
+            return f"Disk: falling {first} -> {current:.1f} GB over {_fmt_hours(span)}{suffix}"
+        if slope > 0.0005:
+            return f"Disk: rising {first} -> {current:.1f} GB free over {_fmt_hours(span)}{suffix}"
+        return None
+
+    disk_line = _trend_block("disk_free_gb", _linear_fit(samples, "disk_free_gb"), _disk_fmt)
+    if disk_line:
+        lines.append(disk_line)
 
     # RAM trend
-    fit = _linear_fit(samples, "ram_pct")
-    if fit is not None:
-        slope, _ = fit
-        current = samples[-1].get("ram_pct")
-        first = samples[0].get("ram_pct")
-        span = _span_hours(samples)
-        confident = span >= 24
+    def _ram_fmt(slope, first, current, span, suffix):
         if abs(slope) > 0.05:
             direction = "rising" if slope > 0 else "falling"
-            lines.append(
-                f"RAM: {direction} {first}% -> {current:.0f}% over {_fmt_hours(span)}"
-                f"{" (confident)" if confident else ""}"
-            )
-        else:
-            lines.append(f"RAM: stable at ~{current:.0f}% over {_fmt_hours(span)}")
+            return f"RAM: {direction} {first}% -> {current:.0f}% over {_fmt_hours(span)}{suffix}"
+        return f"RAM: stable at ~{current:.0f}% over {_fmt_hours(span)}"
+
+    ram_line = _trend_block("ram_pct", _linear_fit(samples, "ram_pct"), _ram_fmt)
+    if ram_line:
+        lines.append(ram_line)
 
     return lines
 

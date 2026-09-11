@@ -147,3 +147,5 @@ apps/desktop/resources/app.asar
 apps/desktop/resources/app/
 apps/backend/dash_dev.db.bak-*
 apps/backend/dash_training/training_data.alpaca.json
+*.key
+*.pem

@@ -20,6 +20,19 @@ router = APIRouter(prefix="/connectors", tags=["connectors"])
 _service = get_connector_service()
 
 
+async def _safe_json(request: Request) -> dict:
+    """Parse the request body as JSON, tolerating empty/malformed payloads.
+
+    Platform webhooks occasionally deliver empty or invalid bodies (retries,
+    probes); a malformed body is a client error (400), never a server fault.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(400, "request body must be valid JSON")
+    return payload if isinstance(payload, dict) else {"payload": payload}
+
+
 @router.get("/status")
 async def status(_user=Depends(get_current_user)):
     return {"ok": True, "connectors": _service.status()}
@@ -67,7 +80,7 @@ async def telegram_webhook(secret_token: str, request: Request):
     """Telegram accepts two webhook secret styles; both are supported:
     1. path token — the secret is embedded in the callback URL, or
     2. header — X-Telegram-Bot-Api-Secret-Token (verified in the service)."""
-    payload = await request.json()
+    payload = await _safe_json(request)
     header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
     result = _service.ingest_telegram(payload, header or secret_token)
     if not result.get("ok"):
@@ -77,7 +90,7 @@ async def telegram_webhook(secret_token: str, request: Request):
 
 @router.post("/notion/webhook")
 async def notion_webhook(request: Request):
-    payload = await request.json()
+    payload = await _safe_json(request)
     result = _service.ingest_notion(payload, request.headers.get("X-Notion-Signature", ""))
     if not result.get("ok"):
         raise HTTPException(result.get("status_code", 401), result.get("reason", "unauthorized"))

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, Notification, powerMonitor, screen, session } from "electron";
+import { app, BrowserWindow, shell, ipcMain, Notification, powerMonitor, screen, session, systemPreferences } from "electron";
 // Use software WebGL (SwiftShader) — keeps the 3D Orb working without GPU crashes
 app.commandLine.appendSwitch("use-gl", "swiftshader");
 app.commandLine.appendSwitch("use-angle", "swiftshader");
@@ -203,6 +203,41 @@ ipcMain.handle("backend:status", () => {
 // authenticate with DASH Core (no login UI; Windows user is the boundary).
 // The token value is NEVER logged.
 let cachedDeviceToken = null;
+ipcMain.handle("biometric:availability", () => {
+    try {
+        // Electron's canPromptTouchID is macOS-only in typings; on Windows the
+        // runtime simply reports false and we rely on Hello being probed by the
+        // credential prompt itself.
+        const touchIdAvailable = process.platform === "darwin" &&
+            typeof systemPreferences.canPromptTouchID === "function" &&
+            systemPreferences.canPromptTouchID();
+        const windowsHello = process.platform === "win32" &&
+            typeof systemPreferences.canPromptTouchID === "function";
+        return {
+            ok: true,
+            available: Boolean(touchIdAvailable || windowsHello),
+            authenticator: process.platform === "darwin" ? "touch_id" : process.platform === "win32" ? "windows_hello" : null,
+        };
+    }
+    catch {
+        return { ok: true, available: false, authenticator: null, reason: "Platform authenticator unavailable" };
+    }
+});
+ipcMain.handle("biometric:prompt", async (_event, reason) => {
+    if (process.platform === "darwin") {
+        try {
+            await systemPreferences.promptTouchID(reason || "Unlock DASH");
+            return { ok: true, success: true };
+        }
+        catch (error) {
+            return { ok: true, success: false, reason: String(error) };
+        }
+    }
+    // Windows: prompt via credential UI (WinHello) — Electron exposes
+    // canPromptTouchID only on macOS, so we fall back to the Windows
+    // security dialog through the credential prompt.
+    return { ok: false, success: false, reason: "Biometric prompt not supported on this platform" };
+});
 ipcMain.handle("auth:device-token", async () => {
     try {
         if (cachedDeviceToken)

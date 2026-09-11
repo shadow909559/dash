@@ -961,3 +961,22 @@ Backend start → ConnectorService() singleton hydrates configs (decrypts), rule
   from LocalStore — restarts keep credentials, forwarding rules, and history
 GET /connectors/status | /rules | /messages/{svc} | /events  [JWT — booleans only, secrets never returned]
 ```
+
+## 23. API Sweep Suite — How the Invariants Travel
+
+**Entry:** `tests/test_api_sweep.py` builds the app via `create_app()` and calls `app.openapi()` — the OpenAPI schema is the source of truth, so the sweep's coverage is always exactly the deployed surface (654 operations / 591 paths today).
+
+**Operation discovery:** `_all_operations(spec)` flattens `spec["paths"]` into `(method, path)` pairs — this list parameterizes the two no-5xx sweeps. Path params are filled from each operation's own parameter schemas (`_fill_params`); request bodies come from `_minimal_valid`, a recursive schema-walker that satisfies required fields from enums/defaults/types (uuid/date-time formats included).
+
+**Request flow per case:** pytest parametrization generates one case per operation per phase → `TestClient(create_app())` → ASGI transport → middleware chain (CORS → auth dependency → rate limiter) → route handler. The rate limiter's buckets are cleared between phases (`get_api_limiter().buckets.clear()`) so limiter state never decides an outcome.
+
+**The five enforcement layers, in order:**
+1. `test_no_5xx_on_minimal_valid_input` — every operation, valid-shaped input: asserts status < 500 (503 whitelisted as "dependency not configured").
+2. `test_no_5xx_on_junk_body` — same surface, hostile body: a malformed payload must be *rejected* (4xx) by validation, never crash a handler.
+3. `test_every_protected_route_rejects_anonymous` — the auth contract: anon client walks all 654 operations; anything answering 2xx outside the curated public allowlist (`/health`, `/api/v1/legal/*`, `/api/v1/memory/types`) is a leak reported with its exact `(method, path, status)`.
+4. `test_openapi_covers_full_surface` — guards the guard: fails loudly if the exposed surface shrinks (≥600 ops expected), so the sweep can't silently pass against a broken app.
+5. Deep happy-paths — memory literal-route regression (`/stats|/types|/continue` must beat `/{memory_id}` matching), memory create→search→delete roundtrip, proactive suggestions, legal docs, health.
+
+**What the first run proved:** zero-500 across all 654 operations *after* fixing the five crash paths it found (OAuth provider ValueError, webhook JSONDecodeError, ollama-tunnel proxy exceptions, memory route shadowing, briefing None-format) — and the auth layer found three fully-public routers (`integrations_all`, `cloud_relay`, `ecosystem`, plus `ollama_tunnel`) that now 401 anonymously.
+
+**Regression promise:** a route added tomorrow is swept automatically. A router mounted without `dependencies=[Depends(get_current_user)]`, a handler that lets an exception escape, or a webhook receiver that trusts request bodies — each fails CI with the offending route in the assertion message.
