@@ -503,3 +503,19 @@ Every meaningful technical decision, why it was made, and what alternatives were
 **Also hardened:** the app's real engine (`db/session.py`) now passes `connect_args={"timeout": 30}` for SQLite URLs — a competing writer (alembic at boot, admin CLI, second process) makes SQLite wait up to 30s instead of failing instantly. Non-SQLite URLs get no connect args, so Postgres behavior is untouched.
 
 **Files:** `apps/backend/tests/conftest.py` (hermetic app DB + stamp), `apps/backend/dash_backend/db/session.py` (busy-timeout).
+
+## 43. Automatic Dead-Letter Recovery for the Supabase Outbox Worker
+
+**What:** Dead-lettered outbox events are no longer parked forever. `fail_event` now schedules dead letters hourly (`next_retry_at = now + 1h`) instead of clearing the schedule; a new `claim_dead_letter_events` re-arms due dead letters back to `pending` with a **fresh attempt budget** (attempt_count reset to 0), up to `MAX_RECOVERY_ATTEMPTS = 3` recoveries tracked in a new `recovery_count` column. The worker re-arms at the top of every `deliver_once` pass — no separate timer thread. After 3 recoveries the event stays dead-lettered permanently (surfaceable via `error` + `recovery_count` for manual inspection).
+
+**Why re-arm with a fresh budget instead of just extending attempts:** the 5-attempt budget exists to stop hammering a failing condition; conditions CHANGE between recoveries (config fixed, service redeployed, schema drifted back), so a re-armed event deserves a full budget against the new reality. A single growing attempt_count would conflate "5 tries against this outage" with "try #12 after the fix". `recovery_count` is the honest lifetime measure.
+
+**Why hourly via next_retry_at, not a timer:** the worker's poll loop already runs every 5s; encoding the cadence in the claim query's `next_retry_at <= now` gate means zero new concurrency, zero timers to leak on shutdown, and the cadence survives a worker restart for free (it's in the DB, not in memory).
+
+**Deterministic errors keep exhausting immediately:** invalid payload/operation (ValueError) sets `attempt_count = 4` AND `recovery_count = MAX_RECOVERY_ATTEMPTS` — a deterministic error cannot heal by waiting an hour, so recovery budget must not be wasted (and the event must not resurrect every hour forever).
+
+**Migration:** `b2c3d4e5f6a7` adds nullable-safe `recovery_count INTEGER NOT NULL DEFAULT 0`; existing dead letters automatically become recovery-eligible on the next pass after upgrade (recovery_count 0 < 3), which is the desired catch-up behavior. Verified upgrade/downgrade/re-upgrade on a fresh SQLite DB.
+
+**Tests:** 3 new tests in `test_supabase_outbox.py` (11 total): hourly gate + fresh budget on re-arm; budget exhaustion is permanent; end-to-end outage → dead letter → re-arm → re-dead-letter → cloud heals → delivered (recovery_count 2). One test-infra subtlety documented: `deliver_once`'s session closes between passes, so assertions re-fetch the event by id (`_fetch_event`) instead of `refresh()`ing a detached instance.
+
+**Files:** `apps/backend/dash_backend/sync/outbox.py` (recovery_count, claim_dead_letter_events, hourly scheduling), `apps/backend/dash_backend/sync/supabase_outbox_worker.py` (re-arm pass, deterministic-error budget), `apps/backend/alembic/versions/b2c3d4e5f6a7_add_outbox_recovery_count.py` (new), `apps/backend/tests/test_supabase_outbox.py` (3 new tests).

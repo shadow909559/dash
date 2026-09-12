@@ -27,6 +27,14 @@ STATUS_COMPLETED = "completed"
 STATUS_DEAD_LETTER = "dead_letter"
 MAX_ATTEMPTS = 5
 
+# Dead-letter recovery (decisions.md #43): a dead-lettered event is not
+# necessarily broken forever — Supabase outages and schema drift are often
+# transient or fixed later. The worker re-arms dead letters hourly, up to
+# MAX_RECOVERY_ATTEMPTS recoveries (each re-armed event gets a fresh
+# attempt budget of MAX_ATTEMPTS), before giving up permanently.
+MAX_RECOVERY_ATTEMPTS = 3
+DEAD_LETTER_RETRY_DELAY = timedelta(hours=1)
+
 
 class SyncOutboxEvent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """A local event. It is never a source of truth for DASH domain data."""
@@ -41,6 +49,10 @@ class SyncOutboxEvent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default=STATUS_PENDING)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # How many times this event was re-armed from dead-letter back to
+    # pending. Re-arm resets attempt_count; this counter is what bounds
+    # total recovery lifetime.
+    recovery_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -111,6 +123,39 @@ async def claim_pending_events(session: AsyncSession, limit: int = 25) -> list[S
     return events
 
 
+async def claim_dead_letter_events(session: AsyncSession, limit: int = 25) -> list[SyncOutboxEvent]:
+    """Re-arm due dead-lettered events that still have recovery budget.
+
+    "Due" means next_retry_at has passed (the worker schedules dead letters
+    hourly). Events that exhausted MAX_RECOVERY_ATTEMPTS recoveries stay
+    dead-lettered permanently — surfaced for manual inspection via their
+    error and recovery_count fields.
+    """
+    now = datetime.now(UTC)
+    query = (
+        select(SyncOutboxEvent)
+        .where(
+            SyncOutboxEvent.status == STATUS_DEAD_LETTER,
+            SyncOutboxEvent.recovery_count < MAX_RECOVERY_ATTEMPTS,
+            (SyncOutboxEvent.next_retry_at.is_(None)) | (SyncOutboxEvent.next_retry_at <= now),
+        )
+        .order_by(SyncOutboxEvent.created_at.asc())
+        .limit(limit)
+    )
+    events = list((await session.execute(query)).scalars().all())
+    for event in events:
+        # Re-arm with a fresh attempt budget: the original 5 attempts were
+        # spent against whatever condition dead-lettered it; conditions can
+        # change (config fix, service recovery) between recoveries.
+        event.recovery_count += 1
+        event.attempt_count = 0
+        event.status = STATUS_PENDING
+        event.next_retry_at = now
+    if events:
+        await session.commit()
+    return events
+
+
 async def complete_event(session: AsyncSession, event: SyncOutboxEvent) -> None:
     event.status = STATUS_COMPLETED
     event.completed_at = datetime.now(UTC)
@@ -124,7 +169,11 @@ async def fail_event(session: AsyncSession, event: SyncOutboxEvent, error: str) 
     event.error = error[:512]
     if event.attempt_count >= MAX_ATTEMPTS:
         event.status = STATUS_DEAD_LETTER
-        event.next_retry_at = None
+        # Schedule automatic recovery instead of parking the event forever:
+        # the worker re-checks hourly while recovery budget remains. For an
+        # already-recovered event (recovery_count > 0), the NEXT retry is
+        # still scheduled — claim_dead_letter_events re-arms when due.
+        event.next_retry_at = datetime.now(UTC) + DEAD_LETTER_RETRY_DELAY
     else:
         event.status = STATUS_PENDING
         event.next_retry_at = retry_at(event.attempt_count)

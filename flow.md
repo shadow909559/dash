@@ -1029,3 +1029,16 @@ Modified: lib/api.ts (authFetch resolution), App.tsx (routes), CommandPalette.ts
 **Boot-time migration flow (production):** `main.py` lifespan → `alembic upgrade head` with `sqlalchemy.url` = settings.database_url → SQLite URLs now also carry `connect_args timeout:30` on the app engine, so a concurrent writer makes the boot wait instead of erroring.
 
 **Why a file DB, not `:memory:`:** the app engine pools connections; with `:memory:` each pooled connection gets its own empty database and schema-dependent queries fail intermittently. A file DB is shared by all pooled connections — the same semantics as production SQLite.
+
+## 27. Outbox Dead-Letter Recovery Flow (decisions.md #43)
+
+**Event lifecycle, including the recovery loop:**
+1. `enqueue_event` → `pending` (attempt_count 0, recovery_count 0).
+2. Worker `deliver_once` (every 5s): FIRST re-arms due dead letters via `claim_dead_letter_events` (`status = dead_letter AND recovery_count < 3 AND next_retry_at <= now` → each becomes `pending`, attempt_count 0, recovery_count+1), THEN `claim_pending_events` delivers whatever is due.
+3. Delivery failure → `fail_event`: attempts 1-4 → `pending` with bounded exponential retry (2s…5min); attempt 5 → `dead_letter` with `next_retry_at = now + 1h` (the hourly recovery gate).
+4. If the hour passes while recovery budget remains, step 2 re-arms → fresh 5-attempt budget against the (possibly healed) cloud; success → `completed` (recovery_count keeps its value, proving it survived recovery). Budget exhausted (recovery_count = 3) → dead letter is final; no claim query ever selects it again.
+5. Deterministic errors (ValueError: invalid payload/operation) short-circuit the loop: attempt_count → 4 AND recovery_count → 3, so they dead-letter immediately and never resurrect.
+
+**State invariants:** `recovery_count` only increments in `claim_dead_letter_events`; `attempt_count` resets only there. `next_retry_at` is always non-null for pending/dead-letter events with remaining budget. Every transition commits in its own helper (`fail_event`/`complete_event`/`claim_*`), so a crash mid-pass leaves at most a `processing` row that the next pass's claim ignores until... (note: `processing` rows are not re-claimed — pre-existing behavior, outbox is best-effort one-way sync by design).
+
+**Migration flow:** `b2c3d4e5f6a7` adds `recovery_count` with server_default 0 → existing dead letters become recovery-eligible immediately after upgrade (intentional catch-up).

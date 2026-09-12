@@ -11,9 +11,11 @@ from dash_backend.db.session import AsyncSessionLocal
 from dash_backend.logging_config import get_logger
 from dash_backend.services.supabase import get_supabase_service
 from dash_backend.sync.outbox import (
+    MAX_RECOVERY_ATTEMPTS,
     OPERATION_TOMBSTONE,
     OPERATION_UPSERT,
     SyncOutboxEvent,
+    claim_dead_letter_events,
     claim_pending_events,
     complete_event,
     fail_event,
@@ -38,14 +40,30 @@ class SupabaseOutboxWorker:
         if not get_settings().supabase_sync_enabled:
             return 0
         async with AsyncSessionLocal() as session:
+            # Automatic dead-letter recovery (decisions.md #43): re-arm due
+            # dead letters (hourly via next_retry_at, max 3 recoveries) back
+            # to pending; the claim below then treats them like any other
+            # event. No separate timer needed — the hourly cadence is the
+            # next_retry_at gate, not the 5s poll loop.
+            requeued = await claim_dead_letter_events(session, limit)
+            if requeued:
+                logger.info(
+                    "Re-armed %d dead-lettered outbox event(s) for recovery attempt %d",
+                    len(requeued),
+                    requeued[0].recovery_count,
+                )
             events = await claim_pending_events(session, limit)
             delivered = 0
             for event in events:
                 try:
                     await self._deliver(event)
                 except ValueError as exc:
-                    # Invalid payloads/operations are not transient; exhaust immediately.
+                    # Invalid payloads/operations are not transient; exhaust
+                    # immediately AND spend the whole recovery budget — a
+                    # deterministic error cannot be fixed by retrying later,
+                    # so the event stays dead-lettered for manual inspection.
                     event.attempt_count = 4
+                    event.recovery_count = MAX_RECOVERY_ATTEMPTS
                     await fail_event(session, event, str(exc))
                 except Exception as exc:
                     logger.warning("Supabase outbox delivery failed event=%s error=%s", event.id, type(exc).__name__)
