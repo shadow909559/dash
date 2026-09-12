@@ -38,6 +38,15 @@ os.environ.setdefault("DASH_HOST", "127.0.0.1")
 _TEST_STORE_DIR = tempfile.mkdtemp(prefix="dash-test-store-")
 os.environ.setdefault("DASH_LOCAL_STORE", os.path.join(_TEST_STORE_DIR, "dash_local_test.db"))
 
+# Hermetic cloud flags: tests must behave identically on a developer machine
+# whose .env enables Supabase sync and in CI where no .env exists. Without
+# this, local runs enqueue real outbox events from generic service calls
+# (create_goal etc.) and CI does not — a divergence that produced
+# environment-dependent failures. Tests that exercise sync explicitly
+# monkeypatch the flag themselves, so disabling the default is safe.
+os.environ["SUPABASE_ENABLED"] = "false"
+os.environ["SUPABASE_SYNC_ENABLED"] = "false"
+
 # Hermetic app database: tests that boot the real app (create_app) must never
 # touch the developer's dev database (dash_dev.db) — the live backend keeps it
 # locked, causing "sqlite3.OperationalError: database is locked" flakiness,
@@ -150,4 +159,41 @@ async def test_user(db_session: AsyncSession) -> User:
 async def test_user_id(test_user: User) -> str:
     """Return the test user's id as a string."""
     return str(test_user.id)
+
+
+# ── Hermetic AI-provider fixtures (decisions.md #44) ────────────
+# Why an autouse patch instead of per-test stubs: several test files
+# (test_integration, test_typed_memory, …) exercise services that generate
+# embeddings. The embedding path calls live endpoints — Ollama (60s timeout
+# × two endpoint fallbacks per call) or OpenAI — so on a developer machine
+# with Ollama running, tests depend on a live model; in CI they stall for
+# minutes per uncached call. Patching at the use sites (services import the
+# symbol into their own module namespace) makes every test deterministic
+# and instant while keeping provider plumbing covered by unit tests that
+# stub the client explicitly.
+
+
+async def _no_embedding(_text: str):
+    return None
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_ai_providers(monkeypatch: pytest.MonkeyPatch):
+    """Neutralize live embedding/model calls for every test, everywhere."""
+    # get_embedding is imported into these modules' namespaces at module
+    # load; patch each binding (monkeypatch restores automatically).
+    import dash_backend.memory.service as memory_service
+    import dash_backend.services.conversation_embeddings.service as conv_emb_service
+    import dash_backend.rag.service as rag_service
+
+    monkeypatch.setattr(memory_service, "get_embedding", _no_embedding)
+    monkeypatch.setattr(conv_emb_service, "get_embedding", _no_embedding)
+    monkeypatch.setattr(rag_service, "create_embedding", _no_embedding)
+    # Anything that slips through (direct module use, lazy imports inside
+    # functions) hits the underlying provider stub too.
+    import dash_backend.memory.embeddings as memory_embeddings
+    import dash_backend.rag.embeddings as rag_embeddings
+
+    monkeypatch.setattr(memory_embeddings, "create_embedding", _no_embedding)
+    monkeypatch.setattr(rag_embeddings, "create_embedding", _no_embedding)
 

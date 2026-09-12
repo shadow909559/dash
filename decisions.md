@@ -519,3 +519,30 @@ Every meaningful technical decision, why it was made, and what alternatives were
 **Tests:** 3 new tests in `test_supabase_outbox.py` (11 total): hourly gate + fresh budget on re-arm; budget exhaustion is permanent; end-to-end outage → dead letter → re-arm → re-dead-letter → cloud heals → delivered (recovery_count 2). One test-infra subtlety documented: `deliver_once`'s session closes between passes, so assertions re-fetch the event by id (`_fetch_event`) instead of `refresh()`ing a detached instance.
 
 **Files:** `apps/backend/dash_backend/sync/outbox.py` (recovery_count, claim_dead_letter_events, hourly scheduling), `apps/backend/dash_backend/sync/supabase_outbox_worker.py` (re-arm pass, deterministic-error budget), `apps/backend/alembic/versions/b2c3d4e5f6a7_add_outbox_recovery_count.py` (new), `apps/backend/tests/test_supabase_outbox.py` (3 new tests).
+
+## 44. Hanging-Test Audit: Hermetic AI Providers + Hang-Proof Timeout
+
+**Audit of the three "known-hanging" files found no live hangs today — but four real landmines:**
+
+1. **`test_integration.py` shipped a stale database to CI.** `apps/backend/test_integration.db` was accidentally tracked in git; `create_all` does not ALTER existing tables, so CI checked out a schema missing `sync_outbox_events.recovery_count` and every outbox-writing test failed (4 failures reproduced locally). Fixed: switched to a session-scoped **in-memory** engine with `StaticPool` (shared across pooled connections — the file-DB semantics without the file), untracked the db file (already gitignored).
+2. **The deprecated custom `event_loop` fixture.** A session-scoped `event_loop` + session-scoped async engine fixture is the classic pytest-asyncio 1.x deadlock; removed it and declared `loop_scope="session"` on the engine fixture instead (the supported way to bind session-scoped async fixtures).
+3. **Live embedding calls from tests.** `save_memory`/`search_memories`/RAG call Ollama (60s timeout × two endpoint fallbacks = up to ~2 min per uncached call) or OpenAI. With Ollama running locally, `test_typed_memory.py` took 28s of network time; in CI it stalls minutes and can appear "hung". Fixed with an **autouse conftest fixture** patching `get_embedding`/`create_embedding` at every use site (services bind the symbol at import, so each module namespace needs its own stub) to return None — services fall back to lexical search, which is what those tests actually assert. Deterministic and instant: the three files now run in 3.6s combined (was 28s+ for one file).
+4. **No hang ceiling.** Added `pytest-timeout` (dev extra, `timeout=60`, thread method — works on Windows and POSIX): any future genuine hang now FAILS with a stack dump instead of freezing CI for the full job timeout.
+
+**Why patch use sites instead of the provider module:** `from X import get_embedding` copies the symbol into the importer's namespace at module load; patching only the source module would miss live references. The autouse fixture patches both layers (use sites + provider modules), and monkeypatch restores everything per-test. Supabase sync flags are likewise forced off in conftest (see #45) so developer `.env` state cannot change test behavior.
+
+**Piper status:** `tools/piper/piper.exe` is not in the repo (model is), so the 9 binary tests skip cleanly by design; the registration test passes without it (voice module registration is try/except-guarded, CI-safe without the `voice` extra).
+
+**Files:** `apps/backend/tests/conftest.py` (autouse `_hermetic_ai_providers`, sync flags off), `apps/backend/tests/test_integration.py` (StaticPool in-memory engine, event_loop fixture removed), `apps/backend/pyproject.toml` (pytest-timeout + ini timeout), `.gitignore`-backed untrack of `apps/backend/test_integration.db`.
+
+## 45. Branch Reconciliation: local website-v1 adopted remote history (clean-clone workaround retired)
+
+**Problem:** local `website-v1` and `origin/website-v1` were parallel histories of the same content — the remote was published from a fresh `/tmp/dash_final` clean clone because direct pushes from the local repo (3.7GB legacy pack of model/binaries in history) timed out. Same commit messages, different SHAs; 121 local commits unreachable from the remote graph. Every sync required: fetch in clean clone → reset --hard → copy files → commit → push.
+
+**Discovery that made reconciliation safe:** `origin/main` is a strict ancestor of `origin/website-v1` (fast-forwardable), and the twin tips differ by 183 files — the clean clone is a *curated* copy (legacy `dash_training/` scripts, `.freebuff/` metadata, GitHub templates dropped). Remote is the canonical published view.
+
+**Procedure (reproducible):** backup branch `backup/pre-reconcile` → `git reset --soft origin/website-v1` (working tree untouched; index now differs from new HEAD by exactly the curated-tree adoption) → commit 1 "Adopt remote curated tree" (the 183-file diff) → stage the pending hanging-test fixes + `git rm --cached apps/backend/test_integration.db` as commit 2 → **direct** `git push origin website-v1` from the local repo (succeeded — small delta, workaround retired) → fast-forward `origin/main` to the same tip via `git push origin origin/website-v1:main` (allowed: strict ancestor).
+
+**Why adopt remote's tree instead of rebasing local onto it:** a rebase would replay 121 commits as textual patches across an already-published tree and manufacture 121 new conflicting SHAs; adopting the remote tree keeps every published SHA immutable and lands local uniqueness (4 commits of real work + this session's fixes) as ordinary new commits on top. The old local history stays reachable via the backup branch.
+
+**Also hermetic-ized test env flags:** conftest now forces `SUPABASE_ENABLED=false` / `SUPABASE_SYNC_ENABLED=false` — the developer `.env` enables sync, which silently made local tests enqueue real outbox events while CI (no `.env`) did not; an environment-dependent divergence that produced confusing one-sided failures.

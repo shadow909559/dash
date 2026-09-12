@@ -45,6 +45,9 @@ dev = [
     "aiosqlite>=0.20.0",
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
+    # Any test that hangs fails with a stack dump after the timeout instead
+    # of stalling CI forever (decisions.md #44).
+    "pytest-timeout>=2.3.0",
     "ruff>=0.8.0",
     "black>=24.10.0",
     "mypy>=1.13.0",
@@ -66,3 +69,9 @@ packages = ["dash_backend"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Kill hangs: per-test ceiling (thread method works on Windows + POSIX).
+# Real-service integration tests (piper synthesis, app boot) finish well
+# under this; a stuck subprocess or deadlock now FAILS instead of freezing
+# the whole run.
+timeout = 60
+timeout_method = "thread"

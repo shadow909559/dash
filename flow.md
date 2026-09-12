@@ -1042,3 +1042,21 @@ Modified: lib/api.ts (authFetch resolution), App.tsx (routes), CommandPalette.ts
 **State invariants:** `recovery_count` only increments in `claim_dead_letter_events`; `attempt_count` resets only there. `next_retry_at` is always non-null for pending/dead-letter events with remaining budget. Every transition commits in its own helper (`fail_event`/`complete_event`/`claim_*`), so a crash mid-pass leaves at most a `processing` row that the next pass's claim ignores until... (note: `processing` rows are not re-claimed — pre-existing behavior, outbox is best-effort one-way sync by design).
 
 **Migration flow:** `b2c3d4e5f6a7` adds `recovery_count` with server_default 0 → existing dead letters become recovery-eligible immediately after upgrade (intentional catch-up).
+
+## 28. Test Determinism Flow (decisions.md #44)
+
+**What runs live vs stubbed, in collection order:**
+1. conftest import time: `SUPABASE_ENABLED/SYNC_ENABLED` forced false → goal/task writes never enqueue outbox events in tests unless a test monkeypatches `sync_is_enabled` itself.
+2. Every test (autouse `_hermetic_ai_providers`): `get_embedding`/`create_embedding` stubbed at all four binding sites (memory.service, conversation_embeddings.service, rag.service, both provider modules) → memory search takes the lexical fallback, no network.
+3. `test_integration.py`: session-scoped in-memory engine with StaticPool → schema always matches current models; no stale file, no git-tracked db.
+4. Whole suite: pytest-timeout 60s/test (thread method) → a hang is a failure with a stack trace, never a frozen job.
+
+**Still live by design:** the piper binary tests (skip cleanly without tools/piper/piper.exe), the autostart lifespan boot (real alembic + services against a temp DB), and the API sweep (ASGI in-process, no network).
+
+## 29. Git Sync Flow After Reconciliation (decisions.md #45)
+
+**Old flow (retired):** edit locally → fetch in /tmp/dash_final clean clone → reset --hard → cp files → commit → push (worked around 3.7GB legacy pack making direct pushes time out).
+
+**New flow:** edit locally → `git add <files>` → `git commit` → `git push origin website-v1` directly. First post-reconcile push sent only the 183-file tree adoption + delta commits (small); subsequent pushes send only real deltas. `main` is kept a strict fast-forward of `website-v1` — publish to main with `git push origin origin/website-v1:main` (no local main needed) or push the same commit to both refs.
+
+**Recovery:** pre-reconcile local history (121 commits, incl. the duplicated work) remains reachable at branch `backup/pre-reconcile`; delete it once confident nothing unique was lost: `git branch -D backup/pre-reconcile`.

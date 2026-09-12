@@ -56,28 +56,35 @@ from dash_backend.db.models import User, Memory, Conversation, Message, MessageR
 
 logger = get_logger(__name__)
 
-# Use test database
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test_integration.db"
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create event loop for session-scoped fixtures."""
-    import asyncio
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+# In-memory SQLite shared across all pooled connections via StaticPool.
+# Previously a file DB (./test_integration.db) that was accidentally tracked
+# in git: CI checked out a STALE schema (e.g. missing sync_outbox_events.
+# recovery_count) and create_all does not ALTER existing tables, so every
+# outbox-writing test failed on CI. In-memory + StaticPool is hermetic and
+# always matches the current models.
+TEST_DATABASE_URL = "sqlite+aiosqlite://"
 
 
 @pytest.fixture(scope="session")
 async def test_engine():
-    """Create test database engine."""
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    """Session-wide in-memory database engine.
+
+    Loop-scope="session" (pytest-asyncio >= 0.23) is required: a session-
+    scoped async fixture must bind to a session-scoped loop or teardown
+    deadlocks — the deprecated custom `event_loop` fixture this file used
+    before is exactly what made the suite hang under pytest-asyncio 1.x.
+    """
+    from sqlalchemy.pool import StaticPool
+
+    engine = create_async_engine(
+        TEST_DATABASE_URL,
+        echo=False,
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield engine
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()
 
 
