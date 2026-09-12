@@ -45,8 +45,28 @@ export class BackendManager {
         this.unhealthyTicks = 0;
         this.lockPath = path.join(app.getPath("userData"), "dash-backend.lock");
         if (app.isPackaged) {
-            this.backendDir = path.join(app.getAppPath(), "backend");
-            this.pythonPath = path.join(this.backendDir, "DashBackend.exe");
+            // extraResources copies the backend to <resources>/backend — OUTSIDE
+            // app.asar, so app.getAppPath() (the asar path) would be wrong here.
+            this.backendDir = path.join(process.resourcesPath, "backend");
+            const bundledExe = path.join(this.backendDir, "DashBackend.exe");
+            const bundledVenvPython = path.join(this.backendDir, ".venv", "Scripts", "python.exe");
+            if (fs.existsSync(bundledExe)) {
+                this.pythonPath = bundledExe;
+            }
+            else if (fs.existsSync(bundledVenvPython)) {
+                // Venv shipped without a PyInstaller bundle.
+                this.pythonPath = bundledVenvPython;
+                this.usePythonDirect = true;
+                console.warn(`[BackendManager] DashBackend.exe not bundled — using bundled venv Python: ${bundledVenvPython}`);
+            }
+            else {
+                // Backend source is bundled but no interpreter for it was shipped.
+                // Fall back to a system Python so autostart still works on machines
+                // where DASH was installed alongside an existing Python setup.
+                this.pythonPath = "python";
+                this.usePythonDirect = true;
+                console.warn(`[BackendManager] DashBackend.exe and venv not bundled — falling back to system Python for the backend (autostart will fail with a clear error if Python is absent)`);
+            }
         }
         else {
             this.backendDir = path.join(app.getAppPath(), "..", "..", "apps", "backend");
@@ -171,7 +191,11 @@ export class BackendManager {
             throw err;
         }
     }
-    async waitForBackend(maxAttempts = 40, interval = 500) {
+    async waitForBackend(maxAttempts = 120, interval = 500) {
+        // 120 × 500ms = 60s: the backend's lifespan starts 15+ services and its
+        // first import can be slow on cold login (AV scanning, disk cache cold).
+        // The old 20s window burned 1 of only 3 restart attempts on every slow
+        // login — three slow starts meant the backend gave up for the session.
         this.log("waiting for backend health");
         for (let i = 0; i < maxAttempts; i++) {
             if (this.stopping)

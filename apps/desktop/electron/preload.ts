@@ -102,7 +102,7 @@ app: {
     startup: {
       setSettings: (settings: { openAtLogin: boolean; startMinimized: boolean; startAsOrb: boolean }): Promise<{ ok: boolean }> =>
         ipcRenderer.invoke("startup:set-settings", settings),
-      getSettings: (): Promise<{ openAtLogin: boolean; openAsHidden: boolean }> =>
+      getSettings: (): Promise<{ openAtLogin: boolean; openAsHidden: boolean; startMinimized: boolean; startAsOrb: boolean }> =>
         ipcRenderer.invoke("startup:get-settings"),
     },
   },

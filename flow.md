@@ -980,3 +980,21 @@ GET /connectors/status | /rules | /messages/{svc} | /events  [JWT — booleans o
 **What the first run proved:** zero-500 across all 654 operations *after* fixing the five crash paths it found (OAuth provider ValueError, webhook JSONDecodeError, ollama-tunnel proxy exceptions, memory route shadowing, briefing None-format) — and the auth layer found three fully-public routers (`integrations_all`, `cloud_relay`, `ecosystem`, plus `ollama_tunnel`) that now 401 anonymously.
 
 **Regression promise:** a route added tomorrow is swept automatically. A router mounted without `dependencies=[Depends(get_current_user)]`, a handler that lets an exception escape, or a webhook receiver that trusts request bodies — each fails CI with the offending route in the assertion message.
+
+## 24. Autostart Flow — Login to Working Backend
+
+**Boot chain, in order:**
+1. **Windows login** → `HKCU\...\Run` key `DASH = "C:\Program Files\DASH\DASH.exe" --hidden` (written by `app.setLoginItemSettings` with `args:["--hidden"]` when Start-minimized is on).
+2. **DASH.exe (Electron main, `dist-electron/main.js`)** → module init: single-instance lock (second launch quits and focuses the first). `launchHidden` = `--hidden`/`--start-minimized` argv OR `getLoginItemSettings().openAsHidden`.
+3. **`app.whenReady()`** → `backendManager.start()` (serialized on its op-chain mutex):
+   - probe `/health` on 127.0.0.1:8000 → healthy DASH? **reuse** (never a second backend)
+   - port occupied by stale DASH → kill it, wait 1.2s, spawn exactly one
+   - port occupied by non-DASH → **blocked** (never fight a foreign process)
+   - port free → **spawn**: packaged = `process.resourcesPath/backend` (DashBackend.exe, else bundled venv python, else system python) with `-m uvicorn dash_backend.main:app --host 127.0.0.1 --port 8000`; dev = `apps/backend` venv-or-global python
+   - `waitForBackend`: 120 × 500ms health probes (60s window; child-exit aborts in ~0.5s); on health → `lifecycle=healthy`, 15s monitor loop starts with backoff-restart (max 3 attempts)
+4. **Backend lifespan (`dash_backend/main.py`)**, each step failure-isolated: alembic `upgrade head` → device identity → executive worker → automation scheduler → event bus → system services (scheduler/health/metrics/resource/cache + AI provider monitor) → enhanced sync → plugin manager + hot reloader → autonomous agents + brain → performance optimizers → Ollama auto-start (model `dash-finetuned`) + background monitor → predictive device sampler → `system.startup` event.
+5. **Back in Electron** → `createWindow()`; if `launchHidden`: `startAsOrb` ? floating orb window : hide to tray (`enableBackgroundMode`).
+
+**Startup prefs flow:** SettingsPage toggle → `startup:set-settings` IPC → `app.setLoginItemSettings(openAtLogin, openAsHidden, args:["--hidden"])` + persist full pref object to `userData/startup-prefs.json`; read path merges login-item state, `launchArguments`, and persisted prefs (Windows can't report openAsHidden).
+
+**What the tests lock:** `tests/test_autostart_contract.py` asserts the chain's load-bearing details — Run-key args written, prefs persisted, orb honored inside the `launchHidden` block, packaged dir on `process.resourcesPath`, dual spawn fallbacks, ≥60s health window, uvicorn args, stale-replace/reuse logic, stale-bundle markers on the built artifact, and a live boot with every service engaged, zero startup exceptions, and clean shutdown.

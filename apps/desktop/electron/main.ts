@@ -7,6 +7,7 @@ import { autoUpdater } from "electron-updater";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BackendManager } from "./backend_manager";
+import fsSync from "node:fs";
 import { SystemTray } from "./system_tray";
 import { initSingleInstanceLock, setMainWindow } from "./single_instance";
 import { startMemoryCleanup, stopMemoryCleanup, getMemoryStats, performCleanup } from "./memory_cleanup";
@@ -469,29 +470,56 @@ ipcMain.handle("app:quit", () => {
 });
 
 // ── Startup Settings ─────────────────────────────────────────────────────
+// Prefs persist in userData so "start as orb" / "start minimized" survive
+// restarts — getLoginItemSettings only knows openAtLogin/openAsHidden.
+const startupPrefsFile = path.join(app.getPath("userData"), "startup-prefs.json");
 let startupPrefs: { openAtLogin: boolean; startMinimized: boolean; startAsOrb: boolean } = {
   openAtLogin: false,
   startMinimized: false,
   startAsOrb: false,
 };
+try {
+  if (fsSync.existsSync(startupPrefsFile)) {
+    const saved = JSON.parse(fsSync.readFileSync(startupPrefsFile, "utf-8"));
+    startupPrefs = { ...startupPrefs, ...saved };
+  }
+} catch (err) {
+  console.warn("[Main] Could not read startup prefs:", err);
+}
 
 ipcMain.handle("startup:set-settings", async (_, settings: { openAtLogin: boolean; startMinimized: boolean; startAsOrb: boolean }) => {
   startupPrefs = { ...startupPrefs, ...settings };
+  // Windows: openAsHidden is macOS-only — the Run key must carry the
+  // --hidden arg itself, which launchHidden checks at boot.
   app.setLoginItemSettings({
     openAtLogin: settings.openAtLogin,
     openAsHidden: settings.startMinimized,
     path: process.execPath,
+    args: settings.startMinimized ? ["--hidden"] : [],
   });
+  try {
+    fsSync.writeFileSync(startupPrefsFile, JSON.stringify(startupPrefs, null, 2), "utf-8");
+  } catch (err) {
+    console.error("[Main] Could not persist startup prefs:", err);
+  }
   console.log("[Main] Startup settings updated:", startupPrefs);
   return { ok: true };
 });
 
 ipcMain.handle("startup:get-settings", () => {
   const login = app.getLoginItemSettings();
+  const launchArgs: string = (login as { launchArguments?: string }).launchArguments || "";
   return {
     openAtLogin: login.openAtLogin,
     openAsHidden: login.openAsHidden,
-    startMinimized: login.openAsHidden,
+    // Persisted prefs are the source of truth on Windows (openAsHidden never
+    // reports true there); launchArguments covers a Run key that already
+    // carries --hidden; login.openAsHidden covers macOS.
+    startMinimized:
+      startupPrefs.startMinimized ||
+      login.openAsHidden ||
+      launchArgs.includes("--hidden") ||
+      launchArgs.includes("--start-minimized"),
     startAsOrb: startupPrefs.startAsOrb,
   };
 });
@@ -753,13 +781,20 @@ app.whenReady().then(async () => {
   createWindow();
 
   // If launched with --hidden / start-minimized (auto-start at login),
-  // start in the background: hide the main window, keep it in the tray.
+  // start in the background: honor startAsOrb (floating orb) if set,
+  // otherwise hide the main window and keep it in the tray.
   if (launchHidden && mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.hide();
-    if (systemTray) {
-      systemTray.enableBackgroundMode();
+    if (startupPrefs.startAsOrb) {
+      currentWindowMode = "orb";
+      orbWindow = createOrbWindow();
+      console.log("[Main] Auto-start: launched as floating orb (tray available)");
+    } else {
+      mainWindow.hide();
+      if (systemTray) {
+        systemTray.enableBackgroundMode();
+      }
+      console.log("[Main] Auto-start: started hidden (tray-only mode) — open from system tray");
     }
-    console.log("[Main] Started hidden (tray-only mode) — open from system tray");
   }
 
   // Start periodic memory cleanup
