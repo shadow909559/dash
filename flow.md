@@ -1060,3 +1060,13 @@ Modified: lib/api.ts (authFetch resolution), App.tsx (routes), CommandPalette.ts
 **New flow:** edit locally → `git add <files>` → `git commit` → `git push origin website-v1` directly. First post-reconcile push sent only the 183-file tree adoption + delta commits (small); subsequent pushes send only real deltas. `main` is kept a strict fast-forward of `website-v1` — publish to main with `git push origin origin/website-v1:main` (no local main needed) or push the same commit to both refs.
 
 **Recovery:** pre-reconcile local history (121 commits, incl. the duplicated work) remains reachable at branch `backup/pre-reconcile`; delete it once confident nothing unique was lost: `git branch -D backup/pre-reconcile`.
+
+## 30. Outbox Health Flow (decisions.md #46)
+
+**Data path:** worker loop (every 5s: re-arm dead letters → deliver pending) mutates `sync_outbox_events.status/attempt_count/recovery_count` → desktop App.tsx mount starts `startBadgePolling(60s)` → `badgeStore.fetchCounts` calls three endpoints in parallel via authFetch (`/executive/goals/upcoming`, `/proactive/suggestions`, new `/sync/outbox/health`) → outbox body stored in badgeStore (`outbox`, `outboxError`) → `DASHSidebar` footer renders `SyncHealthIndicator` from that state.
+
+**Endpoint flow:** `GET /sync/outbox/health` → device-token auth (router-level `get_current_user_id`) → sync disabled? → `{state: LOCAL_ONLY}` → else one grouped count + retryable count + 5 newest dead letters + max(completed_at) against the app DB → state derivation: processing>0 → SYNCING; dead|pending>0 → DEGRADED; else HEALTHY → JSON. Never touches Supabase (the point is to reflect LOCAL reality, and the endpoint must stay fast even when the cloud is down — that's usually when someone checks it).
+
+**UI decision flow:** state null (no data / backend down) → render nothing (global connection dot covers it) → HEALTHY/LOCAL_ONLY → nothing (absence = healthy) → ERROR → static warning chip, click → Command Center → DEGRADED → warning chip with dead-letter count, click toggles inline expansion (pending/retryable/stuck + recent failure rows), last-sync timestamp at bottom.
+
+**Failure semantics:** non-OK health response → `state: ERROR` kept in store (visible "unknown"), fetch rejection (backend unreachable) → outbox cleared to null (the system-ready dot already signals disconnection) — the indicator never lies by showing stale healthy data.

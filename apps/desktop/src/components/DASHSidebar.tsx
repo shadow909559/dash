@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAIStore } from "@/stores/aiStore";
 import { useBadgeStore } from "@/stores/badgeStore";
+import { SyncHealthIndicator } from "@/components/SyncHealthIndicator";
 
 interface DASHSidebarProps {
   isExpanded: boolean;
@@ -314,62 +315,67 @@ export const DASHSidebar: React.FC<DASHSidebarProps> = ({ isExpanded, onToggle }
       {/* Footer / Toggle Section */}
       <div
         style={{
-          padding: isExpanded ? "10px 12px" : "10px 8px",
           borderTop: "1px solid var(--dash-border)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: isExpanded ? "space-between" : "center",
           backgroundColor: "var(--dash-bg-subtle)",
           flexShrink: 0,
         }}
-      >
-        {!isExpanded ? (
-          <button
-            onClick={onToggle}
-            title="Expand Sidebar"
-            aria-label="Expand Sidebar"
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "var(--dash-text-muted)",
-              cursor: "pointer",
-              padding: 6,
-              borderRadius: "var(--dash-radius-xs)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all var(--dash-transition-fast)",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = "var(--dash-text)";
-              e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.05)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = "var(--dash-text-muted)";
-              e.currentTarget.style.backgroundColor = "transparent";
-            }}
-          >
-            <ChevronRight size={16} />
-          </button>
+      >        {!isExpanded ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "8px 0" }}>
+            <SyncHealthIndicator />
+            <button
+              onClick={onToggle}
+              title="Expand Sidebar"
+              aria-label="Expand Sidebar"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--dash-text-muted)",
+                cursor: "pointer",
+                padding: 6,
+                borderRadius: "var(--dash-radius-xs)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all var(--dash-transition-fast)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--dash-text)";
+                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.05)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--dash-text-muted)";
+                e.currentTarget.style.backgroundColor = "transparent";
+              }}
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         ) : (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 11,
-              color: "var(--dash-text-secondary)",
-            }}
-          >
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <SyncHealthIndicator />
             <div
               style={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                backgroundColor: systemStatus === "online" ? "var(--dash-success)" : "var(--dash-danger)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                padding: "8px 12px",
+                fontSize: 11,
+                color: "var(--dash-text-secondary)",
               }}
-            />
-            <span>{systemStatus === "online" ? "System Ready" : "Disconnected"}</span>
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    backgroundColor: systemStatus === "online" ? "var(--dash-success)" : "var(--dash-danger)",
+                  }}
+                />
+                <span>{systemStatus === "online" ? "System Ready" : "Disconnected"}</span>
+              </div>
+            </div>
           </div>
         )}
       </div>

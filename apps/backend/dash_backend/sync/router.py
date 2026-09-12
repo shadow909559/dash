@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
 
 from dash_backend.auth.dependencies import get_current_user_id
+from dash_backend.config import get_settings
+from dash_backend.db.session import AsyncSessionLocal
 from dash_backend.logging_config import get_logger
 from dash_backend.sync.service import (
     SyncRequest,
@@ -113,3 +117,108 @@ async def sync_health(
     """Get sync service health status."""
     service = get_sync_service()
     return await service.get_health()
+
+
+@router.get("/outbox/health")
+async def outbox_health(
+    user_id: str = Depends(get_current_user_id),
+) -> dict[str, Any]:
+    """Supabase outbox health: queue counts, dead-letter detail, freshness.
+
+    Makes sync failures visible instead of silent (decisions.md #46):
+    pending (backlog incl. retry-scheduled), dead_letter total split into
+    retryable (recovery budget remains) and exhausted (permanent), recent
+    dead letters with their errors, and the last successful delivery.
+    Read-only, DB-only — never touches the network.
+    """
+    from dash_backend.sync.outbox import (
+        MAX_RECOVERY_ATTEMPTS,
+        STATUS_DEAD_LETTER,
+        STATUS_PENDING,
+        STATUS_PROCESSING,
+        SyncOutboxEvent,
+    )
+
+    enabled = get_settings().supabase_sync_enabled
+    if not enabled:
+        return {"state": "LOCAL_ONLY", "sync_enabled": False}
+
+    now = datetime.now(UTC)
+    async with AsyncSessionLocal() as session:
+        rows = (
+            await session.execute(
+                select(SyncOutboxEvent.status, func.count()).group_by(
+                    SyncOutboxEvent.status
+                )
+            )
+        ).all()
+        counts = {str(status): int(count) for status, count in rows}
+
+        dead_total = counts.get(STATUS_DEAD_LETTER, 0)
+        retryable = int(
+            (await session.execute(
+                select(func.count())
+                .select_from(SyncOutboxEvent)
+                .where(
+                    SyncOutboxEvent.status == STATUS_DEAD_LETTER,
+                    SyncOutboxEvent.recovery_count < MAX_RECOVERY_ATTEMPTS,
+                )
+            )).scalar()
+            or 0
+        )
+
+        recent_rows = (
+            await session.execute(
+                select(SyncOutboxEvent)
+                .where(SyncOutboxEvent.status == STATUS_DEAD_LETTER)
+                .order_by(SyncOutboxEvent.updated_at.desc())
+                .limit(5)
+            )
+        ).scalars().all()
+        recent = [
+            {
+                "id": str(event.id),
+                "record_type": event.record_type,
+                "record_id": str(event.record_id),
+                "operation": event.operation,
+                "error": event.error,
+                "attempt_count": event.attempt_count,
+                "recovery_count": event.recovery_count,
+                "last_attempt_at": (
+                    event.last_attempt_at.isoformat() if event.last_attempt_at else None
+                ),
+            }
+            for event in recent_rows
+        ]
+
+        last_success = await session.scalar(
+            select(func.max(SyncOutboxEvent.completed_at)).where(
+                SyncOutboxEvent.status == "completed"
+            )
+        )
+
+    pending = counts.get(STATUS_PENDING, 0)
+    processing = counts.get(STATUS_PROCESSING, 0)
+    exhausted = dead_total - retryable
+    if processing:
+        state = "SYNCING"
+    elif dead_total or pending:
+        state = "DEGRADED"
+    else:
+        state = "HEALTHY"
+
+    return {
+        "state": state,
+        "sync_enabled": True,
+        "pending": pending,
+        "processing": processing,
+        "completed": counts.get("completed", 0),
+        "dead_letter": dead_total,
+        "dead_letter_retryable": retryable,
+        "dead_letter_exhausted": exhausted,
+        "recent_dead_letters": recent,
+        "last_successful_sync": (
+            last_success.astimezone(UTC).isoformat() if last_success else None
+        ),
+        "checked_at": now.isoformat(),
+    }
