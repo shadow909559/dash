@@ -1017,3 +1017,15 @@ Modified: lib/api.ts (authFetch resolution), App.tsx (routes), CommandPalette.ts
 4. **Test guarantee** — `test_no_flash_terminal.py` proves the shim is active after any `import dash_backend`, that real cmd.exe children run correctly under it, that caller flags are OR-preserved, and that `__init__.py` keeps the shim wired (source-level regression guard).
 
 **What was flashing before:** context collectors polling tasklist/wmic, git status probes, ping reachability checks, winget update detection — each spawning a console every poll interval from the console-less backend, plus the two misconfigured logon tasks.
+
+## 26. Test-Run DB Flow (decisions.md #42)
+
+**Which database each test layer touches, in order of import:**
+1. pytest starts → `tests/conftest.py` runs at collection: sets `DASH_DATABASE_URL` to a fresh temp FILE db (`dash_test.db`), then `Base.metadata.create_all` builds the schema and `alembic.command.stamp(..., "head")` marks it current — before any test imports the app.
+2. App-booting tests (`create_app()` + ASGITransport) → `dash_backend/db/session.py` engine binds `settings.database_url` → conftest's env var wins → all app writes land in the temp DB, never `dash_dev.db`. ASGITransport does not run the lifespan, so only the lifespan test runs alembic — which sees the stamp and no-ops.
+3. Tests using the `db_session`/`db_engine` fixtures → separate per-test in-memory engines (unchanged behavior).
+4. Feature-service tests → `DASH_LOCAL_STORE` temp file (pre-existing hermetic override).
+
+**Boot-time migration flow (production):** `main.py` lifespan → `alembic upgrade head` with `sqlalchemy.url` = settings.database_url → SQLite URLs now also carry `connect_args timeout:30` on the app engine, so a concurrent writer makes the boot wait instead of erroring.
+
+**Why a file DB, not `:memory:`:** the app engine pools connections; with `:memory:` each pooled connection gets its own empty database and schema-dependent queries fail intermittently. A file DB is shared by all pooled connections — the same semantics as production SQLite.

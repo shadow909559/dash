@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import tempfile
 import uuid
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # ── Device identity bootstrap (must run before any request) ──────────
@@ -36,11 +38,44 @@ os.environ.setdefault("DASH_HOST", "127.0.0.1")
 _TEST_STORE_DIR = tempfile.mkdtemp(prefix="dash-test-store-")
 os.environ.setdefault("DASH_LOCAL_STORE", os.path.join(_TEST_STORE_DIR, "dash_local_test.db"))
 
+# Hermetic app database: tests that boot the real app (create_app) must never
+# touch the developer's dev database (dash_dev.db) — the live backend keeps it
+# locked, causing "sqlite3.OperationalError: database is locked" flakiness,
+# and tests would pollute real data. A fresh temp FILE database is used
+# (not :memory:, because the app's pooled engine would give each pooled
+# connection its own empty in-memory DB). Schema is created once, below, from
+# the same metadata the app's alembic migrations model.
+_TEST_DB_DIR = tempfile.mkdtemp(prefix="dash-test-db-")
+_TEST_DB_PATH = pathlib.Path(_TEST_DB_DIR) / "dash_test.db"
+os.environ["DASH_DATABASE_URL"] = f"sqlite+aiosqlite:///{_TEST_DB_PATH.as_posix()}"
+
 AUTH_HEADERS = {"Authorization": f"Bearer {_TEST_TOKEN}"}
 
 from dash_backend.db.base import Base  # noqa: E402
 from dash_backend.db.models.user import User  # noqa: E402
 from dash_backend.main import create_app  # noqa: E402
+
+
+# Create the app-DB schema once per test session, before any test boots the
+# app (ASGITransport does not run the lifespan, so alembic never runs in
+# tests; the dev DB previously supplied the schema implicitly). A sync
+# engine is sufficient — the file is shared with the app's aiosqlite engine.
+_sync_test_engine = create_engine(
+    f"sqlite:///{_TEST_DB_PATH.as_posix()}", echo=False
+)
+Base.metadata.create_all(_sync_test_engine)
+
+# Stamp the fresh schema to the latest alembic revision so a full app boot
+# (the lifespan test runs `alembic upgrade head` for real) sees an
+# already-current database and no-ops instead of re-running revision 1 and
+# colliding with create_all's tables ("table agents already exists").
+from alembic import command as _alembic_command  # noqa: E402
+from alembic.config import Config as _AlembicConfig  # noqa: E402
+
+_alembic_ini = pathlib.Path(__file__).resolve().parents[1] / "alembic.ini"
+_alembic_cfg = _AlembicConfig(str(_alembic_ini))
+_alembic_cfg.set_main_option("sqlalchemy.url", f"sqlite:///{_TEST_DB_PATH.as_posix()}")
+_alembic_command.stamp(_alembic_cfg, "head")
 
 
 @pytest.fixture

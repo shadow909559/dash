@@ -491,3 +491,15 @@ Every meaningful technical decision, why it was made, and what alternatives were
 **Verification:** `tests/test_no_flash_terminal.py` (7 tests, Windows-only): shim active after any dash_backend import (all five helpers + Popen qualname), live `subprocess.run`/`check_output` of cmd.exe complete with correct output (would flash without the shim), caller flags OR-preserved, shim wired in package __init__ (regression guard), asyncio coverage argument asserted. Live verification: all six DASH logon tasks confirmed windowless via Get-ScheduledTask inspection.
 
 **Files:** `apps/backend/dash_backend/_win_noswindow.py` (new), `apps/backend/dash_backend/__init__.py` (shim install), `scripts/fix-hidden-tasks.ps1` (new), `scripts/setup-autostart.bat` (windowless variants for future installs), `apps/backend/tests/test_no_flash_terminal.py` (new).
+
+## 42. Full-Suite Green: Hermetic App-DB for Tests + SQLite Busy-Timeout
+
+**What:** Full backend test suite run end-to-end and every failure fixed — 1,871 tests now pass (555 non-sweep + 1,316 sweep; 9 pre-existing skips, `test_integration.py` still excluded as network-dependent).
+
+**Root cause of the 5 failures (`database is locked`):** `.env` sets `DASH_DATABASE_URL=sqlite:///dash_dev.db`, so any test that boots the real app via `create_app()` shared the developer's live dev database file with the actually-running backend — SQLite locked it, tests flaked, and writes polluted real data. The five app-booting tests (goal engine flow, memory regression, privacy delete, security logout, status conversations) raced the live process.
+
+**Why the fix is in conftest, not per-test:** conftest already establishes the hermetic pattern (`DASH_IDENTITY_FILE`, `DASH_LOCAL_STORE` temp overrides); the app DB was the last non-hermetic global. A fresh temp FILE database is created once per session (`sqlite+aiosqlite:///<tmp>/dash_test.db`) — not `:memory:`, because the app's pooled engine would hand each pooled connection its own empty in-memory DB. Schema comes from `Base.metadata.create_all`, then the DB is **stamped to alembic head** via `alembic.command.stamp` so the lifespan test's real `upgrade head` boot no-ops instead of colliding with create_all's tables ("table agents already exists" — the first attempt's mistake, caught by the autostart contract test and fixed with the stamp).
+
+**Also hardened:** the app's real engine (`db/session.py`) now passes `connect_args={"timeout": 30}` for SQLite URLs — a competing writer (alembic at boot, admin CLI, second process) makes SQLite wait up to 30s instead of failing instantly. Non-SQLite URLs get no connect args, so Postgres behavior is untouched.
+
+**Files:** `apps/backend/tests/conftest.py` (hermetic app DB + stamp), `apps/backend/dash_backend/db/session.py` (busy-timeout).
