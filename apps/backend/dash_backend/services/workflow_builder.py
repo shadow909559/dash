@@ -1,6 +1,7 @@
 """Workflow builder: templates, triggers, conditional logic, error handling, execution history."""
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import uuid
@@ -108,7 +109,7 @@ WORKFLOW_TEMPLATES: list[dict] = [
 # ── Persistence ────────────────────────────────────────────────────────────
 
 import os
-from pathlib import Path as _Path
+from pathlib import Path as _Path  # noqa: F401  (used in type hints + _state_path)
 
 
 def _state_path() -> _Path:
@@ -272,11 +273,43 @@ class WorkflowEngine:
             return {"ok": False, "reason": "Workflow not found"}
         return self.create(
             name=new_name or f"{wf['name']} (copy)",
-            nodes=list(wf["nodes"]),
-            edges=list(wf["edges"]),
+            nodes=copy.deepcopy(wf["nodes"]),
+            edges=copy.deepcopy(wf["edges"]),
             description=wf.get("description", ""),
             category=wf.get("category", "custom"),
         )
+
+    def instantiate_template(self, template_id: str, name: Optional[str] = None) -> dict:
+        """Create an editable custom workflow from a template (one click).
+
+        Deep-copies nodes/edges so the template's code-seeded definitions can
+        never be mutated through an edited copy (templates are re-seeded from
+        code on every boot, but an in-session shallow share would corrupt the
+        running template's node dicts). Auto-deduplicates names so repeated
+        instantiations read "Daily Briefing", "Daily Briefing (2)", ...
+        """
+        wf = self._workflows.get(template_id)
+        if not wf or not wf.get("is_template"):
+            return {"ok": False, "reason": "Template not found"}
+
+        base_name = (name or wf["name"]).strip() or wf["name"]
+        existing = {w["name"] for w in self._workflows.values() if not w.get("is_template")}
+        final_name = base_name
+        counter = 2
+        while final_name in existing:
+            final_name = f"{base_name} ({counter})"
+            counter += 1
+
+        created = self.create(
+            name=final_name,
+            nodes=copy.deepcopy(wf["nodes"]),
+            edges=copy.deepcopy(wf["edges"]),
+            description=wf.get("description", ""),
+            category=wf.get("category", "custom"),
+        )
+        if created.get("ok"):
+            created["workflow"]["instantiated_from"] = template_id
+        return created
 
     # ── Triggers ────────────────────────────────────────────────────
 

@@ -25,6 +25,17 @@ def _no_window_flag() -> int:
     return getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
+# The REAL Popen captured at test-module import. Careful: if this module is
+# imported after dash_backend, subprocess.Popen is already the shim; capture
+# through the MRO instead so the assertion is against the genuine base.
+import dash_backend as _dash  # noqa: E402
+
+if isinstance(subprocess.Popen, type) and subprocess.Popen is not getattr(subprocess, "Popen", None):
+    _orig_popen = subprocess.Popen.__mro__[1]
+else:
+    _orig_popen = subprocess.Popen
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows-only console behavior")
 class TestShimInstalled:
     def test_shim_active_after_backend_import(self):
@@ -37,7 +48,11 @@ class TestShimInstalled:
             assert getattr(fn, "__wrapped__", None) is not None or fn.__qualname__.startswith(
                 "_wrap_simple"
             ), f"subprocess.{name} is not shimmed"
-        assert subprocess.Popen.__qualname__.startswith("_wrap_popen"), "subprocess.Popen is not shimmed"
+        # Popen must be a real CLASS subclass of the original Popen — not a
+        # function wrapper — because asyncio.windows_utils subclasses
+        # subprocess.Popen at import time (a function would crash there).
+        assert isinstance(subprocess.Popen, type), "subprocess.Popen shim must be a class"
+        assert issubclass(subprocess.Popen, _orig_popen)
 
     def test_run_inherits_no_window_flag(self):
         import dash_backend  # type: ignore[import-untyped]  # noqa: F401
@@ -82,12 +97,18 @@ class TestShimWired:
 
     def test_asyncio_spawns_covered_by_popen_patch(self):
         # asyncio.create_subprocess_exec goes through subprocess.Popen on
-        # the Proactor loop — assert the patched Popen is what Python sees.
+        # the Proactor loop. The patched Popen must remain subclassable so
+        # asyncio.windows_utils' `class Popen(subprocess.Popen)` keeps working
+        # regardless of import order.
         import asyncio
 
         import dash_backend  # noqa: F401
 
-        # subprocess.Popen must be the wrapped version.
-        assert subprocess.Popen.__qualname__.startswith("_wrap_popen")
+        assert isinstance(subprocess.Popen, type)
+        assert issubclass(subprocess.Popen, _orig_popen)
+        # The subclass must be constructible (exercises the __init__ path).
+        proc = subprocess.Popen(["cmd", "/c", "echo", "ok"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, _ = proc.communicate(timeout=10)
+        assert out.strip() == b"ok"
         # And asyncio still references the subprocess module (not a copy).
         assert asyncio.subprocess is not None

@@ -366,6 +366,26 @@ async def duplicate_workflow(workflow_id: str, _user=Depends(get_current_user)):
     return workflow_engine.duplicate(workflow_id)
 
 
+class TemplateInstantiateRequest(BaseModel):
+    name: Optional[str] = None
+
+
+@router.post("/workflows/templates/{template_id}/instantiate")
+async def instantiate_template(
+    template_id: str,
+    body: TemplateInstantiateRequest,
+    _user=Depends(get_current_user),
+):
+    """One-click template instantiation into an editable custom workflow.
+
+    Path is under /workflows/templates/ (a literal prefix) so it can never
+    collide with /workflows/{workflow_id}/... — and the request body is
+    optional-named so the UI can send an empty JSON object.
+    """
+    from dash_backend.services.workflow_builder import workflow_engine
+    return workflow_engine.instantiate_template(template_id, body.name)
+
+
 @router.delete("/workflows/{workflow_id}")
 async def delete_workflow(workflow_id: str, _user=Depends(get_current_user)):
     from dash_backend.services.workflow_builder import workflow_engine

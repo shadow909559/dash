@@ -574,3 +574,19 @@ Every meaningful technical decision, why it was made, and what alternatives were
 **Bug caught by own tests:** first implementation double-appended executions (original append + new one) — the persisted-file test asserted exactly 1 record and failed with 2; removed the duplicate append. Also caught the route-test harness needing to monkeypatch the module-level `workflow_engine` symbol the routes resolve at call time.
 
 **Files:** `apps/backend/dash_backend/services/workflow_builder.py` (persistence, injectable path, ring buffer), `apps/backend/dash_backend/api/routes/enhanced_features.py` (all-executions route + limit), `apps/backend/tests/test_workflow_execution_history.py` (new, 7 tests), `apps/desktop/src/pages/WorkflowBuilderPage.tsx` (History toggle + panel).
+
+## 48. Template Gallery with One-Click Instantiation (Workflow Builder)
+
+**Decision:** Templates are now real starting points, not just read-only previews. `WorkflowEngine.instantiate_template(template_id, name=None)` deep-copies a template into an editable custom workflow (`is_template=False`, `instantiated_from=<template id>`), exposed as `POST /enhanced/workflows/templates/{id}/instantiate`.
+
+**Why deep copy, not `duplicate()`'s existing shallow copy:** templates are **re-seeded from code on every engine construction**; a shallow `list(nodes)` shares the inner node dicts with the seeded template, so editing a copy would mutate "pristine" template data in memory (and race the next re-seed). `instantiate_template` uses `copy.deepcopy`; `duplicate()` was fixed the same way — the latent hazard was caught while reviewing the copy paths for this feature.
+
+**Name dedup:** repeated instantiations get `"<Name> (2)"`, `"(3)"`, … across BOTH template instances and custom workflows (templates never block names). Explicit `name=` overrides still dedup. Without this, users would hit confusing `duplicate name` errors on the second "Use" click — the most likely action in the whole gallery.
+
+**UI (WorkflowBuilderPage):** template list became a 2-column card grid — name, category chip, description, node count, and a **Use** button per card (per-card "Adding…" state, all buttons disabled while one is in flight, `stopPropagation` so selecting ≠ instantiating). Selecting a template shows the detail view with a **Use Template** button instead of Run/History (templates are not executable; previously the Run button rendered on templates and did nothing useful). Cards are keyboard-accessible (`role="button"`, `tabIndex`, Enter/Space) per the project's accessibility rules.
+
+**Test-contract correction:** the "templates remain pristine" test originally asserted `run_count == 0` on templates — templates don't carry `run_count` (they're never executed; only custom workflows track runs). The assertion now checks the actual pristine properties: `is_template` stays true, no `instantiated_from`, node content byte-identical after 3 instantiations.
+
+**Files:** `apps/backend/dash_backend/services/workflow_builder.py` (`instantiate_template`, deep-copy fix in `duplicate`, `copy` import), `apps/backend/dash_backend/api/routes/enhanced_features.py` (instantiate route), `apps/backend/tests/test_template_instantiation.py` (new, 8 tests), `apps/desktop/src/pages/WorkflowBuilderPage.tsx` (gallery + actions).
+
+**Side fix:** probing the module surfaced a real latent crash in the no-flash subprocess shim — it replaced `subprocess.Popen` with a plain *function*, but `asyncio.windows_utils` does `class Popen(subprocess.Popen)`, which crashes with `TypeError: function() takes no arguments` for any later asyncio-Windows import (previously masked by lucky import order). The shim is now a proper `subprocess.Popen` subclass; `test_no_flash_terminal.py` asserts the subclass contract.

@@ -35,13 +35,18 @@ def _merge(creationflags: int | None) -> int:
     return (creationflags or 0) | _NO_WINDOW
 
 
-def _wrap_popen(orig):
-    def Popen(*args, **kwargs):
+class _NoWindowPopen(subprocess.Popen):
+    """Real subclass, NOT a function wrapper: asyncio.windows_utils does
+    ``class Popen(subprocess.Popen)`` at import time — subclassing the
+    original function-wrapper crashed with ``TypeError: function()
+    argument 'code' must be code, not str`` whenever asyncio's Windows
+    modules were imported after dash_backend (import-order luck previously
+    hid this). A class can be subclassed safely by anyone, anytime."""
+
+    def __init__(self, *args, **kwargs):
         if _NO_WINDOW:
             kwargs["creationflags"] = _merge(kwargs.get("creationflags"))
-        return orig(*args, **kwargs)
-
-    return Popen
+        super().__init__(*args, **kwargs)
 
 
 def _wrap_simple(orig):
@@ -60,7 +65,7 @@ def install() -> None:
     global _applied
     if _applied or not _NO_WINDOW or sys.platform != "win32":
         return
-    subprocess.Popen = _wrap_popen(subprocess.Popen)  # type: ignore[assignment]
+    subprocess.Popen = _NoWindowPopen  # type: ignore[assignment]
     subprocess.run = _wrap_simple(subprocess.run)  # type: ignore[assignment]
     subprocess.call = _wrap_simple(subprocess.call)  # type: ignore[assignment]
     subprocess.check_call = _wrap_simple(subprocess.check_call)  # type: ignore[assignment]

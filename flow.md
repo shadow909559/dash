@@ -1080,3 +1080,18 @@ Modified: lib/api.ts (authFetch resolution), App.tsx (routes), CommandPalette.ts
 **Read path:** detail card History toggle → `GET /enhanced/workflows/{id}/executions?limit=20` (per-workflow) — the all-workflows `GET /enhanced/workflows/executions?limit=N` literal route sits BEFORE the dynamic `/{workflow_id}` route in the router so it is never shadowed → newest-first list → React panel maps each record to status icon + duration + start time + node chain + error.
 
 **Selection flow:** clicking a workflow (`selectWorkflow`) keeps the History toggle state and reloads that workflow's history if open; Run re-fetches history when the panel is visible, so the newest execution appears immediately without toggling.
+
+## 32. Template Instantiation Flow (decisions.md #48)
+
+Click **Use** (gallery card) or **Use Template** (detail view) →
+`POST /enhanced/workflows/templates/{id}/instantiate` →
+`enhanced_features.instantiate_template_route` (literal path, no dynamic-segment shadowing) →
+`WorkflowEngine.instantiate_template()`:
+
+1. Template lookup in code-seeded `_templates`; missing → `{"ok": False, "reason": "Template not found"}`
+2. `copy.deepcopy` nodes/edges (template dicts are shared code-seeded state — never handed to editable copies)
+3. Name dedup against custom workflows + prior instances → `"<Name> (2) (3)…"`
+4. Custom workflow dict created: `is_template=False`, `instantiated_from=<tpl id>`, fresh `id`/`created_at`, `run_count=0`
+5. Persisted into the state file's `workflows` list; returned in the response
+
+UI then `setSelected(newWorkflow)` (detail view opens on the editable copy) and re-fetches lists — the new workflow appears under **My Workflows** instantly. Duplicate runs of the same template produce `(2)`, `(3)` names instead of errors.
