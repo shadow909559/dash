@@ -1138,3 +1138,15 @@ Rebuild: KnowledgePage "Rebuild from memories" → POST /enhanced/knowledge-grap
 Render: GET /enhanced/knowledge-graph → KnowledgeGraphView force-directed canvas (type chips filter, search-select opens detail panel, neighbor buttons traverse entity→entity; empty graph renders a role=status hint instead of blank canvas).
 
 Entries tab: GET /memory?limit=200 (client-side knowledge filter — the endpoint has no type param; the old phantom ?type=knowledge was silently ignored).
+
+## 36. Email/Calendar Sync & Deadline Flow (decisions.md #52)
+
+Fetch mail: EmailPage account chip → POST /features/email/{id}/fetch → ExtendedEmailService.fetch_imap → SecretBox.decrypt(stored blob) → imaplib IMAP4_SSL (host from override/account/known-provider map) → parse_eml per message → _ingest (Message-ID dedup) → inbox.
+
+Paste EML: POST /features/email/ingest-eml (raw body) → parse_eml → _ingest.
+
+Import calendar: CalendarPage Import ICS → POST /features/calendar/import-ics (raw body) → parse_ics (unfold → VEVENT blocks) → ExtendedCalendarService.import_ics (UID dedup via external_id) → create_event + persist.
+
+Deadlines: GET /features/deadlines → ExtendedCalendarService.get_deadlines → deadline docs (DeadlineService) + calendar events with deadline-ish titles within window → each mapped through deadline_urgency (overdue/today/urgent/soon/upcoming) → sorted by urgency then date. Email scan: POST /features/email/scan-deadlines → extract_deadlines → regex "due|deadline|expires|submit by YYYY-MM-DD" per inbox message → add_deadline (source+source_id dedup).
+
+Singleton rebind: importing email_calendar_sync replaces email_calendar.email_service/.calendar_service with the extended subclasses, so pre-existing lazy imports in phase2_features.py handlers get IMAP/ICS/deadline methods without import changes.

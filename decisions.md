@@ -684,3 +684,24 @@ Every meaningful technical decision, why it was made, and what alternatives were
 **Also:** the WAL-mode change from #49 surfaced dash_dev.db-shm/-wal siblings next to the tracked... (now corrected) gitignored db pattern; .gitignore now covers apps/backend/dash_dev.db* so WAL sidecars can never be committed.
 
 **Files:** apps/desktop/src/components/KnowledgeGraphView.tsx (empty state, aria-labels, nodeCount), apps/desktop/src/pages/KnowledgePage.tsx (honest memory fetch), .gitignore.
+
+## 52. Email + Calendar External Sync & Deadline Tracking
+
+**Decision:** extended the existing EmailService/CalendarService (email_calendar.py) with a real external bridge (email_calendar_sync.py) rather than bolting on a parallel stack. The extended classes rebind the base module's singletons, so every lazy `from email_calendar import email_service` in route handlers transparently gains the new behavior — zero route churn for existing endpoints.
+
+**What was added:**
+- **IMAP fetch:** stdlib imaplib (IMAP4_SSL, known hosts for gmail/outlook/yahoo/icloud; explicit host override for anything else). Credentials stored via SecretBox (AES-256-GCM, per-install key file) — never returned by any endpoint; list_accounts() overrides to expose only a has_credentials flag. Message-ID dedup so re-polling is idempotent.
+- **EML ingest:** POST /features/email/ingest-eml parses raw RFC-822 (stdlib email parser, prefers text/plain part of multipart) for webhook/manual ingestion.
+- **ICS import:** POST /features/calendar/import-ics — minimal RFC-5545 parser (unfold with single-space continuation, VEVENT blocks, VALUE=DATE and Z timestamps); dedup on VEVENT UID via an external_id field, so re-importing a subscription never duplicates. Unparseable dates log-and-skip the field; events without DTSTART are dropped.
+- **Deadlines:** unified persisted list (LocalStore migration v2 adds the deadlines table) fed three ways — regex scan of emails for explicit "due 2026-09-20" phrasing (source_id-deduped), calendar events whose title says deadline/due/submit/expire/cutoff, and manual entries. Each item gets an urgency bucket (overdue/today/urgent/soon/upcoming) and the view sorts by urgency. GET /features/deadlines?window_days=30 is the single read endpoint.
+- **Missing CRUD surfaced:** event update (PUT), delete, reminders, and email rules (create/list/delete) now have routes — the service methods existed but were unreachable from the UI.
+
+**Desktop:** EmailPage shows an account chip per account with a key icon (amber = no creds, green = stored) opening an encrypted-credential form, a per-account fetch button with busy state, and a Scan Deadlines action. CalendarPage gets an Import ICS panel (paste area) and a Deadlines panel in the sidebar with urgency-colored dates and an honest empty state.
+
+**Clock-dependent test fixed (pre-existing):** test_proactive quiet-hours test configured a 0–23 window and asserted quiet hours are always active — true except when run at 23:xx local. It now freezes datetime in the engine to 03:00, so it passes at any wall-clock time.
+
+**Why stdlib everywhere:** imaplib/email parsing and the ICS reader avoid new dependencies (icalendar, imap-tools) for two narrow formats; the parser is pure and fully tested. If richer RRULE/recurrence support is ever needed, that's the point to adopt the icalendar library.
+
+**Verification:** 21 new hermetic tests (EML parse incl. multipart, ICS parse incl. fold + date-only + bad dates, urgency buckets, ingest dedup, IMAP happy-path with stubbed imaplib + creds-decrypt assertion + unknown-provider/host gating, credential non-leak, ICS dedup, deadline extraction/dedup, unified merge + sort, and all new routes through the real app incl. 422 guards). Full suite 669 passed, 0 failed, 10 skipped. Live-verified earlier on port 8010: EML → scan → deadline with urgency, ICS import → dedup on second import, unified view listing all three sources. tsc clean, production build succeeded.
+
+**Files:** services/email_calendar_sync.py (new), services/local_store.py (migration v2), api/routes/phase2_features.py (12 routes), tests/test_email_calendar_sync.py (new), tests/test_proactive.py (clock freeze), desktop src/pages/EmailPage.tsx + src/pages/CalendarPage.tsx.

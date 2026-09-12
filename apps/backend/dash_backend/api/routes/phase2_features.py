@@ -1,7 +1,7 @@
 """API routes for Phase 2+ features: email, security, voice, browser, collaboration, AI, infra."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 
@@ -493,3 +493,151 @@ async def health_check_all(_user=Depends(get_current_user)):
 async def health_check_service(service: str, _user=Depends(get_current_user)):
     from dash_backend.services.infrastructure import health_check
     return health_check.check(service)
+
+# ── Email/calendar external sync + deadlines ──────────────────────────────
+# Importing email_calendar_sync rebinds the base module's email_service /
+# calendar_service singletons to the extended versions (IMAP, ICS, deadlines).
+from dash_backend.services import email_calendar_sync as _sync_ext  # noqa: E402,F401
+
+
+class EmailCredentialsReq(BaseModel):
+    password: str
+    host: str = ""
+
+
+@router.post("/email/{account_id}/credentials")
+async def set_email_credentials(account_id: str, body: EmailCredentialsReq,
+                                 _user=Depends(get_current_user)):
+    """Store IMAP credentials encrypted at rest; the password is never returned."""
+    from dash_backend.services.email_calendar_sync import email_service as ext_email
+    return ext_email.set_credentials(account_id, body.password, body.host)
+
+
+class EmailFetchReq(BaseModel):
+    folder: str = "INBOX"
+    limit: int = 20
+    host: str = ""
+
+
+@router.post("/email/{account_id}/fetch")
+async def fetch_email_imap(account_id: str, body: Optional[EmailFetchReq] = None,
+                           _user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar_sync import email_service as ext_email
+    req = body or EmailFetchReq()
+    return ext_email.fetch_imap(account_id, folder=req.folder,
+                                limit=req.limit, host=req.host)
+
+
+@router.post("/email/ingest-eml")
+async def ingest_eml(request: Request, _user=Depends(get_current_user)):
+    """Ingest a raw RFC-822 message (body = raw .eml bytes)."""
+    from dash_backend.services.email_calendar_sync import email_service as ext_email
+    raw = await request.body()
+    if not raw:
+        raise HTTPException(status_code=422, detail="Empty EML body")
+    return ext_email.ingest_eml(raw)
+
+
+class EmailRuleReq(BaseModel):
+    name: str
+    field: str = "subject"
+    op: str = "contains"
+    value: str
+    action: str
+    label: str = ""
+
+
+@router.post("/email/rules")
+async def create_email_rule(body: EmailRuleReq, _user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar import email_service
+    return email_service.add_rule(
+        body.name,
+        {"field": body.field, "op": body.op, "value": body.value},
+        body.action,
+        {"label": body.label},
+    )
+
+
+@router.get("/email/rules")
+async def list_email_rules(_user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar import email_service
+    return {"rules": email_service.get_rules()}
+
+
+@router.delete("/email/rules/{rule_id}")
+async def delete_email_rule(rule_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar_sync import email_service as ext_email
+    return ext_email.delete_rule(rule_id)
+
+
+@router.post("/email/scan-deadlines")
+async def scan_email_deadlines(_user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar_sync import email_service as ext_email
+    return ext_email.extract_deadlines()
+
+
+@router.put("/calendar/events/{event_id}")
+async def update_calendar_event(event_id: str, body: dict,
+                                 _user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar import calendar_service
+    allowed = {k: v for k, v in body.items()
+               if k in ("title", "start", "end", "description",
+                        "location", "status")}
+    if not allowed:
+        raise HTTPException(status_code=422, detail="No updatable fields provided")
+    return calendar_service.update_event(event_id, **allowed)
+
+
+@router.delete("/calendar/events/{event_id}")
+async def delete_calendar_event(event_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar import calendar_service
+    return calendar_service.delete_event(event_id)
+
+
+class ReminderReq(BaseModel):
+    minutes_before: int = 30
+
+
+@router.post("/calendar/events/{event_id}/reminders")
+async def add_event_reminder(event_id: str, body: ReminderReq,
+                              _user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar import calendar_service
+    return calendar_service.add_reminder(event_id, body.minutes_before)
+
+
+@router.post("/calendar/import-ics")
+async def import_ics_calendar(request: Request,
+                               _user=Depends(get_current_user)):
+    """Import ICS text (body = raw calendar text). Dedup on VEVENT UID."""
+    from dash_backend.services.email_calendar_sync import calendar_service as ext_cal
+    text = (await request.body()).decode("utf-8", errors="replace")
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="Empty ICS body")
+    return ext_cal.import_ics(text)
+
+
+@router.get("/deadlines")
+async def get_deadlines(window_days: int = 30,
+                        _user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar_sync import calendar_service as ext_cal
+    return {"deadlines": ext_cal.get_deadlines(window_days)}
+
+
+class DeadlineReq(BaseModel):
+    title: str
+    due: str
+    notes: str = ""
+
+
+@router.post("/deadlines")
+async def create_deadline(body: DeadlineReq, _user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar_sync import deadline_service
+    created = deadline_service.add_deadline(body.title, body.due,
+                                            source="manual", notes=body.notes)
+    return {"ok": True, "created": created}
+
+
+@router.delete("/deadlines/{deadline_id}")
+async def delete_deadline(deadline_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar_sync import deadline_service
+    return deadline_service.delete_deadline(deadline_id)

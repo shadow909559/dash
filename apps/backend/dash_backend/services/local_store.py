@@ -130,6 +130,15 @@ _MIGRATIONS: list[tuple[int, list[str]]] = [
             """CREATE INDEX IF NOT EXISTS idx_activity_ws ON activity_events(workspace_id)""",
         ],
     ),
+    (
+        2,
+        [
+            # Unified deadlines (email_calendar_sync.py): fed from email scans,
+            # calendar deadline events, and manual entries.
+            """CREATE TABLE IF NOT EXISTS deadlines (
+                id TEXT PRIMARY KEY, seq INTEGER, data TEXT NOT NULL)""",
+        ],
+    ),
 ]
 
 

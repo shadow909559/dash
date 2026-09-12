@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { authFetch } from "@/lib/api";
 import { useNotifier } from "@/components/NotificationProvider";
 import { PageShell, PageHeader, GlassCard, EmptyState } from "@/components/ultron";
-import { Mail, Inbox, Send, Search, RefreshCw, Star, Archive, Trash2, Plus } from "lucide-react";
+import { Mail, Inbox, Send, Search, RefreshCw, Star, Archive, Trash2, Plus, KeyRound, MailCheck, CalendarClock } from "lucide-react";
 
 export default function EmailPage() {
   const { addNotification } = useNotifier();
@@ -15,6 +15,9 @@ export default function EmailPage() {
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [newAccount, setNewAccount] = useState("");
   const [stats, setStats] = useState({ total_inbox: 0, unread: 0, total_sent: 0 });
+  const [credFor, setCredFor] = useState<string | null>(null);
+  const [credPassword, setCredPassword] = useState("");
+  const [busyAccount, setBusyAccount] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -63,6 +66,36 @@ export default function EmailPage() {
     } catch {}
   };
 
+  const saveCreds = async (accountId: string) => {
+    if (!credPassword) { addNotification({ type: "error", title: "Missing", message: "Enter the app password first" }); return; }
+    try {
+      const r = await authFetch(`/features/email/${accountId}/credentials`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: credPassword }) });
+      const d = await r?.json().catch(() => ({}));
+      if (d?.ok) { addNotification({ type: "success", title: "Credentials saved", message: "Stored encrypted — password is never shown again" }); setCredPassword(""); setCredFor(null); }
+      else addNotification({ type: "error", title: "Failed", message: d?.reason || "Could not store credentials" });
+    } catch { addNotification({ type: "error", title: "Failed", message: "Backend unreachable" }); }
+  };
+
+  const fetchMail = async (accountId: string) => {
+    setBusyAccount(accountId);
+    try {
+      const r = await authFetch(`/features/email/${accountId}/fetch`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ limit: 20 }) });
+      const d = await r?.json().catch(() => ({}));
+      if (d?.ok) addNotification({ type: "success", title: "Mail fetched", message: `${d.created} new, ${d.skipped} already known` });
+      else addNotification({ type: "error", title: "Fetch failed", message: d?.reason || "IMAP error" });
+      if (d?.ok) fetch();
+    } catch { addNotification({ type: "error", title: "Failed", message: "Backend unreachable" }); }
+    finally { setBusyAccount(null); }
+  };
+
+  const scanDeadlines = async () => {
+    try {
+      const r = await authFetch("/features/email/scan-deadlines", { method: "POST" });
+      const d = await r?.json().catch(() => ({}));
+      if (d?.ok) addNotification({ type: "success", title: "Deadline scan", message: `Scanned ${d.scanned} messages — ${d.created} new deadline${d.created === 1 ? "" : "s"}` });
+    } catch {}
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -73,6 +106,7 @@ export default function EmailPage() {
         subtitle={`${stats.unread} unread messages${accounts.length ? ` • ${accounts.length} account${accounts.length > 1 ? "s" : ""}` : ""}`}
         actions={
           <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={scanDeadlines} title="Scan inbox for deadlines" style={{ background: "none", border: "1px solid var(--border, #333)", borderRadius: 6, padding: "6px 12px", cursor: "pointer", color: "var(--text)", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><CalendarClock size={12} /> Scan Deadlines</button>
             <button onClick={() => setShowAddAccount(!showAddAccount)} style={{ background: "none", border: "1px solid var(--border, #333)", borderRadius: 6, padding: "6px 12px", cursor: "pointer", color: "var(--text)", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Plus size={12} /> Add Account</button>
             <button onClick={fetch} className="dash-btn-ghost" title="Refresh" aria-label="Refresh inbox"><RefreshCw size={14} className={loading ? "animate-rotate" : undefined} /></button>
           </div>
@@ -91,6 +125,34 @@ export default function EmailPage() {
             style={{ flex: 1, padding: "7px 10px", background: "var(--bg-secondary, #1a1a2e)", border: "1px solid var(--border, #333)", borderRadius: 6, color: "var(--text)", fontSize: 12 }}
           />
           <button onClick={addAccount} style={{ background: "var(--accent, #22c55e)", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", color: "#000", fontSize: 12, fontWeight: 600 }}>Connect</button>
+        </GlassCard>
+      )}
+
+      {accounts.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          {accounts.map(a => (
+            <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "var(--bg-secondary, #1a1a2e)", border: "1px solid var(--border, #333)", borderRadius: 8, fontSize: 11 }}>
+              <span style={{ color: "var(--text)" }}>{a.email}</span>
+              <button onClick={() => setCredFor(credFor === a.id ? null : a.id)} title="Set IMAP app password" aria-label={`Set credentials for ${a.email}`} style={{ background: "none", border: "none", cursor: "pointer", color: a.password_enc ? "var(--accent, #22c55e)" : "#f59e0b", padding: 2, display: "flex" }}><KeyRound size={12} /></button>
+              <button onClick={() => fetchMail(a.id)} disabled={busyAccount === a.id} title="Fetch mail via IMAP" aria-label={`Fetch mail for ${a.email}`} style={{ background: "none", border: "none", cursor: busyAccount === a.id ? "wait" : "pointer", color: "var(--accent, #22c55e)", padding: 2, display: "flex" }}><MailCheck size={12} className={busyAccount === a.id ? "animate-rotate" : undefined} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {credFor && (
+        <GlassCard padding={12} style={{ marginBottom: 14, display: "flex", gap: 8 }}>
+          <input
+            value={credPassword}
+            onChange={(e) => setCredPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && saveCreds(credFor)}
+            placeholder="IMAP app password (stored encrypted)"
+            aria-label="IMAP app password"
+            type="password"
+            style={{ flex: 1, padding: "7px 10px", background: "var(--bg-secondary, #1a1a2e)", border: "1px solid var(--border, #333)", borderRadius: 6, color: "var(--text)", fontSize: 12 }}
+          />
+          <button onClick={() => saveCreds(credFor)} style={{ background: "var(--accent, #22c55e)", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", color: "#000", fontSize: 12, fontWeight: 600 }}>Save</button>
+          <button onClick={() => { setCredFor(null); setCredPassword(""); }} style={{ background: "none", border: "1px solid var(--border, #333)", borderRadius: 6, padding: "6px 14px", cursor: "pointer", color: "var(--text)", fontSize: 12 }}>Cancel</button>
         </GlassCard>
       )}
 

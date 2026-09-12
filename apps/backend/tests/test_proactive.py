@@ -112,7 +112,19 @@ async def test_disabled_returns_nothing(tmp_path):
     assert await engine.evaluate(config=cfg) == []
 
 
-async def test_quiet_hours_returns_nothing(tmp_path):
+async def test_quiet_hours_returns_nothing(tmp_path, monkeypatch):
+    # Freeze the clock inside the window — otherwise the test only passes at
+    # night (0 <= local hour < 23) and fails when run at 23:xx local.
+    from datetime import datetime as _dt
+
+    class _FrozenDT(_dt):
+        @classmethod
+        def now(cls):  # noqa: ANN201
+            return _dt(2026, 9, 12, 3, 0, 0)
+
+    monkeypatch.setattr(
+        "dash_backend.proactive.engine.datetime", _FrozenDT
+    )
     engine = make_engine(make_snap(device={"cpu_percent": 99.0}), tmp_path)
     cfg = {**DEFAULT_CONFIG, "quiet_hours_start": 0, "quiet_hours_end": 23}
     assert engine.in_quiet_hours(cfg) is True
