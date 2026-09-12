@@ -1006,3 +1006,14 @@ App.tsx lazy-loads ConnectorsPage/RagDocumentsPage/FineTuningPage/Phase3OpsPage/
 Data path per page: mount → useCallback fetchAll → authFetch (lib/api.ts) resolves relative or absolute URL against API_BASE (VITE_API_URL or http://127.0.0.1:8000/api/v1), attaches Bearer device token from preload window.electronAPI.auth.deviceToken() → backend route (integration_connectors.py, rag/router.py, fine_tuning.py, phase3_features.py, phase4_features.py, ec2_control.py + tunnel.py + cloud_relay.py) → service singleton → JSON → React state → GlassCard lists. Failures degrade to empty-state text, never crash the page (safe() wrapper with .ok checks and try/catch).
 
 Modified: lib/api.ts (authFetch resolution), App.tsx (routes), CommandPalette.tsx (entries), 6 new page files; backend rag/router.py (text() fix).
+
+## 25. Terminal-Flash Elimination Flow (decisions.md #41)
+
+**Every spawn path in DASH and how it stays windowless:**
+
+1. **Backend runtime spawns** — `dash_backend/__init__.py` imports `_win_noswindow` FIRST (before any service/route module), which wraps `subprocess.Popen/run/call/check_call/check_output` to OR `CREATE_NO_WINDOW` into creationflags. Because asyncio's Proactor `create_subprocess_exec/_shell` allocates through `subprocess.Popen`, the ~20 async spawn sites (system samplers, cloud relay, Ollama monitor) inherit the same guarantee. Flow: any service module → `subprocess.run(...)` → wrapped Popen → `CreateProcessW` with CREATE_NO_WINDOW → no console allocated.
+2. **Logon tasks** — Windows login → Task Scheduler → `wscript.exe run-hidden.vbs <command>` (wscript is a GUI-subsystem host: zero console) → target runs hidden. DASH-Backend, DASH-AllServices, DASH-Ollama, DASH-AutoConnect, DASH-Watchdog all route through it; DASH-Desktop runs `DASH.exe --hidden` (Electron window flag, not a console).
+3. **Electron spawns** — already `windowsHide: true` (BackendManager child + any helper exec); unchanged.
+4. **Test guarantee** — `test_no_flash_terminal.py` proves the shim is active after any `import dash_backend`, that real cmd.exe children run correctly under it, that caller flags are OR-preserved, and that `__init__.py` keeps the shim wired (source-level regression guard).
+
+**What was flashing before:** context collectors polling tasklist/wmic, git status probes, ping reachability checks, winget update detection — each spawning a console every poll interval from the console-less backend, plus the two misconfigured logon tasks.

@@ -476,3 +476,18 @@ Every meaningful technical decision, why it was made, and what alternatives were
 **Also fixed:** RAG /documents route 500 (raw SQL string in SQLAlchemy 2.x session.execute — wrapped in text()); root-caused the SQLite NUMERIC-affinity trap where an all-digits nil-UUID string is stored as integer 0 and crashes the UUID result processor on read (dev-db junk rows cleaned; real UUIDs unaffected).
 
 **Libraries:** no new deps — lucide-react icons and existing ultron components only; SectionTitle uses children/count API (not icon prop).
+
+## 41. Terminal Flash Fix — CREATE_NO_WINDOW Shim + Windowless Logon Tasks
+
+**The bug:** terminal windows opened and closed on the desktop while no DASH app was visible. Two independent sources:
+
+1. **Backend child processes (~130 spawn sites).** The backend runs windowless (pythonw/no console of its own). On Windows, every console executable it launches WITHOUT an explicit creation flag allocates a brand-new visible console: system stats polling (tasklist/wmic every few seconds), git probes, ping, winget update checks, powershell one-liners, AWS CLI. `subprocess.run(["tasklist", ...])` from a console-less process = a console window the user never asked for. 158 spawn sites exist across the backend; ~130 of them lacked flags.
+2. **Logon scheduled tasks.** `DASH-Ollama` used `cmd /c start /min ollama serve` — allocates a console that stays minimized-but-visible all session; `DASH-AllServices` ran bare powershell.exe — flashes a window at every logon.
+
+**Why a module shim instead of editing 130 sites:** `subprocess.Popen` is the single choke point — `run/call/check_call/check_output` all delegate to Popen, and asyncio's `create_subprocess_exec/_shell` on the Windows Proactor transport also spawns through `subprocess.Popen` internally. Patching the `subprocess` module attributes once at package import (`dash_backend/__init__.py` imports `_win_noswindow` before any route/service submodule loads) covers all 158 sites with one file, cannot miss a future spawn site, and OR-s its bit into any caller-supplied creationflags so explicit flags are never clobbered. Non-Windows is untouched (flag does not exist there) — no-op in dev on macOS/Linux and in CI. Callers who genuinely need a visible window (none today) could still pass `CREATE_NEW_CONSOLE` explicitly, which survives the OR.
+
+**Why wscript run-hidden.vbs for the tasks:** schtasks /Change with a batch or wscript target keeps zero consoles; Set-ScheduledTask hung and nested-quote elevation attempts mangled args, so the final fix ran via `scripts/fix-hidden-tasks.ps1` (object-model PowerShell, no shell-quote fragility) — all six DASH tasks verified rewritten to `wscript.exe ... run-hidden.vbs "..."` (DASH-Desktop intentionally keeps `--hidden` — that's the tray autostart, not a console).
+
+**Verification:** `tests/test_no_flash_terminal.py` (7 tests, Windows-only): shim active after any dash_backend import (all five helpers + Popen qualname), live `subprocess.run`/`check_output` of cmd.exe complete with correct output (would flash without the shim), caller flags OR-preserved, shim wired in package __init__ (regression guard), asyncio coverage argument asserted. Live verification: all six DASH logon tasks confirmed windowless via Get-ScheduledTask inspection.
+
+**Files:** `apps/backend/dash_backend/_win_noswindow.py` (new), `apps/backend/dash_backend/__init__.py` (shim install), `scripts/fix-hidden-tasks.ps1` (new), `scripts/setup-autostart.bat` (windowless variants for future installs), `apps/backend/tests/test_no_flash_terminal.py` (new).

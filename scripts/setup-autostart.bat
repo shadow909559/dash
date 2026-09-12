@@ -19,8 +19,10 @@ if %errorLevel% neq 0 (
 
 echo [1/4] Registering DASH-AllServices (Backend + Ollama + Desktop + Tunnel)...
 schtasks /delete /tn "DASH-AllServices" /f >nul 2>&1
+REM Wrapped in wscript run-hidden: even with -WindowStyle Hidden, Task Scheduler
+REM briefly flashes a conhost window for console hosts — the VBS wrapper hides it fully.
 schtasks /create /tn "DASH-AllServices" ^
-    /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"%USERPROFILE%\AppData\Local\DASH\scripts\start-all.ps1\"" ^
+    /tr "wscript.exe \"%USERPROFILE%\AppData\Local\DASH\scripts\run-hidden.vbs\" \"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File %USERPROFILE%\AppData\Local\DASH\scripts\start-all.ps1\"" ^
     /sc onlogon ^
     /rl highest ^
     /f
@@ -38,8 +40,10 @@ echo       Done.
 echo.
 echo [3/4] Registering DASH-Ollama (Ollama serve)...
 schtasks /delete /tn "DASH-Ollama" /f >nul 2>&1
+REM Was: cmd.exe /c start /min ollama serve — that left a minimized console
+REM window open for the entire session. The VBS wrapper runs serve with no window.
 schtasks /create /tn "DASH-Ollama" ^
-    /tr "cmd.exe /c start /min ollama serve" ^
+    /tr "wscript.exe \"%USERPROFILE%\AppData\Local\DASH\scripts\run-hidden.vbs\" \"cmd /c ollama serve\"" ^
     /sc onlogon ^
     /rl highest ^
     /f
