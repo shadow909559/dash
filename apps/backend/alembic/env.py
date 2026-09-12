@@ -115,7 +115,24 @@ def run_migrations_online() -> None:
     url = to_sync_dsn(get_database_url())
     logger.info("Online migration DSN: %s", url)
 
-    connectable = create_engine(url, poolclass=pool.NullPool)
+    connect_args = {"timeout": 30} if url.startswith("sqlite") else {}
+    connectable = create_engine(url, poolclass=pool.NullPool, connect_args=connect_args)
+
+    # SQLite: alembic connections previously ran with no busy timeout and
+    # in the default rollback journal, so a boot-time migration racing any
+    # other DASH process (second backend instance, admin CLI) failed with
+    # "database is locked" — and the app kept booting against a HALF-
+    # MIGRATED schema (decisions.md #49). WAL + busy_timeout close that
+    # window; the app engine mirrors the same pragmas.
+    if url.startswith("sqlite"):
+        from sqlalchemy import event
+
+        @event.listens_for(connectable, "connect")
+        def _sqlite_pragmas(dbapi_conn, _record):  # noqa: ANN001
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA busy_timeout=30000")
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.close()
 
     with connectable.connect() as connection:
         # Only widen version_num column if alembic_version already exists.

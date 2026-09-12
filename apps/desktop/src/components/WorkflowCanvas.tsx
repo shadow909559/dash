@@ -54,6 +54,8 @@ export interface WorkflowCanvasProps {
   onChange: (nodes: WorkflowNode[], edges: WorkflowEdge[]) => void;
   selectedNodeId: string | null;
   onSelectNode: (id: string | null) => void;
+  /** false = read-only preview (templates): no drag/wire/drop/delete. */
+  editable?: boolean;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -64,6 +66,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   onChange,
   selectedNodeId,
   onSelectNode,
+  editable = true,
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [pan, setPan] = useState({ x: 24, y: 16 });
@@ -108,7 +111,17 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   const startNodeDrag = (e: React.PointerEvent, node: WorkflowNode) => {
     if (e.button !== 0) return;
     e.stopPropagation();
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    if (!editable) {
+      // Read-only preview: selection allowed, movement is not.
+      onSelectNode(node.id);
+      return;
+    }
+    try {
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    } catch {
+      // Pointer may already be released — capture is only a hit-test
+      // nicety; canvas-level pointermove still drives the drag.
+    }
     const w = toWorld(e.clientX, e.clientY);
     onSelectNode(node.id);
     setDrag({ nodeId: node.id, offX: w.x - node.x, offY: w.y - node.y });
@@ -144,8 +157,13 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   // ── Edge wiring ──────────────────────────────────────────────────────────
 
   const startConnect = (e: React.PointerEvent, port: Port) => {
+    if (!editable) return;
     e.stopPropagation();
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    try {
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    } catch {
+      // Same guard as node drag — capture is best-effort.
+    }
     setConnect(port);
     setGhost({ x: port.x, y: port.y });
   };
@@ -160,43 +178,72 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     if (!connect) return;
     const w = toWorld(e.clientX, e.clientY);
 
-    // Find the port nearest to the release point — accepts any node body hit
+    // Resolution order (both bugs found in live preview):
+    // 1. Body hit — release point inside a node rect wires the edge. The
+    //    old port-distance-only check silently ignored drops on a node's
+    //    body center (86px from the left-edge input port, beyond the 64px
+    //    threshold), so the most natural gesture did nothing.
+    // 2. Nearest visible port within threshold — for precise port-to-port
+    //    wiring. Reverse-wiring (dragging FROM an input port) only binds to
+    //    the target's visible out port: condition nodes' true/false ports
+    //    sit at invisible top/bottom-center positions and used to win the
+    //    nearest-port contest, creating accidental branch edges.
+    const hitNode = nodes.find(
+      (n) =>
+        n.id !== connect.nodeId &&
+        w.x >= n.x &&
+        w.x <= n.x + NODE_W &&
+        w.y >= n.y &&
+        w.y <= n.y + NODE_H
+    );
+
     let best: { nodeId: string; kind: Port["kind"]; dist: number } | null = null;
-    for (const n of nodes) {
-      if (n.id === connect.nodeId) continue;
-      const candidates: Port["kind"][] =
-        connect.kind === "in" ? ["out", "true", "false"] : ["in"];
-      for (const kind of candidates) {
-        const p = ports.get(`${n.id}:${kind}`);
-        if (!p) continue;
-        const d = Math.hypot(p.x - w.x, p.y - w.y);
-        if (d < NODE_H && (!best || d < best.dist)) best = { nodeId: n.id, kind, dist: d };
+    if (!hitNode) {
+      for (const n of nodes) {
+        if (n.id === connect.nodeId) continue;
+        const candidates: Port["kind"][] = connect.kind === "in" ? ["out"] : ["in"];
+        for (const kind of candidates) {
+          const p = ports.get(`${n.id}:${kind}`);
+          if (!p) continue;
+          const d = Math.hypot(p.x - w.x, p.y - w.y);
+          if (d < NODE_H && (!best || d < best.dist)) best = { nodeId: n.id, kind, dist: d };
+        }
       }
     }
 
-    if (best) {
-      let from = connect.nodeId;
-      let to = best.nodeId;
-      let condition: string | undefined;
-      if (connect.kind === "in") {
-        // Reverse: dragging from an input port to an output port
-        [from, to] = [to, from];
-        condition = best.kind === "true" || best.kind === "false" ? best.kind : undefined;
-      } else {
-        condition = connect.kind === "true" || connect.kind === "false" ? connect.kind : undefined;
-      }
+    const reverse = connect.kind === "in";
+    let from = connect.nodeId;
+    let to: string | null = null;
+    let condition =
+      !reverse && (connect.kind === "true" || connect.kind === "false")
+        ? connect.kind
+        : undefined;
 
-      // One outgoing edge per output port (replace existing)
-      const cleaned = edges.filter((ed) => {
-        const sameFromOut =
-          ed.from === from && (condition ? ed.condition === condition : !ed.condition && ed.from !== from || !ed.condition);
-        // Simpler rule: for condition ports, replace same-branch edge;
-        // for plain out, replace any unconditional out edge.
-        if (condition) return !(ed.from === from && ed.condition === condition);
-        return !(ed.from === from && !ed.condition);
-      });
-      const next = [...cleaned, { from, to, condition }];
-      onChange(nodes, next);
+    if (hitNode) {
+      if (reverse) {
+        from = hitNode.id;
+        to = connect.nodeId;
+        condition = undefined;
+      } else {
+        to = hitNode.id;
+      }
+    } else if (best) {
+      if (reverse) {
+        from = best.nodeId;
+        to = connect.nodeId;
+      } else {
+        to = best.nodeId;
+      }
+    }
+
+    if (to) {
+      // One outgoing edge per output port/branch (replace existing):
+      // branch ports replace only the same branch; a plain out port replaces
+      // the previous unconditional edge.
+      const cleaned = edges.filter(
+        (ed) => !(ed.from === from && (ed.condition ?? null) === (condition ?? null))
+      );
+      onChange(nodes, [...cleaned, { from, to, condition }]);
     }
     setConnect(null);
     setGhost(null);
@@ -206,6 +253,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    if (!editable) return;
     const type = e.dataTransfer.getData("application/dash-node-type") as WorkflowNode["type"] | "";
     if (!type || !(type in NODE_META)) return;
     const w = toWorld(e.clientX, e.clientY);
@@ -365,7 +413,37 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           return (
             <div
               key={n.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`${meta.label} node${Object.keys(n.config).length ? ` (${summary})` : ""}. Arrow keys move, Delete removes.`}
               onPointerDown={(e) => startNodeDrag(e, n)}
+              onKeyDown={(e) => {
+                // Keyboard access: arrows nudge by one grid cell (matches
+                // pointer-drag snapping), Enter/Space select.
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectNode(n.id);
+                  return;
+                }
+                const deltas: Record<string, [number, number]> = {
+                  ArrowLeft: [-GRID, 0],
+                  ArrowRight: [GRID, 0],
+                  ArrowUp: [0, -GRID],
+                  ArrowDown: [0, GRID],
+                };
+                const d = deltas[e.key];
+                if (d && editable) {
+                  e.preventDefault();
+                  onChange(
+                    nodes.map((m) =>
+                      m.id === n.id
+                        ? { ...m, x: Math.max(0, m.x + d[0]), y: Math.max(0, m.y + d[1]) }
+                        : m
+                    ),
+                    edges
+                  );
+                }
+              }}
               style={{
                 position: "absolute",
                 left: n.x,
@@ -451,6 +529,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
 
       {/* Toolbar */}
       <div
+        onPointerDown={(e) => e.stopPropagation()}
         style={{
           position: "absolute",
           top: 8,
@@ -473,7 +552,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         >
           {nodes.length} nodes · {edges.length} links
         </span>
-        {selectedNodeId && (
+        {editable && selectedNodeId && (
           <button
             onClick={() => {
               const nextNodes = nodes.filter((n) => n.id !== selectedNodeId);
@@ -488,7 +567,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
             <Trash2 size={12} color="var(--dash-danger)" />
           </button>
         )}
-        {nodes.length > 0 && (
+        {editable && nodes.length > 0 && (
           <button
             onClick={() => {
               onChange([], []);

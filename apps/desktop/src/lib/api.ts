@@ -7,13 +7,37 @@ const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api/v1";
 
 let cachedToken: string | null | undefined;
 
-async function getDeviceToken(): Promise<string | null> {
+/**
+ * Browser-dev fallback: when running under vite (no Electron bridge),
+ * fetch the device token from the backend's development-only endpoint.
+ * The endpoint is double-gated server-side (env=development AND loopback
+ * client), so this only ever works for a local browser session.
+ */
+async function fetchBrowserDevToken(): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE}/devtools/device-token`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { ok?: boolean; token?: string };
+    return data?.ok && data.token ? data.token : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Shared token accessor — also used by wsClient for the WebSocket handshake. */
+export async function getDeviceToken(): Promise<string | null> {
   if (cachedToken !== undefined) return cachedToken ?? null;
   try {
     const res = await window.electronAPI?.auth?.deviceToken();
     cachedToken = res?.ok && res.token ? res.token : null;
   } catch {
     cachedToken = null;
+  }
+  if (!cachedToken) {
+    // No Electron bridge (plain browser / web build): dev-only fallback.
+    cachedToken = await fetchBrowserDevToken();
   }
   return cachedToken ?? null;
 }

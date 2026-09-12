@@ -55,8 +55,23 @@ async def lifespan(app: FastAPI):
             alembic_cfg = AlembicConfig(str(alembic_ini))
             # Point Alembic at the same database URL the app uses.
             alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
-            alembic_command.upgrade(alembic_cfg, "head")
-            logger.info("Database migrations applied (alembic upgrade head)")
+            # Retry: two DASH processes booting together (logon task + manual
+            # start) can contend on SQLite even with busy_timeout, and a
+            # failed migration previously left the app running against a
+            # half-migrated schema. 3 attempts × short backoff.
+            for attempt in range(1, 4):
+                try:
+                    alembic_command.upgrade(alembic_cfg, "head")
+                    logger.info("Database migrations applied (alembic upgrade head)")
+                    break
+                except Exception:
+                    if attempt == 3:
+                        raise
+                    logger.warning(
+                        "Boot migration attempt %d failed; retrying", attempt
+                    )
+                    import time
+                    time.sleep(2 * attempt)
         else:
             logger.warning("alembic.ini not found — skipping auto-migration")
     except Exception:

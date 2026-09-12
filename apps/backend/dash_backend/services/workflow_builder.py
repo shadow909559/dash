@@ -259,7 +259,14 @@ class WorkflowEngine:
         return self._workflows.get(workflow_id)
 
     def list_all(self, category: Optional[str] = None) -> list[dict]:
-        result = list(self._workflows.values())
+        """Custom (user) workflows only — templates are served separately by
+        list_templates(); including them here duplicated every template in
+        the desktop dropdown (UI bug found in live preview)."""
+        result = [
+            w
+            for w in self._workflows.values()
+            if not w.get("is_template")
+        ]
         if category:
             result = [w for w in result if w.get("category") == category]
         return sorted(result, key=lambda x: x.get("updated_at", ""), reverse=True)

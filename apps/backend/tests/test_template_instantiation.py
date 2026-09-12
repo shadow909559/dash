@@ -82,6 +82,18 @@ def test_templates_remain_pristine_after_instantiation(eng: WorkflowEngine) -> N
     assert fresh["nodes"] == tmpl["nodes"]
 
 
+def test_list_all_excludes_templates(eng: WorkflowEngine) -> None:
+    """Regression: /enhanced/workflows used to include templates, so the
+    desktop dropdown listed every template twice (merged from both endpoints).
+    Custom listing must contain no template records (names may legitimately
+    collide — the first instantiation reuses the template's name)."""
+    eng.instantiate_template(eng.list_templates()[0]["id"])
+    all_ids = [w["id"] for w in eng.list_all()]
+    tmpl_ids = {t["id"] for t in eng.list_templates()}
+    assert not tmpl_ids & set(all_ids)
+    assert all(not w["is_template"] for w in eng.list_all())
+
+
 def test_instantiate_unknown_template_fails_cleanly(eng: WorkflowEngine) -> None:
     result = eng.instantiate_template("nope")
     assert result == {"ok": False, "reason": "Template not found"}

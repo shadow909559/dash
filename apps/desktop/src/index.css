@@ -369,3 +369,25 @@ button, [role="button"], a {
   font-size: 12px;
   color: var(--dash-text-secondary);
 }
+
+/* ── Responsive builder grid (Workflow Builder) ─────────────────────────
+   The builder used a fixed `200px 1fr 264px` grid that collapsed the canvas
+   to ~2px on narrow windows (compact/always-on-top modes, live-preview
+   webview). Stacks palette/canvas/properties vertically below 900px. */
+.wf-builder-grid {
+  display: grid;
+  grid-template-columns: 200px 1fr 264px;
+  gap: 12px;
+  align-items: stretch;
+  min-height: 460px;
+}
+
+@media (max-width: 900px) {
+  .wf-builder-grid {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .wf-builder-grid .wf-builder-canvas-wrap {
+    min-height: 380px;
+  }
+}

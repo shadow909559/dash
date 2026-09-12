@@ -46,6 +46,7 @@ from dash_backend.executive.router import router as executive_router
 from dash_backend.api.routes.security import router as security_router
 from dash_backend.api.routes.privacy import router as privacy_router
 from dash_backend.api.routes.legal import router as legal_router
+from dash_backend.api.routes.devtools import router as devtools_router
 from dash_backend.api.routes.enhanced_features import router as enhanced_features_router
 from dash_backend.api.routes.phase2_features import router as phase2_features_router
 from dash_backend.api.routes.phase3_features import router as phase3_features_router
@@ -296,6 +297,13 @@ api_router.include_router(
 api_router.include_router(
     legal_router,
     tags=["legal"],
+)
+
+# Development-only tooling (device token for browser preview; env+loopback gated)
+api_router.include_router(
+    devtools_router,
+    prefix="/devtools",
+    tags=["devtools"],
 )
 
 # Enhanced features: export, shortcuts, analytics, workflows, plugins, knowledge graph, ensemble

@@ -1095,3 +1095,25 @@ Click **Use** (gallery card) or **Use Template** (detail view) →
 5. Persisted into the state file's `workflows` list; returned in the response
 
 UI then `setSelected(newWorkflow)` (detail view opens on the editable copy) and re-fetches lists — the new workflow appears under **My Workflows** instantly. Duplicate runs of the same template produce `(2)`, `(3)` names instead of errors.
+
+## 33. Browser Preview Auth + Builder Interaction Flow (decisions.md #49)
+
+Renderer boots in a browser (no Electron bridge) →
+
+1. `getDeviceToken()` — bridge absent → `fetchBrowserDevToken()` → `GET /api/v1/devtools/device-token` → backend gate: `env=="development"` AND loopback client → returns device token → cached; every `authFetch`/`request` attaches `Authorization: Bearer`. `wsClient.connect()` uses the same accessor for the handshake `?token=`.
+2. AutomationPage → Builder tab → `workflowsApi.list()` (custom only, templates filtered server-side) + `listTemplates()` → dropdown, no duplicates.
+3. Canvas interactions → `WorkflowCanvas` (`editable=isCustom`): pointer drag → world coords → grid snap → `mutate()` (page re-guards) → dirty → Save → `PUT /enhanced/workflows/{id}` → persisted to state file. Port drag → `finishConnect`: body-rect hit wins, else nearest visible port within threshold → one edge per out/branch port (replace) → `onChange`.
+4. Run → `POST .../execute` → engine executes nodes → status line "Run completed (…ms, N nodes)".
+
+Boot (any DASH process): lifespan → alembic upgrade (retry ×3, WAL+busy_timeout on SQLite) → services. Two concurrent boots no longer corrupt schema; lock contention is absorbed by pragmas + retry.
+
+## 33. Browser Preview Auth + Builder Interaction Flow (decisions.md #49)
+
+Renderer boots in a browser (no Electron bridge):
+
+1. getDeviceToken() — bridge absent → fetchBrowserDevToken() → GET /api/v1/devtools/device-token → backend gate: env==development AND loopback client → returns device token → cached; every authFetch/request attaches Authorization Bearer. wsClient.connect() uses the same accessor for the handshake token query param.
+2. AutomationPage → Builder tab → workflowsApi.list() (custom only, templates filtered server-side) + listTemplates() → dropdown, no duplicates.
+3. Canvas interactions → WorkflowCanvas (editable=isCustom): pointer drag → world coords → grid snap → mutate() (page re-guards) → dirty → Save → PUT /enhanced/workflows/{id} → persisted to state file. Port drag → finishConnect: body-rect hit wins, else nearest visible port within threshold → one edge per out/branch port (replace) → onChange.
+4. Run → POST .../execute → engine executes nodes → status line Run completed (duration, node count).
+
+Boot (any DASH process): lifespan → alembic upgrade (retry x3, WAL+busy_timeout on SQLite) → services. Two concurrent boots no longer corrupt schema; lock contention is absorbed by pragmas + retry.

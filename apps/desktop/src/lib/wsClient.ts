@@ -11,6 +11,8 @@
  *   server -> client: { type: "chat.error", message_id?, error }
  */
 
+import { getDeviceToken } from "@/lib/api";
+
 type WSEventHandler = (data: Record<string, unknown>) => void;
 
 export type ConnectionState = "idle" | "connecting" | "connected" | "reconnecting" | "disconnected";
@@ -90,13 +92,15 @@ export class WsClient {
     this.setState(this.reconnectAttempts > 0 ? "reconnecting" : "connecting");
 
     // Attach the local device token to the handshake (backend rejects
-    // unauthenticated sockets with close code 4401).
+    // unauthenticated sockets with close code 4401). getDeviceToken()
+    // (lib/api) also covers the plain-browser dev path via the
+    // loopback-gated /devtools/device-token endpoint.
     let wsUrl = this.url;
     try {
-      const res = await window.electronAPI?.auth?.deviceToken();
-      if (res?.ok && res.token) {
+      const token = await getDeviceToken();
+      if (token) {
         const sep = wsUrl.includes("?") ? "&" : "?";
-        wsUrl = `${wsUrl}${sep}token=${encodeURIComponent(res.token)}`;
+        wsUrl = `${wsUrl}${sep}token=${encodeURIComponent(token)}`;
       }
     } catch {
       /* proceed without token; backend will reject and we surface the error */

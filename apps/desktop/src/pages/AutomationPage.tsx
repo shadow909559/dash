@@ -281,6 +281,10 @@ const BuilderTab: React.FC = () => {
   }, [activeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mutate = (nextNodes: WorkflowNode[], nextEdges: WorkflowEdge[]) => {
+    // Templates are read-only previews (enforced inside WorkflowCanvas via
+    // editable={isCustom}); this guard is a second line of defense so no
+    // canvas change can ever dirty/save a template.
+    if (!isCustom) return;
     setNodes(nextNodes);
     setEdges(nextEdges);
     setDirty(true);
@@ -336,7 +340,14 @@ const BuilderTab: React.FC = () => {
     if (!active || !isCustom) return;
     try {
       await workflowsApi.delete(active.id);
+      // Clear the canvas too — it kept rendering the deleted workflow's
+      // nodes with a dead activeId (bug found in live preview).
       setActiveId(null);
+      setNodes([]);
+      setEdges([]);
+      setSelectedNodeId(null);
+      setDirty(false);
+      setRunResult(null);
       fetchData();
     } catch {}
   };
@@ -452,8 +463,8 @@ const BuilderTab: React.FC = () => {
         </div>
       </GlassCard>
 
-      {/* Main builder area */}
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr 264px", gap: 12, alignItems: "stretch", minHeight: 460 }}>
+      {/* Main builder area — responsive: 3 columns ≥900px, stacked below */}
+      <div className="wf-builder-grid">
         {/* Palette */}
         <GlassCard padding={12}>
           <div className="dash-section-title" style={{ marginBottom: 10 }}>Node Palette</div>
@@ -496,13 +507,14 @@ const BuilderTab: React.FC = () => {
         </GlassCard>
 
         {/* Canvas */}
-        <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <div className="wf-builder-canvas-wrap" style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
           <WorkflowCanvas
             nodes={nodes}
             edges={edges}
             onChange={mutate}
             selectedNodeId={selectedNodeId}
             onSelectNode={setSelectedNodeId}
+            editable={isCustom}
           />
           {hasCycle && (
             <div role="alert" style={{ marginTop: 6, fontSize: 11.5, color: "var(--dash-warning)", fontFamily: "'JetBrains Mono', monospace" }}>
@@ -542,24 +554,28 @@ const BuilderTab: React.FC = () => {
                   <input
                     value={String(selectedNode.config[f.key] ?? "")}
                     onChange={(e) => updateNodeConfig(f.key, e.target.value)}
+                    disabled={!isCustom}
+                    title={isCustom ? undefined : "Templates are read-only — duplicate to edit"}
                     aria-label={f.label}
                     className="dash-input-ultron"
                     style={{ width: "100%", boxSizing: "border-box" }}
                   />
                 </div>
               ))}
-              <button
-                onClick={() => {
-                  const nextNodes = nodes.filter((n) => n.id !== selectedNode.id);
-                  const nextEdges = edges.filter((ed) => ed.from !== selectedNode.id && ed.to !== selectedNode.id);
-                  mutate(nextNodes, nextEdges);
-                  setSelectedNodeId(null);
-                }}
-                className="dash-btn-ghost"
-                style={{ color: "var(--dash-danger)", justifyContent: "center" }}
-              >
-                <Trash2 size={12} /> Delete node
-              </button>
+              {isCustom && (
+                <button
+                  onClick={() => {
+                    const nextNodes = nodes.filter((n) => n.id !== selectedNode.id);
+                    const nextEdges = edges.filter((ed) => ed.from !== selectedNode.id && ed.to !== selectedNode.id);
+                    mutate(nextNodes, nextEdges);
+                    setSelectedNodeId(null);
+                  }}
+                  className="dash-btn-ghost"
+                  style={{ color: "var(--dash-danger)", justifyContent: "center" }}
+                >
+                  <Trash2 size={12} /> Delete node
+                </button>
+              )}
             </div>
           )}
         </GlassCard>
