@@ -666,3 +666,21 @@ Every meaningful technical decision, why it was made, and what alternatives were
 **Verification:** 14 new branch tests (true/false paths, missing-field fallback, unwired branch dead-end, unconditional chaining, condition-without-branch-edges back-compat, coercion numeric+boolean, 9-op matrix, unknown-op fail-safe, cycle guard, diamond convergence, output.conditions shape, route input_data both branches + empty body). Full non-sweep suite: 600 passed, 0 failed. Live API: created a branch flow, score=90 ran t→c→hi, score=5 ran t→c→lo. Live UI: Run on the canvas shows "Run completed · c: FALSE". tsc clean; production build succeeded.
 
 **Files:** services/workflow_builder.py (traversal/evaluation), api/routes/enhanced_features.py (input_data body), tests/test_workflow_branches.py (new), tests/test_workflow_builder_canvas.py (contracts), tests/test_startup_regression.py (alembic index check), desktop src/pages/AutomationPage.tsx + src/pages/WorkflowBuilderPage.tsx (branch display).
+
+## 51. Knowledge Graph Page Verified Live (entities + relationships from memories)
+
+**Decision:** the Knowledge page's interactive graph tab was driven end-to-end in the browser preview against the live backend: Rebuild-from-memories → entity extraction → force-directed rendering → search-select → node detail with clickable neighbor traversal. The stack (KnowledgeGraph service, /enhanced/knowledge-graph routes, KnowledgeGraphView canvas) already existed; this session verified it actually works and fixed the gaps found.
+
+**Live verification findings and fixes:**
+
+1. **Empty graph was a blank canvas** — with zero entities the canvas rendered nothing and no guidance. Added a role=status empty state ("No entities in the graph yet — click Rebuild from memories…") that renders only when the fetch succeeds and returns 0 nodes (loading/error states unchanged).
+2. **Neighbor buttons had no accessible names** — the detail panel's "Connected to" buttons were unlabeled (screen readers announced nothing). Added aria-label "Select connected entity {name} ({type})".
+3. **Entries tab sent a phantom ?type=knowledge param** — the memory list endpoint takes limit/offset/min_importance and silently ignored it, so the tab showed ALL memories under a "knowledge" heading (dishonest UI). Now fetches with limit=200 and filters client-side; count badge matches the list.
+
+**Verification path (real data):** seeded 3 realistic memories via POST /memory → Rebuild returned {memories_scanned: 4, entities_extracted: 23, edges_created: 50, nodes: 15} → type chips rendered (concept/date/technology) → search "Alice" + Enter opened the detail panel (Mentioned 4x, 9 connections) → clicked neighbor "Bob" (Mentioned 2x, 7 connections) → reload kept the graph (JSON state file persists). An earlier empty-DB rebuild correctly scanned 1 memory and extracted 0 (memory legitimately had no entities) — no false data.
+
+**Extraction behavior worth knowing:** the NER is heuristic — capitalized phrases become "concept" entities, so "They" and "The Phoenix" both became nodes from the same sentence. Co-mention edges link every entity pair within a memory. Service tests (test_knowledge_graph_seed.py: extraction, idempotency, restart persistence, clear) all pass; a future upgrade path is Ollama-based NER replacing the regex pass.
+
+**Also:** the WAL-mode change from #49 surfaced dash_dev.db-shm/-wal siblings next to the tracked... (now corrected) gitignored db pattern; .gitignore now covers apps/backend/dash_dev.db* so WAL sidecars can never be committed.
+
+**Files:** apps/desktop/src/components/KnowledgeGraphView.tsx (empty state, aria-labels, nodeCount), apps/desktop/src/pages/KnowledgePage.tsx (honest memory fetch), .gitignore.

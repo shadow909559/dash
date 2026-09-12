@@ -16,9 +16,13 @@ export const KnowledgePage: React.FC = () => {
   const fetchKnowledge = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await authFetch(`${API}/memory?type=knowledge`);
+      // NOTE: the memory list endpoint takes limit/offset/min_importance —
+      // it silently ignores an unknown "type" param, so fetch everything
+      // and filter client-side (the old ?type=knowledge was a no-op).
+      const r = await authFetch(`${API}/memory?limit=200`);
       const d = await r.json();
-      setMemories(d.items || d.memories || d || []);
+      const all = d.items || d.memories || d || [];
+      setMemories(all.filter((m: { type?: string }) => (m.type || "").toLowerCase() === "knowledge"));
     } catch {}
     setLoading(false);
   }, []);

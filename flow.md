@@ -1130,3 +1130,11 @@ Run: POST /enhanced/workflows/{id}/execute (optional {"input_data": {...}}) → 
 6. output.conditions = condition_results; desktop Run line and history chips render TRUE/FALSE per condition.
 
 _evaluate_condition: field missing → False; _coerce normalizes "50"→50, "false"→False; op dispatch (eq/ne/gt/gte/lt/lte/contains/not_contains/starts_with/ends_with/in/truthy); unknown op or type error → False (fail-safe to the non-effect branch).
+
+## 35. Knowledge Graph Data Flow (decisions.md #51)
+
+Rebuild: KnowledgePage "Rebuild from memories" → POST /enhanced/knowledge-graph/rebuild → KnowledgeGraph.rebuild_from_memories() scans the memory table → heuristic NER extracts entities (capitalized phrases → concept/person etc.) + co-mention edges (every entity pair within one memory) → persists graph JSON to the service state file → returns {memories_scanned, entities_extracted, edges_created}.
+
+Render: GET /enhanced/knowledge-graph → KnowledgeGraphView force-directed canvas (type chips filter, search-select opens detail panel, neighbor buttons traverse entity→entity; empty graph renders a role=status hint instead of blank canvas).
+
+Entries tab: GET /memory?limit=200 (client-side knowledge filter — the endpoint has no type param; the old phantom ?type=knowledge was silently ignored).

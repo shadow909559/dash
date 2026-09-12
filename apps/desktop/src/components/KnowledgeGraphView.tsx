@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { authFetch } from "@/lib/api";
-import { RefreshCw, Search, ZoomIn, ZoomOut, Crosshair, X, Loader2 } from "lucide-react";
+import { RefreshCw, Search, ZoomIn, ZoomOut, Crosshair, X, Loader2, Share2 } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api/v1";
 
@@ -63,6 +63,7 @@ export const KnowledgeGraphView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [rebuilding, setRebuilding] = useState(false);
   const [types, setTypes] = useState<string[]>([]);
+  const [nodeCount, setNodeCount] = useState<number | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<{ node: GraphNode; neighbors: GraphNode[] } | null>(null);
   const [query, setQuery] = useState("");
@@ -97,6 +98,7 @@ export const KnowledgeGraphView: React.FC = () => {
         });
         edgesRef.current = d.edges || [];
         setTypes([...new Set(nodes.map((n) => n.type))].sort());
+        setNodeCount(nodes.length);
         setHidden(new Set());
         alphaRef.current = 1;
       }
@@ -463,6 +465,18 @@ export const KnowledgeGraphView: React.FC = () => {
               <Loader2 size={16} className="spin" /> Loading graph…
             </div>
           )}
+          {!loading && nodeCount === 0 && (
+            <div
+              role="status"
+              style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--text-muted, #64748b)", fontSize: 13, pointerEvents: "none", textAlign: "center", padding: "0 24px" }}
+            >
+              <Share2 size={22} opacity={0.5} />
+              <div>No entities in the graph yet</div>
+              <div style={{ fontSize: 11, opacity: 0.75 }}>
+                Click “Rebuild from memories” to extract entities and relationships from your stored memories.
+              </div>
+            </div>
+          )}
           <canvas
             ref={canvasRef}
             onMouseDown={onMouseDown}
@@ -502,6 +516,7 @@ export const KnowledgeGraphView: React.FC = () => {
               <button
                 key={n.id}
                 onClick={() => void selectNode(n.id)}
+                aria-label={`Select connected entity ${n.name} (${n.type})`}
                 style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 8, border: "1px solid rgba(148,163,184,0.15)", background: "rgba(255,255,255,0.03)", color: "var(--text-primary, #e2e8f0)", fontSize: 12, cursor: "pointer", textAlign: "left" }}
               >
                 <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: TYPE_COLORS[n.type] || "#64748b" }} />
