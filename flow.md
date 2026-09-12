@@ -1117,3 +1117,16 @@ Renderer boots in a browser (no Electron bridge):
 4. Run → POST .../execute → engine executes nodes → status line Run completed (duration, node count).
 
 Boot (any DASH process): lifespan → alembic upgrade (retry x3, WAL+busy_timeout on SQLite) → services. Two concurrent boots no longer corrupt schema; lock contention is absorbed by pragmas + retry.
+
+## 34. Branch Execution Flow (decisions.md #50)
+
+Run: POST /enhanced/workflows/{id}/execute (optional {"input_data": {...}}) → engine.execute → _traverse(wf, exec_record, context):
+
+1. Start at trigger nodes (fallback: first node) → queue.
+2. Pop (node, branch): unknown id → skip; already visited → skip (cycle guard); step cap 200 → RuntimeError → run failed.
+3. Execute node → append to nodes_executed.
+4. condition node → _evaluate_condition(config, context) → condition_results[id]=result → successors = edges tagged matching branch (fallback to unconditional edges when the node has no branch-tagged edges at all).
+5. other nodes → successors = unconditional edges.
+6. output.conditions = condition_results; desktop Run line and history chips render TRUE/FALSE per condition.
+
+_evaluate_condition: field missing → False; _coerce normalizes "50"→50, "false"→False; op dispatch (eq/ne/gt/gte/lt/lte/contains/not_contains/starts_with/ends_with/in/truthy); unknown op or type error → False (fail-safe to the non-effect branch).

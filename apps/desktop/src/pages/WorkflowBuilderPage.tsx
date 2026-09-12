@@ -23,6 +23,7 @@ interface WorkflowExecution {
   started_at: string;
   completed_at: string | null;
   nodes_executed: string[];
+  condition_results?: Record<string, boolean>;
   duration_ms: number;
   error: string | null;
 }
@@ -326,6 +327,19 @@ export default function WorkflowBuilderPage() {
                                 {ex.nodes_executed.join(" → ") || "—"}
                               </span>
                             </div>
+                            {ex.condition_results && Object.keys(ex.condition_results).length > 0 && (
+                              <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                                {Object.entries(ex.condition_results).map(([id, v]) => (
+                                  <span
+                                    key={id}
+                                    title={`Condition ${id} evaluated to ${v ? "TRUE" : "FALSE"}`}
+                                    style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, fontFamily: "monospace", background: v ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)", color: v ? "var(--accent, #22c55e)" : "#ef4444" }}
+                                  >
+                                    {id}: {v ? "TRUE" : "FALSE"}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                             {ex.error && (
                               <div style={{ marginTop: 4, fontSize: 11, color: "#ef4444", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ex.error}>
                                 {ex.error}

@@ -320,7 +320,16 @@ const BuilderTab: React.FC = () => {
     setRunResult(null);
     try {
       const res = await workflowsApi.execute(active.id);
-      setRunResult(res.execution ? `Run ${res.execution.status} (${res.execution.duration_ms}ms, ${res.execution.nodes_executed.length} nodes)` : "Triggered");
+      if (res.execution) {
+        // Surface branch outcomes so users see which path the if/else took.
+        const conds = (res.execution as { condition_results?: Record<string, boolean> }).condition_results;
+        const condText = conds && Object.keys(conds).length
+          ? " · " + Object.entries(conds).map(([id, v]) => `${id}: ${v ? "TRUE" : "FALSE"}`).join(", ")
+          : "";
+        setRunResult(`Run ${res.execution.status} (${res.execution.duration_ms}ms, ${res.execution.nodes_executed.length} nodes)${condText}`);
+      } else {
+        setRunResult("Triggered");
+      }
     } catch {
       setRunResult("Run failed");
     }

@@ -646,3 +646,23 @@ Every meaningful technical decision, why it was made, and what alternatives were
 **Verification (live, in-browser):** token fetch then authenticated load; drag-drop from palette (node count 1-2-4-5); out-port to body wiring; TRUE/FALSE branch wiring (dashed edges + labels, 2 rendered); accidental-branch regression (body drop on condition node yields a plain edge, 0 dashed); edge replacement (rewiring keeps total links constant); node drag (100px move + grid snap); save shows Saved status; run shows Run completed (0.01ms, 2 nodes); template switch freezes nodes and shows Duplicate to edit; keyboard nudge moves node. Backend: 36+9 tests green including new devtools gate-matrix and list_all regression; tsc clean; production build succeeded.
 
 **Files:** dash_backend/api/routes/devtools.py (new), api/router.py (mount), main.py (migration retry), alembic/env.py (WAL+timeout), db/session.py (WAL), services/workflow_builder.py (list_all filter), tests/test_devtools.py (new), tests/test_template_instantiation.py (regression), desktop src/lib/api.ts, src/lib/wsClient.ts, src/pages/AutomationPage.tsx, src/components/WorkflowCanvas.tsx, src/index.css.
+
+## 50. Runtime TRUE/FALSE Branch Execution (workflow engine)
+
+**Decision:** the engine now evaluates condition nodes and follows only the matching branch. Previously execute() walked nodes in list order and ignored edges entirely — an if/else flow executed BOTH branches, making the canvas's TRUE/FALSE ports decorative.
+
+**Traversal:** BFS from trigger nodes (or the first node when none exist — matches canvas-created flows). Each node runs at most once per run (visited set = cycle guard), with a MAX_TRAVERSAL_STEPS=200 safety valve. `_successors()` implements branch semantics: a condition node with result R follows only edges tagged "true"/"false" matching R; a TRUE/FALSE-evaluating condition whose matching branch is unwired ends the path (dead end, not error). Regular nodes follow unconditional edges.
+
+**Condition evaluation (`_evaluate_condition`):** reads config field/op/value against the run's input_data (now accepted by the execute route as {"input_data": {...}}). Ops: eq, ne, gt/gte/lt/lte, contains, not_contains, starts_with, ends_with, in (comma list), truthy. `_coerce` normalizes canvas strings ("0.5"→0.5, "false"→False) so string-typed configs compare numerically/boolean-correctly — templates ship real bools/floats, the canvas ships strings.
+
+**Safe defaults:** missing field → False (FALSE branch); comparison type errors → False; unknown op → False. Side-effecting flows gate their actions behind TRUE, so failure modes land on the non-effect path. Back-compat: a condition node with NO branch-tagged edges at all degrades to following unconditional edges (hand-built/API flows keep working); two of my own tests caught this gap (chained conditions via plain edges dead-ended).
+
+**Observability:** the execution record gains condition_results {node_id: bool} and output.conditions; the desktop Run status line appends "· c: TRUE/FALSE" and the history panel renders a TRUE/FALSE chip per condition (green/red).
+
+**Contract updates:** the desktop Run button sends no body (route now allows None → {}) and gets FALSE-branch semantics for conditions on missing fields. test_workflow_builder_canvas.py asserted the OLD contract in two places (list_all including templates — the bug fixed in #49 — and execute running all 4 nodes): updated to the new contracts with both TRUE and FALSE runs asserted.
+
+**Side fix:** test_startup_regression.py's alembic-version check hardcoded a revision whitelist and broke when b2c3d4e5f6a7 became head. It now resolves the revision order from alembic's ScriptDirectory (walk_revisions, newest-first) and asserts the live DB is at-or-past the outbox revision by index — future migrations can't stale it out.
+
+**Verification:** 14 new branch tests (true/false paths, missing-field fallback, unwired branch dead-end, unconditional chaining, condition-without-branch-edges back-compat, coercion numeric+boolean, 9-op matrix, unknown-op fail-safe, cycle guard, diamond convergence, output.conditions shape, route input_data both branches + empty body). Full non-sweep suite: 600 passed, 0 failed. Live API: created a branch flow, score=90 ran t→c→hi, score=5 ran t→c→lo. Live UI: Run on the canvas shows "Run completed · c: FALSE". tsc clean; production build succeeded.
+
+**Files:** services/workflow_builder.py (traversal/evaluation), api/routes/enhanced_features.py (input_data body), tests/test_workflow_branches.py (new), tests/test_workflow_builder_canvas.py (contracts), tests/test_startup_regression.py (alembic index check), desktop src/pages/AutomationPage.tsx + src/pages/WorkflowBuilderPage.tsx (branch display).

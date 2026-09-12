@@ -45,11 +45,15 @@ def test_create_and_reload_custom_workflow(workflow_state: Path) -> None:
     data = json.loads(workflow_state.read_text(encoding="utf-8"))
     assert [w["id"] for w in data["custom_workflows"]] == [wf_id]
 
-    # A brand-new engine (restart simulation) reloads it, plus templates
+    # A brand-new engine (restart simulation) reloads the custom workflow.
+    # Templates are registered too, but list_all() must EXCLUDE them (they
+    # are served by list_templates(); including them duplicated the desktop
+    # dropdown — decisions.md #49). Verify both sides directly.
     eng2 = _fresh_engine()
     assert eng2.get(wf_id) is not None
     assert eng2.get(wf_id)["name"] == "My Flow"
-    assert any(w["is_template"] for w in eng2.list_all())
+    assert all(not w["is_template"] for w in eng2.list_all())
+    assert any(w["is_template"] for w in eng2.list_templates())
 
 
 def test_update_persists_canvas_edits(workflow_state: Path) -> None:
@@ -139,7 +143,15 @@ def test_canvas_workflow_end_to_end(workflow_state: Path) -> None:
     )
 
     eng2 = _fresh_engine()
+    # No input_data: the condition's field ("importance") is missing → the
+    # safe default is FALSE, so only the false-branch action executes.
     run = eng2.execute(wf_id)
     assert run["ok"] is True
     assert run["execution"]["status"] == "completed"
-    assert run["execution"]["nodes_executed"] == ["n1", "n2", "n3", "n4"]
+    assert run["execution"]["nodes_executed"] == ["n1", "n2", "n4"]
+    assert run["execution"]["condition_results"] == {"n2": False}
+
+    # With input_data the TRUE branch executes instead.
+    run_hi = eng2.execute(wf_id, {"importance": 0.9})
+    assert run_hi["execution"]["nodes_executed"] == ["n1", "n2", "n3"]
+    assert run_hi["execution"]["condition_results"] == {"n2": True}

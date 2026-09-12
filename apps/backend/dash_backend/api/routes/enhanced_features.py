@@ -354,10 +354,21 @@ async def get_workflow(workflow_id: str, _user=Depends(get_current_user)):
     return wf
 
 
+class WorkflowExecuteRequest(BaseModel):
+    """Optional run payload: becomes the condition-evaluation context
+    (condition nodes read config.field from this dict)."""
+
+    input_data: dict = {}
+
+
 @router.post("/workflows/{workflow_id}/execute")
-async def execute_workflow(workflow_id: str, _user=Depends(get_current_user)):
+async def execute_workflow(
+    workflow_id: str,
+    body: WorkflowExecuteRequest | None = None,
+    _user=Depends(get_current_user),
+):
     from dash_backend.services.workflow_builder import workflow_engine
-    return workflow_engine.execute(workflow_id)
+    return workflow_engine.execute(workflow_id, body.input_data if body else {})
 
 
 @router.post("/workflows/{workflow_id}/duplicate")

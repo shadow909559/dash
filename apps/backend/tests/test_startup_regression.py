@@ -108,10 +108,24 @@ class TestOutboxTableAvailability:
         cursor.execute("SELECT version_num FROM alembic_version")
         versions = [r[0] for r in cursor.fetchall()]
         conn.close()
-        # The Goal Engine migration (a1b2c3d4e5f6) builds on the outbox
-        # migration (9f3a2c4d1e70), so being at or past it implies outbox applied.
-        assert any(
-            v in ("9f3a2c4d1e70", "a1b2c3d4e5f6") for v in versions
+        # The DB must be at or past the outbox migration (9f3a2c4d1e70).
+        # Resolve the revision order from alembic's script directory instead
+        # of hardcoding a whitelist of ids (which goes stale whenever a new
+        # migration lands — it broke when b2c3d4e5f6a7 became head).
+        from alembic.config import Config as AlembicConfig
+        from alembic.script import ScriptDirectory
+
+        alembic_ini = Path(__file__).resolve().parent.parent / "alembic.ini"
+        cfg = AlembicConfig(str(alembic_ini))
+        script = ScriptDirectory.from_config(cfg)
+        # walk_revisions() yields head → base (newest first).
+        history = [rev.revision for rev in script.walk_revisions()]
+        # "At or past outbox" == the DB version's index is <= the outbox
+        # revision's index (0 = newest).
+        outbox_idx = history.index("9f3a2c4d1e70")
+        assert versions, "alembic_version table empty"
+        assert all(
+            v in history and history.index(v) <= outbox_idx for v in versions
         ), f"Outbox migration not applied; versions={versions}"
 
 

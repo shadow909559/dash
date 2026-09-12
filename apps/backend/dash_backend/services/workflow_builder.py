@@ -366,6 +366,169 @@ class WorkflowEngine:
 
     # ── Execution ───────────────────────────────────────────────────
 
+    # Safety valve: a traversed step count beyond this (cycles are also
+    # caught by the visited set) aborts the run as failed instead of hanging.
+    MAX_TRAVERSAL_STEPS = 200
+
+    @staticmethod
+    def _coerce(value: Any) -> Any:
+        """Lenient coercion for canvas-supplied comparison values.
+
+        The builder UI stores config as strings, but templates ship real
+        bools/floats (e.g. value=False, 0.5). Normalize so "0.5" == 0.5 and
+        "false" == False compare correctly.
+        """
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in ("true", "false"):
+                return lowered == "true"
+            try:
+                return float(value) if "." in value else int(value)
+            except ValueError:
+                return value.strip()
+        return value
+
+    @classmethod
+    def _evaluate_condition(cls, config: dict, context: dict) -> bool:
+        """Evaluate a condition node's field/op/value against the run context.
+
+        Missing field → False (the FALSE branch is the safe default: flows
+        like 'email_to_memory' gate side effects behind the TRUE path).
+        """
+        field = str(config.get("field", "")).strip()
+        op = str(config.get("op", "eq")).strip().lower()
+        expected = cls._coerce(config.get("value"))
+        actual = cls._coerce(context.get(field)) if field else None
+
+        if field and field not in context:
+            return False
+
+        try:
+            if op == "eq":
+                return actual == expected
+            if op == "ne":
+                return actual != expected
+            if op in ("gt", "gte", "lt", "lte"):
+                a, b = float(actual), float(expected)
+                return {"gt": a > b, "gte": a >= b, "lt": a < b, "lte": a <= b}[op]
+            if op == "contains":
+                return str(expected).lower() in str(actual).lower()
+            if op == "not_contains":
+                return str(expected).lower() not in str(actual).lower()
+            if op == "starts_with":
+                return str(actual).lower().startswith(str(expected).lower())
+            if op == "ends_with":
+                return str(actual).lower().endswith(str(expected).lower())
+            if op == "in":
+                if isinstance(expected, (list, tuple)):
+                    return actual in expected
+                parts = [p.strip().lower() for p in str(expected).split(",")]
+                return str(actual).strip().lower() in parts
+            if op == "truthy":
+                return bool(actual)
+        except (TypeError, ValueError):
+            return False
+        # Unknown op: fail safe to the FALSE branch rather than guessing.
+        return False
+
+    @staticmethod
+    def _successors(edges: list[dict], node_id: str, branch: Optional[bool]) -> list[str]:
+        """Downstream node ids for a node, honoring branch semantics.
+
+        Condition nodes follow only edges tagged with the matching branch
+        ("true"/"false"); if that branch is unwired the path simply ends —
+        a dead end, not an error. Regular nodes follow unconditional edges.
+        """
+        targets: list[str] = []
+        for ed in edges:
+            if ed.get("from") != node_id:
+                continue
+            cond = ed.get("condition")
+            if branch is not None:
+                if cond == ("true" if branch else "false"):
+                    targets.append(ed.get("to"))
+            elif not cond:
+                targets.append(ed.get("to"))
+        # De-dup, keep order, drop empty targets
+        seen: set[str] = set()
+        out: list[str] = []
+        for t in targets:
+            if t and t not in seen:
+                seen.add(t)
+                out.append(t)
+        return out
+
+    def _traverse(
+        self,
+        wf: dict,
+        exec_record: dict,
+        context: dict,
+    ) -> None:
+        """Walk the workflow graph in edge order, evaluating condition nodes.
+
+        The previous implementation iterated wf["nodes"] in list order and
+        ignored edges entirely — if/else flows executed BOTH branches. This
+        walk starts at trigger nodes (or the first node when a workflow has
+        none), executes each node once, and follows only matching branches.
+        """
+        nodes_by_id = {n["id"]: n for n in wf.get("nodes", [])}
+        edges = wf.get("edges", [])
+
+        starts = [n["id"] for n in wf.get("nodes", []) if n.get("type") == "trigger"]
+        if not starts and wf.get("nodes"):
+            starts = [wf["nodes"][0]["id"]]
+
+        visited: set[str] = set()
+        queue: list[tuple[str, Optional[bool]]] = [(sid, None) for sid in starts]
+        steps = 0
+
+        while queue:
+            if steps >= self.MAX_TRAVERSAL_STEPS:
+                raise RuntimeError(
+                    f"Traversal aborted after {self.MAX_TRAVERSAL_STEPS} steps (cycle?)"
+                )
+            node_id, branch = queue.pop(0)
+            steps += 1
+
+            node = nodes_by_id.get(node_id)
+            if node is None:
+                continue  # edge points at a deleted/unknown node
+            if node_id in visited:
+                continue  # cycle guard: a node runs at most once per run
+            visited.add(node_id)
+            exec_record["nodes_executed"].append(node_id)
+
+            ntype = node.get("type")
+            if ntype == "condition":
+                result = self._evaluate_condition(node.get("config", {}), context)
+                exec_record["condition_results"][node_id] = result
+                nxts = self._successors(edges, node_id, branch=result)
+                if not nxts and not any(
+                    ed.get("from") == node_id and ed.get("condition") in ("true", "false")
+                    for ed in edges
+                ):
+                    # Condition node has NO branch-tagged edges at all (e.g.
+                    # hand-built or API-created flows): degrade to following
+                    # unconditional edges instead of silently dead-ending.
+                    nxts = self._successors(edges, node_id, branch=None)
+                for nxt in nxts:
+                    queue.append((nxt, None))
+            elif ntype == "delay":
+                # Simulated: no real sleep. config.seconds is honored by the
+                # real scheduler path, not the manual-run walk.
+                for nxt in self._successors(edges, node_id, branch=None):
+                    queue.append((nxt, None))
+            else:
+                # trigger + action: follow unconditional edges.
+                for nxt in self._successors(edges, node_id, branch=None):
+                    queue.append((nxt, None))
+
+        exec_record["output"] = {
+            "nodes_run": len(exec_record["nodes_executed"]),
+            "status": "success",
+            "conditions": dict(exec_record["condition_results"]),
+        }
+
     def execute(self, workflow_id: str, input_data: Optional[dict] = None) -> dict:
         wf = self._workflows.get(workflow_id)
         if not wf:
@@ -382,6 +545,7 @@ class WorkflowEngine:
             "started_at": datetime.now(timezone.utc).isoformat(),
             "completed_at": None,
             "nodes_executed": [],
+            "condition_results": {},
             "input": input_data,
             "output": None,
             "error": None,
@@ -389,15 +553,16 @@ class WorkflowEngine:
         }
         self._executions.append(exec_record)
 
-        # Simulate execution (in production, this calls actual tools)
+        # Real graph traversal: follow edges from the trigger, evaluate
+        # condition nodes, and execute only the matching branch. The old
+        # simulation walked every node in list order and ignored edges
+        # entirely, so if/else flows executed BOTH branches.
         import time
         start_time = time.perf_counter()
         try:
-            for node in wf["nodes"]:
-                exec_record["nodes_executed"].append(node["id"])
+            self._traverse(wf, exec_record, dict(input_data or {}))
             exec_record["status"] = "completed"
             exec_record["completed_at"] = datetime.now(timezone.utc).isoformat()
-            exec_record["output"] = {"nodes_run": len(wf["nodes"]), "status": "success"}
         except Exception as e:
             exec_record["status"] = "failed"
             exec_record["error"] = str(e)
