@@ -4,7 +4,7 @@ import { useNotifier } from "@/components/NotificationProvider";
 import { PageShell, PageHeader, GlassCard } from "@/components/ultron";
 import {
   Play, Plus, Copy, Clock, Webhook, ChevronDown, ChevronRight,
-  CheckCircle, Settings, GitBranch, Zap
+  CheckCircle, Settings, GitBranch, Zap, History, XCircle, Timer
 } from "lucide-react";
 
 interface WorkflowNode {
@@ -13,6 +13,18 @@ interface WorkflowNode {
   config: Record<string, string>;
   x: number;
   y: number;
+}
+
+interface WorkflowExecution {
+  id: string;
+  workflow_id: string;
+  workflow_name: string;
+  status: "running" | "completed" | "failed";
+  started_at: string;
+  completed_at: string | null;
+  nodes_executed: string[];
+  duration_ms: number;
+  error: string | null;
 }
 
 interface Workflow {
@@ -43,6 +55,9 @@ export default function WorkflowBuilderPage() {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ templates: true, custom: true });
+  const [executions, setExecutions] = useState<WorkflowExecution[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -66,10 +81,33 @@ export default function WorkflowBuilderPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const loadHistory = useCallback(async (wfId: string) => {
+    setHistoryLoading(true);
+    try {
+      const res = await authFetch(`/enhanced/workflows/${wfId}/executions?limit=20`);
+      if (res?.ok) {
+        const d = await res.json();
+        setExecutions(d.executions || []);
+      } else {
+        setExecutions([]);
+      }
+    } catch {
+      setExecutions([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const selectWorkflow = (wf: Workflow) => {
+    setSelected(wf);
+    if (showHistory) loadHistory(wf.id);
+  };
+
   const executeWorkflow = async (id: string) => {
     try { await authFetch(`/enhanced/workflows/${id}/execute`, { method: "POST" }); } catch {}
     addNotification({ type: "success", title: "Workflow Executed", message: "Workflow ran successfully" });
     fetchData();
+    if (selected?.id === id && showHistory) loadHistory(id);
   };
 
   const createWorkflow = async () => {
@@ -124,7 +162,7 @@ export default function WorkflowBuilderPage() {
               {expanded.templates && (
                 <div style={{ padding: "0 14px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
                   {templates.map(t => (
-                    <div key={t.id} onClick={() => setSelected(t)} style={{ padding: "8px 10px", borderRadius: 6, border: `1px solid ${selected?.id === t.id ? "var(--accent, #22c55e)" : "var(--border, #333)"}`, background: selected?.id === t.id ? "rgba(34,197,94,0.1)" : "transparent", cursor: "pointer" }}>
+                    <div key={t.id} onClick={() => selectWorkflow(t)} style={{ padding: "8px 10px", borderRadius: 6, border: `1px solid ${selected?.id === t.id ? "var(--accent, #22c55e)" : "var(--border, #333)"}`, background: selected?.id === t.id ? "rgba(34,197,94,0.1)" : "transparent", cursor: "pointer" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontSize: 13, fontWeight: 500 }}>{t.name}</span>
                         <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, background: "rgba(34,197,94,0.15)", color: "var(--accent, #22c55e)" }}>{t.category}</span>
@@ -145,7 +183,7 @@ export default function WorkflowBuilderPage() {
                   {workflows.length === 0 ? (
                     <p style={{ fontSize: 12, color: "var(--text-muted, #666)", textAlign: "center", padding: 16 }}>No workflows yet</p>
                   ) : workflows.map(w => (
-                    <div key={w.id} onClick={() => setSelected(w)} style={{ padding: "8px 10px", borderRadius: 6, border: `1px solid ${selected?.id === w.id ? "var(--accent, #22c55e)" : "var(--border, #333)"}`, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div key={w.id} onClick={() => selectWorkflow(w)} style={{ padding: "8px 10px", borderRadius: 6, border: `1px solid ${selected?.id === w.id ? "var(--accent, #22c55e)" : "var(--border, #333)"}`, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div><span style={{ fontSize: 13, fontWeight: 500 }}>{w.name}</span><div style={{ fontSize: 10, color: "var(--text-muted, #666)" }}>Ran {w.run_count}x</div></div>
                       <button onClick={(e) => { e.stopPropagation(); executeWorkflow(w.id); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent, #22c55e)" }}><Play size={14} /></button>
                     </div>
@@ -162,6 +200,15 @@ export default function WorkflowBuilderPage() {
                   <div><h3 style={{ margin: 0, fontSize: 16 }}>{selected.name}</h3><p style={{ fontSize: 12, color: "var(--text-muted, #666)", margin: "3px 0 0" }}>{selected.description}</p></div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button className="btn btn--primary" onClick={() => executeWorkflow(selected.id)} style={{ fontSize: 12, padding: "6px 12px" }}><Play size={12} /> Run</button>
+                    <button
+                      onClick={() => { setShowHistory(v => !v); if (!showHistory) loadHistory(selected.id); }}
+                      aria-expanded={showHistory}
+                      aria-label="Toggle execution history"
+                      title="Execution history"
+                      style={{ background: showHistory ? "rgba(34,197,94,0.12)" : "none", border: "1px solid var(--border, #333)", borderRadius: 6, padding: "6px 10px", cursor: "pointer", color: showHistory ? "var(--accent, #22c55e)" : "var(--text)", display: "flex", alignItems: "center", gap: 4 }}
+                    >
+                      <History size={12} /> History
+                    </button>
                     {!selected.is_template && <button style={{ background: "none", border: "1px solid var(--border, #333)", borderRadius: 6, padding: "6px 10px", cursor: "pointer", color: "var(--text)" }}><Copy size={12} /></button>}
                   </div>
                 </div>
@@ -181,6 +228,55 @@ export default function WorkflowBuilderPage() {
                   <div style={{ textAlign: "center", padding: 30, color: "var(--text-muted, #666)" }}>
                     <Zap size={28} style={{ marginBottom: 10, opacity: 0.3 }} />
                     <p style={{ fontSize: 13 }}>No nodes. Add one to start building.</p>
+                  </div>
+                )}
+                {showHistory && (
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ fontSize: 11, color: "var(--text-muted, #666)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      Execution History
+                    </div>
+                    {historyLoading ? (
+                      <div style={{ padding: 14, fontSize: 12, color: "var(--text-muted, #666)" }}>Loading history…</div>
+                    ) : executions.length === 0 ? (
+                      <div style={{ padding: 14, fontSize: 12, color: "var(--text-muted, #666)", textAlign: "center" }}>
+                        No runs recorded yet. Click Run to execute this workflow.
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {executions.map(ex => (
+                          <div key={ex.id} style={{ padding: "8px 10px", background: "var(--bg-secondary, #1a1a2e)", border: "1px solid var(--border, #333)", borderRadius: 6 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 500 }}>
+                                {ex.status === "completed" ? (
+                                  <CheckCircle size={13} style={{ color: "var(--accent, #22c55e)" }} />
+                                ) : ex.status === "failed" ? (
+                                  <XCircle size={13} style={{ color: "#ef4444" }} />
+                                ) : (
+                                  <Timer size={13} style={{ color: "#f59e0b" }} />
+                                )}
+                                <span style={{ textTransform: "capitalize", color: ex.status === "failed" ? "#ef4444" : "var(--text)" }}>{ex.status}</span>
+                              </span>
+                              <span style={{ fontSize: 11, color: "var(--text-muted, #666)", fontFamily: "monospace" }}>
+                                {ex.duration_ms} ms
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 10, color: "var(--text-muted, #666)" }}>
+                              <span>
+                                {new Date(ex.started_at).toLocaleString()} · {ex.nodes_executed.length} node{ex.nodes_executed.length === 1 ? "" : "s"}
+                              </span>
+                              <span style={{ fontFamily: "monospace" }}>
+                                {ex.nodes_executed.join(" → ") || "—"}
+                              </span>
+                            </div>
+                            {ex.error && (
+                              <div style={{ marginTop: 4, fontSize: 11, color: "#ef4444", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ex.error}>
+                                {ex.error}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>

@@ -560,3 +560,17 @@ Every meaningful technical decision, why it was made, and what alternatives were
 **Test note:** the endpoint reads the app DB (AsyncSessionLocal → conftest temp file), while tests' db_session fixture is a different in-memory DB — tests must enqueue through AsyncSessionLocal with `sync_is_enabled` monkeypatched true, or the endpoint (correctly) reports an empty queue.
 
 **Files:** `apps/backend/dash_backend/sync/router.py` (outbox/health endpoint), `apps/backend/tests/test_outbox_health.py` (new, 4 tests), `apps/desktop/src/stores/badgeStore.ts` (outbox state on the shared poll), `apps/desktop/src/components/SyncHealthIndicator.tsx` (new), `apps/desktop/src/components/DASHSidebar.tsx` (footer wiring).
+
+## 47. Workflow Execution History Panel (Workflow Builder)
+
+**What:** The engine already recorded executions but only in memory — history vanished on restart, and the UI had no surface at all. Now: (1) the JSON state file carries an `executions` ring buffer (newest 500, trimmed oldest-first) persisted on every custom-workflow execution and restored at engine construction; (2) a new literal route `GET /enhanced/workflows/executions?limit=N` returns all-workflow history newest-first, and the per-workflow route honors `limit`; (3) the Workflow Builder detail card gains a History toggle rendering past runs with status icon (completed/failed/running), duration in ms, start time, node chain (`n1 → n2`), and error text.
+
+**Why JSON state file instead of SQLite/DB:** executions are an append-only diagnostic log for one page, not relational domain data; the workflow state file already exists, is already atomic-per-save, and the ring buffer keeps it bounded — a second storage engine for one list would add migration and teardown cost for zero query power the panel needs. Cap raised deliberately from the old in-memory 1000→500 trim to a persisted 500 (the old trim ran in memory only; nothing reached disk).
+
+**Route-order invariant:** the literal `/enhanced/workflows/executions` is declared BEFORE `/enhanced/workflows/{workflow_id}` — FastAPI matches in declaration order, and a dynamic-route shadow would 422 trying to parse "executions" as an id. This is the same literal-vs-dynamic shadowing bug class previously hit by `/memory/{id}` vs `/memory/stats` (decisions.md #38); a regression test now locks it.
+
+**Engine refactor:** `WorkflowEngine.__init__(state_path: Optional[Path])` — injectable state file. Before, `_state_path()` (env-overridable) was resolved at call time inside save/load, which made "fresh engine over a temp file" tests require module reloads (which re-seed templates globally and fight other tests' singletons); constructor injection makes restart-simulation tests trivial (construct two engines over the same path) and removed the reload dance entirely. Production singleton unchanged.
+
+**Bug caught by own tests:** first implementation double-appended executions (original append + new one) — the persisted-file test asserted exactly 1 record and failed with 2; removed the duplicate append. Also caught the route-test harness needing to monkeypatch the module-level `workflow_engine` symbol the routes resolve at call time.
+
+**Files:** `apps/backend/dash_backend/services/workflow_builder.py` (persistence, injectable path, ring buffer), `apps/backend/dash_backend/api/routes/enhanced_features.py` (all-executions route + limit), `apps/backend/tests/test_workflow_execution_history.py` (new, 7 tests), `apps/desktop/src/pages/WorkflowBuilderPage.tsx` (History toggle + panel).

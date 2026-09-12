@@ -112,12 +112,23 @@ from pathlib import Path as _Path
 
 
 def _state_path() -> _Path:
-    """Custom-workflow state file. Override with DASH_WORKFLOW_STATE for tests."""
+    """Workflow state file (custom workflows + execution history).
+    Override with DASH_WORKFLOW_STATE for tests."""
     override = os.environ.get("DASH_WORKFLOW_STATE")
     if override:
         return _Path(override)
     base = os.environ.get("LOCALAPPDATA") or str(_Path.home() / "AppData" / "Local")
     return _Path(base) / "DASH" / "workflow_state.json"
+
+
+# Execution history ring buffer: keep the most recent N runs on disk so the
+# history panel survives backend restarts without unbounded growth.
+MAX_PERSISTED_EXECUTIONS = 500
+
+
+def _trim_executions(executions: list[dict]) -> list[dict]:
+    """Keep the newest MAX_PERSISTED_EXECUTIONS entries (list is append-order)."""
+    return executions[-MAX_PERSISTED_EXECUTIONS:]
 
 
 # ── Workflow Engine ────────────────────────────────────────────────────────
@@ -128,9 +139,13 @@ class WorkflowEngine:
     Custom (user-built) workflows persist to a JSON state file so canvas
     edits survive backend restarts; templates are always re-seeded from
     code and never persisted.
+
+    ``state_path`` is injectable for tests; the default resolves the real
+    per-user state file at construction time.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, state_path: Optional[_Path] = None) -> None:
+        self._state_file = _Path(state_path) if state_path else _state_path()
         self._workflows: dict[str, dict] = {}
         self._executions: list[dict] = []
         self._schedules: dict[str, dict] = {}
@@ -145,12 +160,13 @@ class WorkflowEngine:
                 "enabled": True,
             }
         self._load_custom()
+        self._load_executions()
 
     # ── State file I/O (custom workflows only) ─────────────────────
 
     def _load_custom(self) -> None:
         try:
-            path = _state_path()
+            path = self._state_file
             if path.exists():
                 import json as _json
 
@@ -166,14 +182,29 @@ class WorkflowEngine:
             import json as _json
 
             custom = [wf for wf in self._workflows.values() if not wf.get("is_template")]
-            path = _state_path()
+            path = self._state_file
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(
-                _json.dumps({"version": 1, "custom_workflows": custom}, indent=2),
+                _json.dumps(
+                    {"version": 1, "custom_workflows": custom, "executions": _trim_executions(self._executions)},
+                    indent=2,
+                ),
                 encoding="utf-8",
             )
         except Exception:
             logger.debug("Workflow state save failed", exc_info=True)
+
+    def _load_executions(self) -> None:
+        """Restore the execution-history ring buffer from the state file."""
+        try:
+            import json as _json
+
+            path = self._state_file
+            if path.exists():
+                data = _json.loads(path.read_text(encoding="utf-8"))
+                self._executions = list(data.get("executions", []))[-MAX_PERSISTED_EXECUTIONS:]
+        except Exception:
+            logger.debug("No prior workflow executions loaded", exc_info=True)
 
     # ── CRUD ────────────────────────────────────────────────────────
 
@@ -336,8 +367,10 @@ class WorkflowEngine:
         wf["run_count"] = wf.get("run_count", 0) + 1
         wf["last_run"] = exec_record["completed_at"]
 
-        if len(self._executions) > 1000:
-            self._executions = self._executions[-500:]
+        # Persist history so the execution panel survives restarts. Templates
+        # never re-save (they are code-owned); custom saves carry the buffer.
+        if not wf.get("is_template"):
+            self._save_custom()
 
         return {"ok": True, "execution": exec_record}
 

@@ -1070,3 +1070,13 @@ Modified: lib/api.ts (authFetch resolution), App.tsx (routes), CommandPalette.ts
 **UI decision flow:** state null (no data / backend down) → render nothing (global connection dot covers it) → HEALTHY/LOCAL_ONLY → nothing (absence = healthy) → ERROR → static warning chip, click → Command Center → DEGRADED → warning chip with dead-letter count, click toggles inline expansion (pending/retryable/stuck + recent failure rows), last-sync timestamp at bottom.
 
 **Failure semantics:** non-OK health response → `state: ERROR` kept in store (visible "unknown"), fetch rejection (backend unreachable) → outbox cleared to null (the system-ready dot already signals disconnection) — the indicator never lies by showing stale healthy data.
+
+## 31. Workflow Execution History Flow (decisions.md #47)
+
+**Write path:** `POST /enhanced/workflows/{id}/execute` → `WorkflowEngine.execute` → builds exec_record (status/nodes/duration/error) → appends to `self._executions` → if the workflow is NOT a template, `_save_custom()` writes `{version, custom_workflows, executions: last 500}` to the state file atomically → run_count/last_run updated on the workflow (and persisted for custom workflows).
+
+**Restart path:** backend boots → module import → `workflow_engine = WorkflowEngine()` → `_load_custom()` (custom workflows) + `_load_executions()` (ring buffer, trimmed) → history survives restarts even though executions of template runs only live in memory for the session (templates are code-owned; their history still displays until restart).
+
+**Read path:** detail card History toggle → `GET /enhanced/workflows/{id}/executions?limit=20` (per-workflow) — the all-workflows `GET /enhanced/workflows/executions?limit=N` literal route sits BEFORE the dynamic `/{workflow_id}` route in the router so it is never shadowed → newest-first list → React panel maps each record to status icon + duration + start time + node chain + error.
+
+**Selection flow:** clicking a workflow (`selectWorkflow`) keeps the History toggle state and reloads that workflow's history if open; Run re-fetches history when the panel is visible, so the newest execution appears immediately without toggling.

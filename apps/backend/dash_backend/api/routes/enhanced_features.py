@@ -328,6 +328,23 @@ async def update_workflow(workflow_id: str, body: WorkflowUpdateRequest, _user=D
     return workflow_engine.update(workflow_id, **changes)
 
 
+@router.get("/workflows/executions")
+async def get_all_workflow_executions(
+    limit: int = Query(50, ge=1, le=200),
+    _user=Depends(get_current_user),
+):
+    """Execution history across ALL workflows (newest first).
+
+    Declared BEFORE the /{workflow_id} dynamic route — FastAPI matches in
+    declaration order, so a later literal route would be shadowed and every
+    call would 422 on uuid-style parsing of "executions" (the same
+    literal-vs-dynamic shadowing bug previously hit by /memory routes).
+    Powers the Workflow Builder's execution-history panel.
+    """
+    from dash_backend.services.workflow_builder import workflow_engine
+    return {"executions": workflow_engine.get_executions(limit=limit)}
+
+
 @router.get("/workflows/{workflow_id}")
 async def get_workflow(workflow_id: str, _user=Depends(get_current_user)):
     from dash_backend.services.workflow_builder import workflow_engine
@@ -356,9 +373,13 @@ async def delete_workflow(workflow_id: str, _user=Depends(get_current_user)):
 
 
 @router.get("/workflows/{workflow_id}/executions")
-async def get_workflow_executions(workflow_id: str, _user=Depends(get_current_user)):
+async def get_workflow_executions(
+    workflow_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    _user=Depends(get_current_user),
+):
     from dash_backend.services.workflow_builder import workflow_engine
-    return {"executions": workflow_engine.get_executions(workflow_id)}
+    return {"executions": workflow_engine.get_executions(workflow_id, limit=limit)}
 
 
 class ScheduleRequest(BaseModel):
