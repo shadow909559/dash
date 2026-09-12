@@ -66,6 +66,12 @@ const BackupRestorePage = lazy(() => import("@/pages/BackupRestorePage"));
 const UpdateCheckerPage = lazy(() => import("@/pages/UpdateCheckerPage"));
 const PerformanceMonitorPage = lazy(() => import("@/pages/PerformanceMonitorPage"));
 const DebugConsolePage = lazy(() => import("@/pages/DebugConsolePage"));
+const ConnectorsPage = lazy(() => import("@/pages/ConnectorsPage"));
+const RagDocumentsPage = lazy(() => import("@/pages/RagDocumentsPage"));
+const FineTuningPage = lazy(() => import("@/pages/FineTuningPage"));
+const Phase3OpsPage = lazy(() => import("@/pages/Phase3OpsPage"));
+const AiLabsPage = lazy(() => import("@/pages/AiLabsPage"));
+const RemoteAccessPage = lazy(() => import("@/pages/RemoteAccessPage"));
 
 // Handle Electron IPC for audio stop (exposed via preload onAudioStopAll)
 const onAudioStopAll = window.electronAPI?.onAudioStopAll ?? null;
@@ -269,6 +275,12 @@ export function App() {
                   <Route path="/updates" element={<Suspense fallback={<PageSkeleton />}><UpdateCheckerPage /></Suspense>} />
                   <Route path="/perf-monitor" element={<Suspense fallback={<PageSkeleton />}><PerformanceMonitorPage /></Suspense>} />
                   <Route path="/debug-console" element={<Suspense fallback={<PageSkeleton />}><DebugConsolePage /></Suspense>} />
+                  <Route path="/connectors" element={<Suspense fallback={<PageSkeleton />}><ConnectorsPage /></Suspense>} />
+                  <Route path="/documents" element={<Suspense fallback={<PageSkeleton />}><RagDocumentsPage /></Suspense>} />
+                  <Route path="/fine-tuning" element={<Suspense fallback={<PageSkeleton />}><FineTuningPage /></Suspense>} />
+                  <Route path="/operations" element={<Suspense fallback={<PageSkeleton />}><Phase3OpsPage /></Suspense>} />
+                  <Route path="/ai-labs" element={<Suspense fallback={<PageSkeleton />}><AiLabsPage /></Suspense>} />
+                  <Route path="/remote-access" element={<Suspense fallback={<PageSkeleton />}><RemoteAccessPage /></Suspense>} />
                   <Route path="*" element={<Suspense fallback={<PageSkeleton />}><HomePage /></Suspense>} />
                 </Routes>
               </main>

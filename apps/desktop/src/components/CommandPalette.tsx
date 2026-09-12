@@ -25,6 +25,11 @@ import {
   X,
   ArrowRight,
   Command,
+  Plug,
+  FileText,
+  Layers3,
+  FlaskConical,
+  Cloud,
 } from "lucide-react";
 
 interface PaletteItem {
@@ -60,6 +65,12 @@ const NAV_ITEMS: PaletteItem[] = [
   { id: "plugins", label: "Plugins", description: "Built-in modules and extensions", icon: Puzzle, path: "/plugins", category: "Navigation", keywords: ["extensions", "modules", "integrations"] },
   { id: "analytics", label: "Analytics", description: "System metrics and telemetry", icon: BarChart3, path: "/analytics", category: "Navigation", keywords: ["metrics", "charts", "performance", "telemetry"] },
   { id: "settings", label: "Settings", description: "Connection, AI, appearance", icon: Settings, path: "/settings", category: "Navigation", keywords: ["config", "theme", "provider", "api", "connection"] },
+  { id: "connectors", label: "Connectors", description: "Slack, Telegram, Notion messaging", icon: Plug, path: "/connectors", category: "Navigation", keywords: ["slack", "telegram", "notion", "webhook", "integration"] },
+  { id: "documents", label: "Documents", description: "RAG document library and search", icon: FileText, path: "/documents", category: "Navigation", keywords: ["rag", "chunks", "embeddings", "upload", "knowledge"] },
+  { id: "fine-tuning", label: "Fine-Tuning", description: "Prompt engine, RAG ingestion, LoRA training", icon: Brain, path: "/fine-tuning", category: "Navigation", keywords: ["lora", "training", "prompt", "rag", "model"] },
+  { id: "operations", label: "Operations Hub", description: "Digests, batch jobs, routing, load balancer", icon: Layers3, path: "/operations", category: "Navigation", keywords: ["digest", "batch", "bulk", "queue", "balance", "ops"] },
+  { id: "ai-labs", label: "AI Labs", description: "Causal, federated, curriculum, NL→SQL", icon: FlaskConical, path: "/ai-labs", category: "Navigation", keywords: ["causal", "federated", "curriculum", "sql", "multimodal", "reasoning", "lab"] },
+  { id: "remote-access", label: "Remote Access", description: "EC2, tunnels, cloud relay status", icon: Cloud, path: "/remote-access", category: "Navigation", keywords: ["ec2", "tunnel", "relay", "wake", "cloud", "remote"] },
 ];
 
 /** Match score: lower = better. 0 = exact match. */

@@ -25,8 +25,14 @@ export async function isAuthenticated(): Promise<boolean> {
 /**
  * fetch() with the local device token attached. Use this instead of bare
  * fetch() for every backend call so newly protected endpoints keep working.
+ *
+ * Relative paths are resolved against API_BASE: several pages call
+ * authFetch("/phase3/...") etc. and previously the browser resolved them
+ * against the renderer origin (about:blank / file://), so the request
+ * never reached the backend and pages silently fell back to demo data.
  */
 export async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const resolved = /^https?:\/\//i.test(url) ? url : `${API_BASE}${url.startsWith("/") ? url : `/${url}`}`;
   const headers: Record<string, string> = {
     ...(init.headers as Record<string, string> | undefined),
   };
@@ -34,7 +40,7 @@ export async function authFetch(url: string, init: RequestInit = {}): Promise<Re
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  return fetch(url, { ...init, headers });
+  return fetch(resolved, { ...init, headers });
 }
 
 interface RequestOptions {

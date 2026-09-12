@@ -998,3 +998,11 @@ GET /connectors/status | /rules | /messages/{svc} | /events  [JWT — booleans o
 **Startup prefs flow:** SettingsPage toggle → `startup:set-settings` IPC → `app.setLoginItemSettings(openAtLogin, openAsHidden, args:["--hidden"])` + persist full pref object to `userData/startup-prefs.json`; read path merges login-item state, `launchArguments`, and persisted prefs (Windows can't report openAsHidden).
 
 **What the tests lock:** `tests/test_autostart_contract.py` asserts the chain's load-bearing details — Run-key args written, prefs persisted, orb honored inside the `launchHidden` block, packaged dir on `process.resourcesPath`, dual spawn fallbacks, ≥60s health window, uvicorn args, stale-replace/reuse logic, stale-bundle markers on the built artifact, and a live boot with every service engaged, zero startup exceptions, and clean shutdown.
+
+## 24. New feature pages render flow (this session)
+
+App.tsx lazy-loads ConnectorsPage/RagDocumentsPage/FineTuningPage/Phase3OpsPage/AiLabsPage/RemoteAccessPage per route (/connectors, /documents, /fine-tuning, /operations, /ai-labs, /remote-access); CommandPalette NAV_ITEMS now exposes all six.
+
+Data path per page: mount → useCallback fetchAll → authFetch (lib/api.ts) resolves relative or absolute URL against API_BASE (VITE_API_URL or http://127.0.0.1:8000/api/v1), attaches Bearer device token from preload window.electronAPI.auth.deviceToken() → backend route (integration_connectors.py, rag/router.py, fine_tuning.py, phase3_features.py, phase4_features.py, ec2_control.py + tunnel.py + cloud_relay.py) → service singleton → JSON → React state → GlassCard lists. Failures degrade to empty-state text, never crash the page (safe() wrapper with .ok checks and try/catch).
+
+Modified: lib/api.ts (authFetch resolution), App.tsx (routes), CommandPalette.tsx (entries), 6 new page files; backend rag/router.py (text() fix).

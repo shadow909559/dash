@@ -6,6 +6,7 @@ import uuid
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dash_backend.rag import schemas
@@ -35,7 +36,7 @@ async def list_documents(
     session: AsyncSession = Depends(get_db_session),
 ) -> List[schemas.DocumentRead]:
     stmt = await session.execute(
-        "SELECT id FROM documents WHERE user_id = :uid ORDER BY created_at DESC",
+        text("SELECT id FROM documents WHERE user_id = :uid ORDER BY created_at DESC"),
         {"uid": str(user.id)},
     )
     rows = stmt.fetchall()

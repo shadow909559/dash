@@ -464,3 +464,15 @@ Every meaningful technical decision, why it was made, and what alternatives were
 **Verification:** new `tests/test_autostart_contract.py` (11 tests): TS-source behavior contracts + stale-build markers on the built `dist-electron/main.js`, plus a live boot of the real app asserting all 11 autostart log markers (migrations, identity, executive worker, automation scheduler, event bus, system services, sync, plugins, autonomous agents incl. brain, performance optimizers, predictive sampler) engage with zero "Failed to start" exceptions and clean shutdown. Live boot verified manually too: 0 exceptions, Ollama auto-started with model `dash-finetuned`, registry Run key (`DASH → "C:\Program Files\DASH\DASH.exe" --hidden`) confirmed present. The lifespan test boots the app exactly once per process — a second boot deadlocks on process-wide singletons (documented in the test).
 
 **Files:** `apps/desktop/electron/backend_manager.ts` (+ built `.js`), `apps/desktop/electron/main.ts` (+ built `.js`), `apps/desktop/electron/preload.ts` (+ built `.js`), `apps/backend/tests/test_autostart_contract.py` (new).
+
+## 40. Remaining feature pages + authFetch route fix (this session)
+
+**What:** Six backend feature groups had no desktop surface: /connectors (Slack/Telegram/Notion), /documents (RAG), /fine-tuning, /phase3 ops (digest/batch/bulk/notification-router/load-balancer/ip-allowlist), /phase4 AI labs (causal/federated/curriculum/nl-sql/multi-modal/reasoning), and cloud/remote (/ec2, /tunnel, /relay/pc-status). Built ConnectorsPage, RagDocumentsPage, FineTuningPage, Phase3OpsPage, AiLabsPage, RemoteAccessPage; registered routes (/connectors, /documents, /fine-tuning, /operations, /ai-labs, /remote-access) and Command Palette entries.
+
+**Why this approach:** Inventory (route-group diff vs 53 existing pages) showed these were the only true gaps — other phase3 surfaces (compliance, incidents, retention, feature flags) already had pages. All new pages are read-mostly dashboards with one guarded action (EC2 start, connector rule toggle, RAG upload/delete) matching their backend risk profile; every fetch wrapped in authFetch so the router-level auth added in #38 keeps working.
+
+**Bug found & fixed en route:** CompliancePage, DataManagementPage, FeatureFlagsPage, InfrastructurePage, SecurityHardeningPage call authFetch("/phase3/...") with RELATIVE paths — fetch resolved them against the renderer origin (never reached the backend), so those pages silently rendered hardcoded fallback data while looking functional. Fixed centrally in authFetch: relative URLs now resolve against API_BASE. One-line fix repairs five pre-existing pages at once.
+
+**Also fixed:** RAG /documents route 500 (raw SQL string in SQLAlchemy 2.x session.execute — wrapped in text()); root-caused the SQLite NUMERIC-affinity trap where an all-digits nil-UUID string is stored as integer 0 and crashes the UUID result processor on read (dev-db junk rows cleaned; real UUIDs unaffected).
+
+**Libraries:** no new deps — lucide-react icons and existing ultron components only; SectionTitle uses children/count API (not icon prop).
