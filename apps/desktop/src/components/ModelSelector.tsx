@@ -435,7 +435,7 @@ const AddCustomModelModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             style={{
               padding: "10px 16px",
               borderRadius: 8,
-              background: testing ? "var(--dash-surface)" : "linear-gradient(135deg, #3fa9f5, #1a5276)",
+              background: testing ? "var(--dash-surface)" : "linear-gradient(135deg, #3fa9f5, #123a5c)",
               border: "none",
               color: "#fff",
               fontSize: 13,

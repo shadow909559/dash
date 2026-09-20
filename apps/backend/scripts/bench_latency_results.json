@@ -1,0 +1,29 @@
+{
+  "results": {
+    "stt.cold_ms (model load + decode)": 4334.9,
+    "stt.warm_ms (model resident)": 1178.8,
+    "stt.warm_median_ms": 1178.8,
+    "llm.ttft_cold_ms (weights from disk/RAM)": 21444.5,
+    "llm.total_cold_ms (~100 tokens)": 30258.2,
+    "llm.ttft_warm_ms (resident model)": 13008.6,
+    "llm.total_warm_ms (~100 tokens)": 16049.8,
+    "tts.sapi_first_audio_ms (12-word sentence)": 161.0
+  },
+  "samples": {
+    "stt.warm_ms (model resident)": [
+      1178.8,
+      1247.0,
+      1169.1
+    ],
+    "llm.ttft_warm_ms (resident model)": [
+      31219.3,
+      13008.6,
+      5830.1
+    ],
+    "llm.total_warm_ms (~100 tokens)": [
+      43907.3,
+      16049.8,
+      8135.2
+    ]
+  }
+}

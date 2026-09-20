@@ -150,6 +150,12 @@ private val _chatTokens = MutableStateFlow("")
     private val _sttResult = MutableStateFlow<SttResult?>(null)
     val sttResult: StateFlow<SttResult?> = _sttResult.asStateFlow()
 
+    // ─── DASH speaking state (backend voice.speaking transitions) ───
+    // Debounced true/false transitions pushed from the playback-amplitude
+    // stream — a state mirror, not a firehose.
+    private val _voiceSpeaking = MutableStateFlow(false)
+    val voiceSpeaking: StateFlow<Boolean> = _voiceSpeaking.asStateFlow()
+
     // ─── Voice TTS audio (streaming queue) ───
     data class TtsAudio(val audioBase64: String)
 
@@ -576,6 +582,11 @@ private fun startHeartbeat() {
 
                 "voice.tts.error" -> {
                     Log.e(TAG, "TTS error: ${json["error"]}")
+                }
+
+                "voice.speaking" -> {
+                    _voiceSpeaking.value = json["speaking"] as? Boolean ?: false
+                    Log.d(TAG, "DASH speaking state: ${json["speaking"]}")
                 }
 
                 "ai.provider.status" -> {

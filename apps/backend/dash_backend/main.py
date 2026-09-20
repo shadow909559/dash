@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 import asyncio
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -119,6 +120,16 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Failed to start executive worker")
 
+    # Ollama model warm-up (#136): load weights into memory in the background
+    # so the FIRST user interaction after boot pays ~1 s, not ~21 s.
+    try:
+        from dash_backend.llm.warmup import start_model_warmup
+
+        start_model_warmup()
+        logger.info("LLM model warm-up scheduled")
+    except Exception:
+        logger.exception("Failed to schedule LLM warm-up")
+
     # Start automation scheduler
     scheduler = None
     try:
@@ -126,6 +137,38 @@ async def lifespan(app: FastAPI):
         scheduler.start()
     except Exception:
         logger.exception("Failed to start automation scheduler")
+
+    # Proactive assistant loop (decisions.md #94): meeting reminders,
+    # overdue actions, stale approvals — bounded, deduped, config-gated
+    # (DASH_ASSISTANT_PROACTIVE=0 disables). Non-critical.
+    try:
+        import os as _os
+        from pathlib import Path as _Path
+        from dash_backend.assistant import proactive as _proactive
+        from dash_backend.assistant.crm_store import get_crm_store
+
+        _proactive.configure_state_dir(
+            _Path(_os.getenv("DASH_CRM_DIR", str(_Path.home() / ".dash" / "crm"))))
+        _assistant_notifier = None
+        try:
+            from dash_backend.services.notifications import NotificationService
+            _assistant_notifier = NotificationService()
+        except Exception:
+            logger.info("proactive loop running without desktop notifier")
+        _proactive.start_proactive_loop(
+            get_crm_store(), orchestrator=None, notifier=_assistant_notifier)
+    except Exception:
+        logger.exception("Failed to start proactive assistant loop")
+
+    # Start workflow trigger scheduler: fires workflows whose persisted
+    # cron schedule is due (decisions.md #53). Non-critical: a failure to
+    # start logs and continues — manual runs still work.
+    try:
+        from dash_backend.services.workflow_builder import get_workflow_trigger_scheduler
+        get_workflow_trigger_scheduler().start()
+        logger.info("Workflow trigger scheduler started")
+    except Exception:
+        logger.exception("Failed to start workflow trigger scheduler")
 
     # ── Event Bus ──────────────────────────────────────────
     event_bus = None
@@ -136,6 +179,74 @@ async def lifespan(app: FastAPI):
         logger.info("Event Bus started")
     except Exception:
         logger.exception("Failed to start Event Bus")
+
+    # Workflow event bridge: subscribes the engine's event triggers to the
+    # bus and starts the real producers (decisions.md #57). Started right
+    # after the bus so subscriptions exist before anything publishes.
+    # Non-critical: a failure logs and continues — cron/webhook triggers
+    # and manual runs are unaffected.
+    try:
+        from dash_backend.services.workflow_event_bridge import get_workflow_event_bridge
+        await get_workflow_event_bridge().start()
+        logger.info("Workflow event bridge started")
+    except Exception:
+        logger.exception("Failed to start workflow event bridge")
+
+    # Self-healing loop (Phase 2, decisions.md #59): periodic detect →
+    # repair → verify cycles. Non-critical: a failure logs and continues.
+    try:
+        from dash_backend.self_heal import get_self_healing_loop
+        await get_self_healing_loop().start()
+        logger.info("Self-healing loop started")
+    except Exception:
+        logger.exception("Failed to start self-healing loop")
+
+    # Guardian (Phase 4, decisions.md #60): defensive security monitoring —
+    # listening-port diffing, suspicious-process patterns, failed-login
+    # bursts. Detection only; heavy response stays manual. Non-critical.
+    try:
+        from dash_backend.security.guardian import get_guardian
+
+        import os as _os
+
+        if _os.environ.get("DASH_GUARDIAN_ENABLED", "1") != "0":
+            await get_guardian().start()
+            logger.info("Guardian started")
+        else:
+            logger.info("Guardian disabled via DASH_GUARDIAN_ENABLED=0")
+    except Exception:
+        logger.exception("Failed to start Guardian")
+
+    # Vision watcher (Phase 1 extension, decisions.md #62): periodic camera
+    # watch that recognizes enrolled persons and reports honestly through
+    # the agent's working memory, the event bus, and the audit log.
+    # Non-critical: a failure logs and continues.
+    try:
+        from dash_backend.vision.watcher import get_vision_watcher
+
+        if _os.environ.get("DASH_VISION_WATCHER_ENABLED", "1") != "0":
+            await get_vision_watcher().start()
+            logger.info("Vision watcher started")
+        else:
+            logger.info("Vision watcher disabled via DASH_VISION_WATCHER_ENABLED=0")
+    except Exception:
+        logger.exception("Failed to start vision watcher")
+
+    # Always-listening wake-word loop (decisions.md #86): server-side mic
+    # capture → VAD → "hey dash" → Whisper → REAL chat path → TTS reply.
+    # Strictly opt-in (the loop holds the microphone); disabled by default,
+    # a failed start logs and continues — never blocks boot.
+    try:
+        from dash_backend.voice_system.always_listening import get_wake_loop
+
+        wake_loop = get_wake_loop()
+        if wake_loop.enabled:
+            result = await wake_loop.start()
+            logger.info("Wake-word loop start: %s", result)
+        else:
+            logger.info("Wake-word loop disabled (set DASH_WAKE_LOOP_ENABLED=1 to enable)")
+    except Exception:
+        logger.exception("Failed to start wake-word loop")
 
     # ── System Services ────────────────────────────────────
     try:
@@ -190,27 +301,46 @@ async def lifespan(app: FastAPI):
         logger.exception("Failed to start Plugin Manager")
 
     # ── Autonomous Agent Services ──────────────────────────
-    try:
-        from dash_backend.autonomous.background_task_manager import get_background_task_manager
-        from dash_backend.autonomous.reminder_service import get_reminder_service
-        from dash_backend.autonomous.system_monitor_agent import get_system_monitor_agent
-        from dash_backend.autonomous.idle_detector import get_idle_detector
-        from dash_backend.autonomous.agent_core import get_agent_core
-        from dash_backend.autonomous.proactive import get_proactive_agent
-        await get_background_task_manager().start()
-        await get_reminder_service().start()
-        await get_system_monitor_agent().start()
-        await get_idle_detector().start()
-        # Start the proactive agent (runs during idle periods)
-        proactive = get_proactive_agent()
-        await proactive.start()
-        # Start the autonomous brain (JARVIS orchestrator)
-        from dash_backend.autonomous.brain import get_brain
-        brain = get_brain()
-        await brain.start()
-        logger.info("Autonomous agent services started (including brain)")
-    except Exception:
-        logger.exception("Failed to start autonomous agent services")
+    # DASH_BRAIN_AUTONOMY=0 disables the brain's BACKGROUND machinery
+    # (idle proactive goals, self-monitor, status reports). The per-request
+    # chat path (brain.handle_chat) is unaffected — it enters via get_brain()
+    # from the websocket route, not via brain.start(). Used by benchmarks and
+    # hermetic boots so background autonomy doesn't skew latency measurements.
+    if os.getenv("DASH_BRAIN_AUTONOMY", "1") == "0":
+        logger.info("Autonomous agent background services disabled (DASH_BRAIN_AUTONOMY=0)")
+    else:
+        try:
+            # Resume persisted complex tasks left running by a previous
+            # shutdown (decisions.md #90): non-terminal orchestrator tasks
+            # reload from task_state.json and continue at their last
+            # checkpoint — completed steps are never redone.
+            try:
+                from dash_backend.autonomous.task_orchestrator import get_task_orchestrator
+                resumed = get_task_orchestrator().resume_interrupted()
+                if resumed:
+                    logger.info("Task orchestrator: resumed %d interrupted task(s)", resumed)
+            except Exception:
+                logger.exception("Task orchestrator resume failed")
+            from dash_backend.autonomous.background_task_manager import get_background_task_manager
+            from dash_backend.autonomous.reminder_service import get_reminder_service
+            from dash_backend.autonomous.system_monitor_agent import get_system_monitor_agent
+            from dash_backend.autonomous.idle_detector import get_idle_detector
+            from dash_backend.autonomous.agent_core import get_agent_core
+            from dash_backend.autonomous.proactive import get_proactive_agent
+            await get_background_task_manager().start()
+            await get_reminder_service().start()
+            await get_system_monitor_agent().start()
+            await get_idle_detector().start()
+            # Start the proactive agent (runs during idle periods)
+            proactive = get_proactive_agent()
+            await proactive.start()
+            # Start the autonomous brain (JARVIS orchestrator)
+            from dash_backend.autonomous.brain import get_brain
+            brain = get_brain()
+            await brain.start()
+            logger.info("Autonomous agent services started (including brain)")
+        except Exception:
+            logger.exception("Failed to start autonomous agent services")
 
     # ── Performance Optimization ───────────────────────────
     try:
@@ -263,6 +393,21 @@ async def lifespan(app: FastAPI):
     yield
 
     # ── Shutdown ───────────────────────────────────────────
+    # Wake loop first: it holds the microphone (PortAudio) and a task
+    # blocked in to_thread reads — releasing both before anything else.
+    try:
+        from dash_backend.voice_system.always_listening import get_wake_loop
+
+        await get_wake_loop().shutdown()
+    except Exception:
+        logger.exception("Failed to shut down wake-word loop")
+    try:
+        # Close pooled httpx clients (Ollama/embeddings keep-alive sockets).
+        from dash_backend.http_client import close_shared_clients
+
+        await close_shared_clients()
+    except Exception:
+        logger.exception("Failed to close shared httpx clients")
     try:
         if event_bus:
             await event_bus.publish_sync(
@@ -300,11 +445,49 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
+    # Cancel pending warm-up (#136) if still running.
+    try:
+        from dash_backend.llm.warmup import stop_model_warmup
+
+        stop_model_warmup()
+    except Exception:
+        logger.debug("warm-up shutdown skipped", exc_info=True)
+
     try:
         if scheduler:
             await scheduler.stop()
     except Exception:
         logger.exception("Failed to stop automation scheduler")
+
+    try:
+        from dash_backend.services.workflow_builder import get_workflow_trigger_scheduler
+        await get_workflow_trigger_scheduler().stop()
+    except Exception:
+        logger.exception("Failed to stop workflow trigger scheduler")
+
+    try:
+        from dash_backend.services.workflow_event_bridge import get_workflow_event_bridge
+        await get_workflow_event_bridge().stop()
+    except Exception:
+        logger.exception("Failed to stop workflow event bridge")
+
+    try:
+        from dash_backend.self_heal import get_self_healing_loop
+        await get_self_healing_loop().stop()
+    except Exception:
+        logger.exception("Failed to stop self-healing loop")
+
+    try:
+        from dash_backend.security.guardian import get_guardian
+        await get_guardian().stop()
+    except Exception:
+        logger.exception("Failed to stop Guardian")
+
+    try:
+        from dash_backend.vision.watcher import get_vision_watcher
+        await get_vision_watcher().stop()
+    except Exception:
+        logger.exception("Failed to stop vision watcher")
 
     try:
         from dash_backend.services.system.scheduler import get_system_scheduler
@@ -366,10 +549,25 @@ def create_app() -> FastAPI:
         application.redoc_url = None
         application.openapi_url = None
 
-    # CORS middleware
+    # CORS middleware. Two mechanisms compose (decisions.md #75):
+    #   - allow_origins: explicit list from DASH_CORS_ORIGINS_RAW — the
+    #     mechanism for remote hosts (Tauri, emulator, fly.dev);
+    #   - allow_origin_regex: any http(s) localhost/127.0.0.1 port when
+    #     cors_localhost_dev is on (default) — browser dev on this machine
+    #     is trusted regardless of which port its dev server drifted to.
+    # The regex works WITH allow_credentials: starlette reflects the
+    # request origin instead of emitting a literal "*" (which browsers
+    # reject on credentialed requests), so preflights answer 200 and the
+    # ACAO header stays per-origin.
+    localhost_regex = (
+        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+        if settings.cors_localhost_dev
+        else None
+    )
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        allow_origin_regex=localhost_regex,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

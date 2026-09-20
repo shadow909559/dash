@@ -100,7 +100,7 @@ class MouseRightClickTool(BaseTool):
     name = "mouse_right_click"
     description = "Right-click at the current cursor position."
     parameters = []
-    permission_level = PermissionLevel.AUTO
+    permission_level = PermissionLevel.CONFIRM  # §25: input tools gate like the family (decisions.md #129)
     category = "mouse"
 
     async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:
@@ -118,7 +118,7 @@ class MouseMiddleClickTool(BaseTool):
     name = "mouse_middle_click"
     description = "Middle-click at the current cursor position."
     parameters = []
-    permission_level = PermissionLevel.AUTO
+    permission_level = PermissionLevel.CONFIRM  # §25: input tools gate like the family (decisions.md #129)
     category = "mouse"
 
     async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:

@@ -74,6 +74,7 @@ from dash_backend.memory.service import (
 from dash_backend.db.session import AsyncSessionLocal
 
 import asyncio
+import time
 
 logger = get_logger(__name__)
 
@@ -190,34 +191,100 @@ async def handle_chat_send(
         yield ChatDoneMessage(message_id=msg.message_id)
         return
 
-    # Load previous messages if this is an existing conversation
-    history: list[dict[str, str]] = []
-    memory_context: str | None = None
-    conversation_summary: str | None = None
+    # Latency instrumentation (decisions.md #89): monotonic stage timings for
+    # the pre-LLM path, logged at DEBUG per message.
+    _t0 = time.perf_counter()
+    _ctx_t: dict[str, float] = {}
 
-    if msg.conversation_id:
+    # ── Context gathering, in parallel (decisions.md #89) ────────────────
+    # History, memory, RAG and agent config are mutually independent and run
+    # concurrently. History uses the caller's session; the others use their
+    # own short-lived sessions (an AsyncSession must not be shared between
+    # concurrent tasks). Previously these ran strictly sequentially, so the
+    # first token waited for the sum of all four stages — each of which may
+    # include an embedding round trip to Ollama.
+    history: list[dict[str, str]] = []
+    conversation_summary: str | None = None
+    memory_context: str | None = None
+
+    async def _load_history() -> tuple[list[dict[str, str]], str | None]:
+        if not msg.conversation_id:
+            return [], None
         try:
             db_messages, total = await get_conversation_messages(
                 session, msg.conversation_id, limit=200
             )
-            for db_msg in db_messages:
-                # include token_count when available for better trimming
-                history.append(
-                    {
-                        "role": db_msg.role.value,
-                        "content": db_msg.content,
-                        "token_count": getattr(db_msg, "token_count", None),
-                    }
-                )
-
+            loaded = [
+                {
+                    "role": db_msg.role.value,
+                    "content": db_msg.content,
+                    "token_count": getattr(db_msg, "token_count", None),
+                }
+                for db_msg in db_messages
+            ]
             # If conversation is long, build a short extractive summary for recent messages
+            summary: str | None = None
             if total >= 18:
                 recent_msgs = [{"role": m.role.value, "content": m.content} for m in db_messages[-10:]]
-                summary_text = await summarize_conversation(session, msg.conversation_id, recent_msgs)
-                if summary_text:
-                    conversation_summary = summary_text
+                summary = await summarize_conversation(session, msg.conversation_id, recent_msgs)
+            return loaded, summary
         except Exception:
             logger.exception("Failed to load conversation history")
+            return [], None
+
+    async def _load_memory() -> str:
+        """Semantic memory retrieval on its own session."""
+        try:
+            from dash_backend.db.session import AsyncSessionLocal
+
+            async with AsyncSessionLocal() as own_session:
+                return await build_memory_context(own_session, user_id, query=msg.content) or ""
+        except Exception:
+            logger.exception("Failed to load memory context")
+            return ""
+
+    async def _load_rag() -> str:
+        """RAG retrieval on its own session. Failures are non-fatal."""
+        try:
+            from dash_backend.db.session import AsyncSessionLocal
+            from dash_backend.rag.service import retrieve_context as _retrieve_rag_context
+
+            async with AsyncSessionLocal() as own_session:
+                return await _retrieve_rag_context(
+                    own_session, user_id,
+                    query=msg.content if getattr(msg, "content", None) else None,
+                    client_id=getattr(msg, "client_id", None) or None,
+                ) or ""
+        except Exception:
+            logger.exception("Failed to load RAG context")
+            return ""
+
+    async def _load_agent():
+        """Agent config (system_prompt, allowed_tools). Failures are non-fatal."""
+        if not getattr(msg, "agent_id", None):
+            return None
+        try:
+            from dash_backend.db.session import AsyncSessionLocal
+            from dash_backend.agents.service import get_agent as _get_agent
+
+            async with AsyncSessionLocal() as own_session:
+                return await _get_agent(own_session, msg.agent_id)
+        except Exception:
+            logger.exception("Failed to load agent %s", getattr(msg, "agent_id", None))
+            return None
+
+    (history, conversation_summary), memory_res, rag_res, agent = await asyncio.gather(
+        _load_history(),
+        _load_memory(),
+        _load_rag(),
+        _load_agent(),
+    )
+    _ctx_t["context_parallel"] = (time.perf_counter() - _t0) * 1000
+    memory_context = memory_res or None
+    # Merge RAG context into memory_context (results combined after the gather
+    # so completion order can never race the merge).
+    if rag_res:
+        memory_context = f"{memory_context}\n\n{rag_res}" if memory_context else rag_res
 
     # Trim history to an approximate token budget to keep prompts small
     try:
@@ -227,36 +294,6 @@ async def handle_chat_send(
     except Exception:
         # Trimming is best-effort; if it fails, proceed with full history
         logger.exception("Failed to trim conversation history")
-
-    try:
-        # Pass the user message as query for semantic memory retrieval
-        memory_context = await build_memory_context(session, user_id, query=msg.content)
-    except Exception:
-        logger.exception("Failed to load memory context")
-
-    # Attempt to load RAG context and merge into memory_context. Keep failures non-fatal.
-    try:
-        from dash_backend.rag.service import retrieve_context as _retrieve_rag_context
-
-        rag_ctx = await _retrieve_rag_context(session, user_id, query=msg.content if getattr(msg, "content", None) else None)
-        if rag_ctx:
-            if memory_context:
-                memory_context = memory_context + "\n\n" + rag_ctx
-            else:
-                memory_context = rag_ctx
-    except Exception:
-        logger.exception("Failed to load RAG context")
-
-    # Agent selection: if the client supplied an agent_id, attempt to load
-    # the agent config (system_prompt, allowed_tools). Failures are non-fatal.
-    agent = None
-    try:
-        if getattr(msg, "agent_id", None):
-            from dash_backend.agents.service import get_agent as _get_agent
-
-            agent = await _get_agent(session, msg.agent_id)
-    except Exception:
-        logger.exception("Failed to load agent %s", getattr(msg, "agent_id", None))
 
     tool_manager = get_tool_manager()
     last_assistant_text = ""
@@ -269,13 +306,19 @@ async def handle_chat_send(
         # Build the system prompt. If an agent is selected and has a system_prompt,
         # prepend it to the default DASH_SYSTEM_PROMPT so agent behavior is applied.
         base_prompt = VOICE_SYSTEM_PROMPT if getattr(msg, "voice_mode", False) else DASH_SYSTEM_PROMPT
-        system_prompt = base_prompt
+        final_base = base_prompt
         try:
             if agent and getattr(agent, "system_prompt", None):
-                system_prompt = f"{agent.system_prompt}\n\n{DASH_SYSTEM_PROMPT}"
+                final_base = f"{agent.system_prompt}\n\n{DASH_SYSTEM_PROMPT}"
         except Exception:
             # If agent is malformed, fallback to base prompt
-            system_prompt = base_prompt
+            final_base = base_prompt
+        # Candor Core (decisions.md #54): persona contract + deterministic
+        # honesty pre-checks composed over the final base prompt. Runs on
+        # every message, including voice mode — brevity rules live in the
+        # voice prompt, honesty rules in the contract.
+        from dash_backend.autonomous.candor import compose_candor_system_prompt
+        system_prompt = compose_candor_system_prompt(final_base, msg.content)
 
         # Inject live environment context (device/project) so the model grounds
         # answers in the user's actual machine state. Non-fatal; skipped for
@@ -446,11 +489,14 @@ async def handle_chat_send(
             streamed_any_token = False
             text_parts: list[str] = []
             native = None
+            _llm_start = time.perf_counter()
             async for kind, payload in stream_chat_completion_with_native_tool_calls(
                 messages,
                 tools=tool_defs,
             ):
                 if kind == "token":
+                    if not streamed_any_token:  # first token of this step
+                        _ctx_t[f"llm_ttft_step{step}"] = round((time.perf_counter() - _llm_start) * 1000, 1)
                     streamed_any_token = True
                     text_parts.append(payload)
                     yield ChatTokenMessage(message_id=msg.message_id, content=payload)
@@ -486,6 +532,12 @@ async def handle_chat_send(
 
             # If no tool_calls, we are done — tokens were already streamed.
             if not tool_calls_native:
+                logger.info(
+                    "chat latency (decisions.md #89): msg_id=%s %s total_ms=%.1f",
+                    msg.message_id,
+                    _ctx_t,
+                    (time.perf_counter() - _t0) * 1000,
+                )
                 yield ChatDoneMessage(message_id=msg.message_id)
                 break
 

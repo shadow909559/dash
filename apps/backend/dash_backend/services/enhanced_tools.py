@@ -78,35 +78,16 @@ class ApplicationSearchTool(BaseTool):
         if not query:
             return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message="query required")
         try:
-            apps = []
-            if IS_WINDOWS:
-                start_menu = Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs"
-                if start_menu.exists():
-                    for item in start_menu.rglob("*"):
-                        if item.suffix.lower() in (".lnk", ".url"):
-                            if query in item.stem.lower():
-                                apps.append({"name": item.stem, "path": str(item), "type": "shortcut"})
-                                if len(apps) >= max_results:
-                                    break
-                common_dirs = [
-                    Path(os.environ.get("ProgramFiles", "C:\\Program Files")),
-                    Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")),
-                    Path.home() / "AppData" / "Local",
-                ]
-                for search_dir in common_dirs:
-                    if search_dir.exists():
-                        for item in search_dir.rglob("*"):
-                            if item.suffix.lower() in (".exe", ".lnk", ".url"):
-                                if query in item.stem.lower():
-                                    apps.append({"name": item.stem, "path": str(item), "type": "application"})
-                                    if len(apps) >= max_results:
-                                        break
-                        if len(apps) >= max_results:
-                            break
+            # Delegates to the shared ApplicationService discovery (#134):
+            # the old inline scan rglob-walked the entire AppData tree on
+            # every call (seconds per query) and missed per-user registry
+            # entries. One discovery path for every tool.
+            from dash_backend.services.applications import ApplicationService
+            results = await ApplicationService().search_applications(query)
+            apps = results[:max_results]
             return ToolResult(tool_name=self.name, status=ToolStatus.SUCCESS, output={"applications": apps}, summary=f"Found {len(apps)} apps matching '{query}'")
         except Exception as exc:
             return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message=str(exc))
-
 
 class SmoothMouseMoveTool(BaseTool):
     name = "smooth_mouse_move"
@@ -137,7 +118,7 @@ class KeyboardHoldReleaseTool(BaseTool):
         ToolParameter("key", "Key to hold/release", required=True),
         ToolParameter("duration_ms", "Hold duration in milliseconds", type="integer", required=False, default=200),
     ]
-    permission_level = PermissionLevel.AUTO
+    permission_level = PermissionLevel.CONFIRM  # §25: input tools gate like the family (decisions.md #129)
     category = "keyboard"
 
     async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:
@@ -159,7 +140,7 @@ class TypeUnicodeTool(BaseTool):
     parameters = [
         ToolParameter("text", "Unicode text to type", required=True),
     ]
-    permission_level = PermissionLevel.AUTO
+    permission_level = PermissionLevel.CONFIRM  # §25: input tools gate like the family (decisions.md #129) — shadowed duplicate of tools/keyboard_tools
     category = "keyboard"
 
     async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:

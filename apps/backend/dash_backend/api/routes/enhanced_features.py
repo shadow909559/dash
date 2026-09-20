@@ -1,7 +1,9 @@
 """API routes for all enhanced features: export, shortcuts, analytics, workflows, plugins, knowledge graph."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
@@ -274,6 +276,12 @@ async def get_error_stats(_user=Depends(get_current_user)):
 
 # ── Workflow Routes ────────────────────────────────────────────────────────
 
+class ScheduleEnabledRequest(BaseModel):
+    """Shared body for single and bulk schedule enable/disable."""
+
+    enabled: bool
+
+
 @router.get("/workflows")
 async def list_workflows(category: Optional[str] = None, _user=Depends(get_current_user)):
     from dash_backend.services.workflow_builder import workflow_engine
@@ -328,6 +336,31 @@ async def update_workflow(workflow_id: str, body: WorkflowUpdateRequest, _user=D
     return workflow_engine.update(workflow_id, **changes)
 
 
+@router.put("/workflows/schedules/enabled")
+async def set_all_schedules_enabled(
+    body: ScheduleEnabledRequest,
+    _user=Depends(get_current_user),
+):
+    """Pause (enabled=false) or resume (enabled=true) EVERY schedule at once
+    (decisions.md #85).
+
+    Declared BEFORE /workflows/{workflow_id} (literal-vs-dynamic shadowing,
+    same rule the /executions route documents). Idempotent: schedules
+    already in the requested state are untouched. `changed` reports what
+    actually flipped; the per-workflow responses carry the details.
+    """
+    from dash_backend.services.workflow_builder import workflow_engine
+
+    result = workflow_engine.set_all_schedules_enabled(body.enabled)
+    schedules = workflow_engine.get_schedules()
+    return {
+        **result,
+        "schedules": schedules,
+        "paused_remaining": sum(1 for s in schedules.values() if not s.get("enabled")),
+        "active_remaining": sum(1 for s in schedules.values() if s.get("enabled")),
+    }
+
+
 @router.get("/workflows/executions")
 async def get_all_workflow_executions(
     limit: int = Query(50, ge=1, le=200),
@@ -343,6 +376,33 @@ async def get_all_workflow_executions(
     """
     from dash_backend.services.workflow_builder import workflow_engine
     return {"executions": workflow_engine.get_executions(limit=limit)}
+
+
+@router.get("/workflows/trigger-status")
+async def get_workflow_trigger_status(_user=Depends(get_current_user)):
+    """Scheduler + trigger aggregates for the System page (decisions.md #81).
+
+    Declared BEFORE /workflows/{workflow_id} — same literal-vs-dynamic
+    shadowing rule the /executions route documents above. Reports the
+    scheduler's real liveness (task state + last tick, not a hardcoded
+    "running"), paused/active counts exactly as the fire gates read them,
+    and the next due schedule from the engine's own cron evaluator.
+    """
+    from dash_backend.services.workflow_builder import (
+        get_workflow_trigger_scheduler,
+        workflow_engine,
+    )
+
+    scheduler = get_workflow_trigger_scheduler()
+    return {
+        "ok": True,
+        "scheduler": {
+            "running": scheduler.running,
+            "poll_seconds": scheduler.poll_seconds,
+            "last_tick_at": scheduler.last_tick_at,
+        },
+        **workflow_engine.get_trigger_status(),
+    }
 
 
 @router.get("/workflows/{workflow_id}")
@@ -424,10 +484,148 @@ async def schedule_workflow(workflow_id: str, body: ScheduleRequest, _user=Depen
     return workflow_engine.add_schedule(workflow_id, body.cron, body.timezone)
 
 
+# ScheduleEnabledRequest is defined once, near /workflows (line ~279), shared
+# by the single-schedule and bulk pause/resume routes below.
+
+
+@router.put("/workflows/{workflow_id}/schedule/enabled")
+async def set_schedule_enabled(
+    workflow_id: str, body: ScheduleEnabledRequest, _user=Depends(get_current_user)
+):
+    """Pause (enabled=false) or resume (enabled=true) a schedule. The cron,
+    timestamps, and last-fired status are kept; the scheduler simply skips
+    paused schedules until resumed."""
+    from dash_backend.services.workflow_builder import workflow_engine
+    return workflow_engine.set_schedule_enabled(workflow_id, body.enabled)
+
+
+@router.delete("/workflows/{workflow_id}/schedule")
+async def unschedule_workflow(workflow_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.workflow_builder import workflow_engine
+    return workflow_engine.remove_schedule(workflow_id)
+
+
+class TriggerEnabledRequest(BaseModel):
+    enabled: bool
+
+
+@router.put("/workflows/{workflow_id}/webhook/enabled")
+async def set_webhook_enabled(
+    workflow_id: str, body: TriggerEnabledRequest, _user=Depends(get_current_user)
+):
+    """Pause (enabled=false) or resume (enabled=true) a webhook. Secret,
+    URL, and call count are kept; a paused webhook refuses calls with 409
+    until resumed."""
+    from dash_backend.services.workflow_builder import workflow_engine
+    return workflow_engine.set_webhook_enabled(workflow_id, body.enabled)
+
+
+@router.put("/workflows/{workflow_id}/event-trigger/enabled")
+async def set_event_trigger_enabled(
+    workflow_id: str, body: TriggerEnabledRequest, _user=Depends(get_current_user)
+):
+    """Pause (enabled=false) or resume (enabled=true) an event trigger.
+    Topic, match keys, count, and last-fired history are kept; a paused
+    trigger is skipped by fire_event until resumed."""
+    from dash_backend.services.workflow_builder import workflow_engine
+    return workflow_engine.set_event_trigger_enabled(workflow_id, body.enabled)
+
+
+class WebhookCreateRequest(BaseModel):
+    secret: Optional[str] = None  # auto-minted when omitted
+
+
+@router.post("/workflows/{workflow_id}/webhook")
+async def create_workflow_webhook(
+    workflow_id: str,
+    body: WebhookCreateRequest | None = None,
+    _user=Depends(get_current_user),
+):
+    """Mint a webhook trigger for a workflow. The secret is stored with the
+    workflow state and returned once here; it stays readable via the
+    webhooks list because this is a single-user local app (device-token
+    auth), and the UI needs to re-display it for copying."""
+    from dash_backend.services.workflow_builder import workflow_engine
+    return workflow_engine.add_webhook(workflow_id, body.secret if body else None)
+
+
+@router.delete("/workflows/{workflow_id}/webhook")
+async def delete_workflow_webhook(workflow_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.workflow_builder import workflow_engine
+    return workflow_engine.remove_webhook(workflow_id)
+
+
+@router.get("/workflows/webhooks/all")
+async def get_all_workflow_webhooks(_user=Depends(get_current_user)):
+    """All webhook triggers (keyed by workflow_id). Path uses a two-segment
+    literal tail (/webhooks/all) so it can never be captured by the
+    dynamic /workflows/{workflow_id} route."""
+    from dash_backend.services.workflow_builder import workflow_engine
+    return {"webhooks": workflow_engine.get_webhooks()}
+
+
 @router.get("/workflows/schedules/all")
 async def get_all_schedules(_user=Depends(get_current_user)):
     from dash_backend.services.workflow_builder import workflow_engine
     return {"schedules": workflow_engine.get_schedules()}
+
+
+# ── Workflow Event Triggers (decisions.md #57) ─────────────────────────
+
+class EventTriggerRequest(BaseModel):
+    event: str  # dot-separated topic, e.g. "email.received"
+    match: Optional[dict] = None  # payload keys that must equal to fire
+
+
+@router.put("/workflows/{workflow_id}/event-trigger")
+async def set_event_trigger(workflow_id: str, body: EventTriggerRequest,
+                            _user=Depends(get_current_user)):
+    """Attach an event trigger. Replaces any previous one — a workflow has
+    at most one event trigger, mirroring schedule/webhook semantics."""
+    from dash_backend.services.workflow_builder import workflow_engine
+    return workflow_engine.add_event_trigger(workflow_id, body.event, body.match)
+
+
+@router.delete("/workflows/{workflow_id}/event-trigger")
+async def clear_event_trigger(workflow_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.workflow_builder import workflow_engine
+    return workflow_engine.remove_event_trigger(workflow_id)
+
+
+@router.get("/workflows/event-triggers/all")
+async def get_all_event_triggers(_user=Depends(get_current_user)):
+    from dash_backend.services.workflow_builder import workflow_engine
+    return {"triggers": workflow_engine.get_event_triggers()}
+
+
+# ── Workflow Webhook Trigger (unauthenticated, secret-verified) ────────────
+
+@router.post("/workflows/webhook/{webhook_id}")
+async def trigger_workflow_webhook(webhook_id: str, request: Request):
+    """Inbound webhook that executes a workflow (decisions.md #53).
+
+    Deliberately OUTSIDE the device-token auth: external systems (Zapier,
+    cron jobs, other machines) need a stable URL. Auth is the webhook
+    secret — header "X-Webhook-Secret" or "?secret=" — compared in
+    constant time by the engine. Same trust model as the platform
+    receivers in integration_connectors.py.
+    """
+    provided = request.headers.get("X-Webhook-Secret", "") or request.query_params.get("secret", "")
+    payload: dict = {}
+    raw = await request.body()
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                payload = parsed
+        except ValueError:
+            pass  # non-JSON bodies are fine: the run just gets empty context
+
+    from dash_backend.services.workflow_builder import workflow_engine
+    result = workflow_engine.fire_webhook(webhook_id, provided or None, payload)
+    if not result.get("ok"):
+        raise HTTPException(result.get("status_code", 401), result.get("reason", "unauthorized"))
+    return result
 
 
 # ── Plugin Routes ──────────────────────────────────────────────────────────

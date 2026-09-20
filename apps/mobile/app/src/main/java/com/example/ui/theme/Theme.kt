@@ -40,8 +40,8 @@ private val UltronDarkScheme = darkColorScheme(
     tertiaryContainer = DashPurpleContainer, onTertiaryContainer = DashPurplePrimary,
     error = DashErrorRed, onError = Color.White,
     errorContainer = DashErrorContainer, onErrorContainer = DashErrorRed,
-    background = Color(0xFF0B0E14), onBackground = DashTextPrimary,
-    surface = Color(0xFF12161F), onSurface = DashTextPrimary,
+    background = Color(0xFF06090F), onBackground = DashTextPrimary,
+    surface = Color(0xFF0D1219), onSurface = DashTextPrimary,
     surfaceVariant = DashSurfaceContainerLow, onSurfaceVariant = DashTextSecondary,
     outline = DashBorderGlass, outlineVariant = DashBorderSubtle,
 )
@@ -71,7 +71,7 @@ fun DashTheme(
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
             window.statusBarColor = Color.Transparent.toArgb()
-            window.navigationBarColor = if (isDarkTheme) Color(0xFF0B0E14).toArgb() else Color(0xFFF5F6FA).toArgb()
+            window.navigationBarColor = if (isDarkTheme) Color(0xFF06090F).toArgb() else Color(0xFFF5F6FA).toArgb()
             WindowCompat.setDecorFitsSystemWindows(window, false)
             val controller = WindowInsetsControllerCompat(window, window.decorView)
             controller.isAppearanceLightStatusBars = !isDarkTheme

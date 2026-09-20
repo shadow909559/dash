@@ -12,6 +12,24 @@ from __future__ import annotations
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _isolated_audit_dir(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """Point the audit service at a fresh temp dir and reset its singleton.
+
+    These tests read/write real audit event counts; against the repo's
+    actual audit_logs/ directory the accumulated history eventually
+    saturates query(limit=100) and `after > before` fails spuriously.
+    Hermetic beats realistic here — and no test ever touches real audit
+    data."""
+    import dash_backend.services.audit_logs as audit_mod
+
+    monkeypatch.setenv("DASH_AUDIT_LOG_DIR", str(tmp_path / "audit_logs"))
+    monkeypatch.setattr(audit_mod, "_audit_service", None)
+    yield
+    # get_audit_service() re-reads the env var when the singleton is None,
+    # so every test (and every route during the test) gets the temp dir.
+
+
 # ── Auth event recording + logout ───────────────────────────────
 
 

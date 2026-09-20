@@ -9,6 +9,7 @@ import { useModelStore } from "@/stores/modelStore";
 import { useOrchestratorStore } from "@/stores/orchestratorStore";
 import { getWsClient } from "@/lib/wsClient";
 import { LiveRegion } from "@/components/LiveRegion";
+import { StreamingCaret, StaggerItem, TypingIndicator } from "@/components/fx";
 import { ModelSelector } from "@/components/ModelSelector";
 import {
   Send, Mic, MicOff, Bot, User, Copy, Check, Paperclip, StopCircle,
@@ -80,7 +81,7 @@ export const ChatPage: React.FC = () => {
   const copyMsg = (id: string, text: string) => { navigator.clipboard.writeText(text); setCopied(id); setTimeout(() => setCopied(null), 2000); };
   const runOrch = () => { if (!input.trim() || isProcessing) return; getWsClient().sendOrchestratorRun(input.trim()); useOrchestratorStore.getState().startRun(input.trim()); setInput(""); };
 
-  const allMsgs = [...messages, ...(assistantMessage ? [{ id: assistantMessage.id || "s", role: "assistant" as const, content: assistantMessage.content || "" }] : [])];
+  const allMsgs = [...messages, ...(assistantMessage ? [{ id: assistantMessage.id || "s", role: "assistant" as const, content: (assistantMessage.content || "") + "\u0000STREAMING", streaming: true }] : [])];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, overflow: "hidden" }}>
@@ -188,54 +189,90 @@ const OrchestratorProgress: React.FC = () => {
   );
 };
 
-/* ── Bubble ── */
-const Bubble: React.FC<{ msg: { id?: string; role: string; content: string }; mode: AgentMode; onCopy: () => void; copied: boolean }> = ({ msg, mode, onCopy, copied }) => {
+/* ── Bubble — layered-surface redesign: edge-light, per-mode accent
+      frame, hover actions. Content and copy behavior unchanged. ── */
+const Bubble: React.FC<{ msg: { id?: string; role: string; content: string; streaming?: boolean }; mode: AgentMode; onCopy: () => void; copied: boolean }> = ({ msg, mode, onCopy, copied }) => {
   const u = msg.role === "user";
   return (
-    <div style={{ display: "flex", gap: 8, flexDirection: u ? "row-reverse" : "row", alignItems: "flex-start" }}>
-      <div style={{ width: 28, height: 28, borderRadius: "50%", background: u ? "rgba(168,85,247,0.15)" : mode.glow, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: `1px solid ${u ? "rgba(168,85,247,0.3)" : mode.color + "30"}` }}>
-        {u ? <User size={14} style={{ color: "#a855f7" }} /> : <Bot size={14} style={{ color: mode.color }} />}
+    <div style={{ display: "flex", gap: 10, flexDirection: u ? "row-reverse" : "row", alignItems: "flex-start" }}>
+      {/* Avatar — instrument chip with mode-tinted ring */}
+      <div style={{
+        width: 28, height: 28, borderRadius: 9, flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: u ? "rgba(168,85,247,0.12)" : `linear-gradient(135deg, ${mode.color}22, ${mode.color}0a)`,
+        border: `1px solid ${u ? "rgba(168,85,247,0.35)" : mode.color + "40"}`,
+        boxShadow: u ? "none" : `0 0 10px ${mode.glow}`,
+      }}>
+        {u ? <User size={14} style={{ color: "#c084fc" }} /> : <Bot size={14} style={{ color: mode.color }} />}
       </div>
-      <div style={{ maxWidth: "85%", position: "relative" }}>
-        <div style={{ padding: "8px 12px", borderRadius: u ? "12px 12px 3px 12px" : "12px 12px 12px 3px", background: u ? `${mode.color}12` : "var(--dash-surface)", color: "var(--dash-text)", fontSize: 13, lineHeight: 1.5, border: `1px solid ${u ? mode.color + "18" : "var(--dash-border-subtle)"}`, wordBreak: "break-word" }}>
-          <MsgContent content={msg.content} />
+      <div style={{ maxWidth: "85%", position: "relative", minWidth: 0 }}>
+        <div style={{
+          padding: "10px 14px",
+          borderRadius: u ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+          background: u
+            ? `linear-gradient(135deg, ${mode.color}16, ${mode.color}0a)`
+            : "linear-gradient(180deg, rgba(96,160,235,0.05), rgba(96,160,235,0.015))",
+          color: "var(--dash-text)", fontSize: 13, lineHeight: 1.55,
+          border: `1px solid ${u ? mode.color + "2a" : "var(--dash-border)"}`,
+          boxShadow: u
+            ? "none"
+            : "inset 0 1px 0 rgba(200, 228, 255, 0.05), 0 2px 10px rgba(0, 0, 0, 0.3)",
+          wordBreak: "break-word",
+        }}>
+          <MsgContent content={msg.content} streaming={msg.streaming} modeColor={mode.color} />
         </div>
-        <div style={{ display: "flex", gap: 4, marginTop: 2, opacity: 0, transition: "opacity 150ms" }}
+        <div style={{ display: "flex", gap: 4, marginTop: 3, justifyContent: u ? "flex-end" : "flex-start", opacity: 0, transition: "opacity 150ms" }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0"; }}>
-          <button onClick={onCopy} style={{ padding: 1, color: "var(--dash-text-muted)", background: "none", border: "none", cursor: "pointer" }}>
+          <button onClick={onCopy} aria-label="Copy message" style={{ padding: 2, borderRadius: 4, color: copied ? "#22c55e" : "var(--dash-text-muted)", background: "none", border: "none", cursor: "pointer" }}>
             {copied ? <Check size={11} /> : <Copy size={11} />}
           </button>
         </div>
+        {/* Per-mode accent thread under assistant bubbles */}
+        {!u && (
+          <div aria-hidden style={{
+            position: "absolute", left: 14, bottom: -1, width: 28, height: 2, borderRadius: 1,
+            background: `linear-gradient(90deg, ${mode.color}70, transparent)`,
+          }} />
+        )}
       </div>
     </div>
   );
 };
 
 /* ── MsgContent ── */
-const MsgContent: React.FC<{ content: string }> = ({ content }) => {
-  const parts = content.split(/(```[\s\S]*?```|`[^`]+`|\*\*[^*]+\*\*)/g);
+const MsgContent: React.FC<{ content: string; streaming?: boolean; modeColor?: string }> = ({ content, streaming, modeColor }) => {
+  const live = streaming && content.endsWith("\u0000STREAMING");
+  const text = live ? content.slice(0, -"\u0000STREAMING".length) : content;
+  const parts = text.split(/(```[\s\S]*?```|`[^`]+`|\*\*[^*]+\*\*)/g);
   return (
     <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
       {parts.map((p, i) => {
-        if (p.startsWith("```")) { const c = p.replace(/```\w*\n?/g, "").replace(/```$/g, ""); return <pre key={i} style={{ background: "rgba(0,0,0,0.3)", borderRadius: 6, padding: 10, margin: "6px 0", overflowX: "auto", fontSize: 12, fontFamily: "'JetBrains Mono',monospace" }}><code>{c}</code></pre>; }
-        if (p.startsWith("`") && p.endsWith("`")) return <code key={i} style={{ background: "rgba(255,255,255,0.08)", padding: "1px 4px", borderRadius: 3, fontSize: 12 }}>{p.slice(1, -1)}</code>;
+        if (p.startsWith("```")) { const c = p.replace(/```\w*\n?/g, "").replace(/```$/g, ""); return <pre key={i} style={{ background: "rgba(4, 8, 15, 0.55)", border: "1px solid var(--dash-border-subtle)", borderRadius: 8, padding: 10, margin: "8px 0", overflowX: "auto", fontSize: 12, lineHeight: 1.55, fontFamily: "'JetBrains Mono',monospace", boxShadow: "inset 0 1px 0 rgba(200,228,255,0.04)" }}><code>{c}</code></pre>; }
+        if (p.startsWith("`") && p.endsWith("`")) return <code key={i} style={{ background: "rgba(63,169,245,0.10)", border: "1px solid rgba(63,169,245,0.16)", padding: "1px 5px", borderRadius: 4, fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: "#7dc4f8" }}>{p.slice(1, -1)}</code>;
         if (p.startsWith("**") && p.endsWith("**")) return <strong key={i}>{p.slice(2, -2)}</strong>;
-        return <span key={i}>{p}</span>;
+        return <span key={i}>{p}{live && i === parts.length - 1 && <StreamingCaret color={modeColor} />}</span>;
       })}
     </div>
   );
 };
 
-/* ── Typing ── */
+/* ── Typing — fx TypingIndicator inside a matching bubble shell ── */
 const Typing: React.FC<{ color: string }> = ({ color }) => (
-  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-    <div style={{ width: 28, height: 28, borderRadius: "50%", background: `${color}20`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Bot size={14} style={{ color }} /></div>
-    <div style={{ padding: "10px 14px", borderRadius: 12, background: "var(--dash-surface)" }}>
-      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-        {[0, 1, 2].map((i) => <div key={i} style={{ width: 5, height: 5, borderRadius: "50%", background: color, opacity: 0.5, animation: "typing 1.4s infinite", animationDelay: `${i * 0.2}s` }} />)}
-      </div>
-      <style>{`@keyframes typing { 0%,60%,100% { opacity:0.3;transform:scale(0.8); } 30% { opacity:1;transform:scale(1); } }`}</style>
+  <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+    <div style={{
+      width: 28, height: 28, borderRadius: 9, flexShrink: 0,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: `linear-gradient(135deg, ${color}22, ${color}0a)`,
+      border: `1px solid ${color}40`, boxShadow: `0 0 10px ${color}20`,
+    }}><Bot size={14} style={{ color }} /></div>
+    <div style={{
+      padding: "12px 16px", borderRadius: "14px 14px 14px 4px",
+      background: "linear-gradient(180deg, rgba(96,160,235,0.05), rgba(96,160,235,0.015))",
+      border: "1px solid var(--dash-border)",
+      boxShadow: "inset 0 1px 0 rgba(200, 228, 255, 0.05)",
+    }}>
+      <TypingIndicator color={color} label={"DASH IS THINKING"} />
     </div>
   </div>
 );

@@ -6,20 +6,21 @@ import androidx.compose.ui.graphics.Color
 // DASH JARVIS — Premium Dark Theme with Cyan/Blue accents
 // ═══════════════════════════════════════════════════════════════
 
-// ── Background Layers (deepest to lightest) — JARVIS spec ──
-val DashBackground      = Color(0xFF0B0E14)
-val DashSurface         = Color(0xFF12161F)
-val DashSurfaceLowest   = Color(0xFF0D0F16)
-val DashSurfaceContainerLow = Color(0xFF161B26)
-val DashSurfaceContainer = Color(0xFF1A1F2E)
-val DashSurfaceContainerHigh = Color(0xFF1E2533)
-val DashSurfaceContainerHighest = Color(0xFF242D3E)
+// ── Background Layers (deepest to lightest) — engineered-instrument pass,
+//    aligned with the desktop/website identity (decisions.md #112) ──
+val DashBackground      = Color(0xFF06090F)
+val DashSurface         = Color(0xFF0D1219)
+val DashSurfaceLowest   = Color(0xFF080B11)
+val DashSurfaceContainerLow = Color(0xFF10151D)
+val DashSurfaceContainer = Color(0xFF151B26)
+val DashSurfaceContainerHigh = Color(0xFF1A2230)
+val DashSurfaceContainerHighest = Color(0xFF202A3C)
 
 // ── Text Hierarchy ──
-val DashTextPrimary     = Color(0xFFF0F0F5)
-val DashTextSecondary   = Color(0xFF9090A8)
-val DashTextMuted       = Color(0xFF5A5A72)
-val DashTextDisabled    = Color(0xFF3A3A4A)
+val DashTextPrimary     = Color(0xFFEDF4FC)
+val DashTextSecondary   = Color(0xFF8FB2D4)
+val DashTextMuted       = Color(0xFF4D6A8A)
+val DashTextDisabled    = Color(0xFF35485C)
 
 // ── Primary: JARVIS Cyan/Blue (energy core) ──
 val DashPrimary         = Color(0xFF3FA9F5)

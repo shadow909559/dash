@@ -6,7 +6,8 @@
     "allowSyntheticDefaultImports": true,
     "composite": true,
     "skipLibCheck": true,
-    "noEmit": false
+    "noEmit": false,
+    "outDir": "node_modules/.tsc-node"
   },
   "include": ["vite.config.ts", "electron"]
 }

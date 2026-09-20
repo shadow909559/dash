@@ -10,6 +10,10 @@
  */
 
 import { EventEmitter } from '../EventEmitter';
+import {
+  registerMicAmplitudeSource,
+  type MicAmplitudeHandle,
+} from './micAmplitudeProducer';
 
 export interface WakeWordConfig {
   wakeWord: string;
@@ -46,6 +50,8 @@ export class WakeWordDetector extends EventEmitter {
   private energyHistory: number[] = [];
   private microphoneStream: MediaStream | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
+  // Shared mic-amplitude producer registration (#131).
+  private ampHandle: MicAmplitudeHandle | null = null;
 
   constructor(config: any) {
     super();
@@ -91,6 +97,10 @@ export class WakeWordDetector extends EventEmitter {
       // Connect microphone to analyser
       this.sourceNode = this.audioContext.createMediaStreamSource(this.microphoneStream);
       this.sourceNode.connect(this.analyser);
+
+      // Shared producer (#131): the orbs pulse while wake-word detection
+      // is running.
+      this.ampHandle = registerMicAmplitudeSource(this.analyser);
 
       this.isInitialized = true;
       console.log('[WakeWordDetector] Initialized successfully');
@@ -175,6 +185,9 @@ export class WakeWordDetector extends EventEmitter {
 
   async shutdown(): Promise<void> {
     await this.stop();
+
+    this.ampHandle?.stop();
+    this.ampHandle = null;
 
     if (this.audioContext) {
       await this.audioContext.close();

@@ -108,6 +108,10 @@ class ChatSendMessage(WSBaseMessage):
     agent_mode: str = "general"
     # Voice mode: when True, LLM is instructed to reply with short, spoken-friendly text
     voice_mode: bool = False
+    # Optional client scoping (spec §31, decisions.md #120): when set,
+    # RAG retrieval is entity-scoped — that client's tagged documents
+    # plus untagged general documents, never another client's.
+    client_id: str | None = None
 
 
 class VoiceSTTMessage(WSBaseMessage):

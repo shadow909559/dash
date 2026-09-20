@@ -13,7 +13,7 @@
   height: 100vh;
   overflow: hidden;
   z-index: 9999;
-  background: #0b0e14;
+  background: #06090f;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -26,7 +26,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 80% 70% at 50% 38%, #161b26 0%, #0b0e14 100%);
+  background: radial-gradient(ellipse 80% 70% at 50% 38%, #121a26 0%, #06090f 100%);
   pointer-events: none;
 }
 

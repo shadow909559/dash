@@ -1150,3 +1150,71 @@ Import calendar: CalendarPage Import ICS → POST /features/calendar/import-ics 
 Deadlines: GET /features/deadlines → ExtendedCalendarService.get_deadlines → deadline docs (DeadlineService) + calendar events with deadline-ish titles within window → each mapped through deadline_urgency (overdue/today/urgent/soon/upcoming) → sorted by urgency then date. Email scan: POST /features/email/scan-deadlines → extract_deadlines → regex "due|deadline|expires|submit by YYYY-MM-DD" per inbox message → add_deadline (source+source_id dedup).
 
 Singleton rebind: importing email_calendar_sync replaces email_calendar.email_service/.calendar_service with the extended subclasses, so pre-existing lazy imports in phase2_features.py handlers get IMAP/ICS/deadline methods without import changes.
+
+## 37. Workflow Trigger Flow (decisions.md #53)
+
+Scheduled: backend lifespan starts WorkflowTriggerScheduler (singleton via get_workflow_trigger_scheduler) → every 60s tick(datetime.now()) → WorkflowEngine.due_schedules(now) evaluates each persisted schedule with cron_matches_due against LOCAL wall time (skips disabled workflows/templates, skips schedules whose last_fired_at is in the same minute) → engine.execute(wf_id, source="scheduled") → mark_fired(wf_id, status, at=now) stamps the idempotence marker → run lands in the persisted history with source="scheduled".
+
+Webhook: external caller → POST /enhanced/workflows/webhook/{webhook_id} (unauthenticated; header X-Webhook-Secret or ?secret=) → fire_webhook: lookup by webhook_id → enabled check (409) → hmac.compare_digest secret check (401) → engine.execute(wf_id, body-as-context, source="webhook") → trigger_count += 1 → state file persisted → execution returned (404 for unknown id).
+
+Persistence: schedules + webhooks live in the workflow state file (DASH_WORKFLOW_STATE / %LOCALAPPDATA%/DASH/workflow_state.json) alongside custom workflows and executions; engine __init__ loads them and drops orphans; add/remove/add_webhook/remove_webhook all re-save. Schedules are validated by parse_cron at write time — unsupported dialects are rejected with a reason instead of being stored to never fire.
+
+## 38. Candor Core Flow (decisions.md #54)
+
+Chat (websocket): handle_chat_send → base = VOICE or DASH system prompt (agent prompt composed first when present) → compose_candor_system_prompt(base, msg.content) → CANDOR_RULES appended + assess_idea(msg.content) runs deterministic pre-checks (REFUSE-CLASS / EXPECTATION-CHECK / VAGUE-SCOPE / UNDER-SPECIFIED) → any findings render as a [CANDOR REVIEW] block the model must address → build_chat_messages as before → LLM.
+
+Chat (brain): AutonomousBrain.handle_chat → mode prompt from fine-tuner (or JARVIS fallback) → compose_candor_system_prompt(mode_prompt, message) → + SYSTEM STATUS + RAG context → LLM. Both paths share one composition function, so the contract cannot drift between them.
+
+The pre-check is deliberately shallow and labeled as such: word/pattern reality checks that are testable without an LLM. Understanding the idea remains the model's job; the block only guarantees the model cannot silently ignore mechanically detectable honesty hazards.
+
+## 40. Workflow Event Trigger Flow (decisions.md #57)
+
+Event: producer → bridge / bus → engine. Email: ExtendedEmailService._ingest stores a NEW message → schedule_event_publish("email.received", {email_id, from, subject, importance, source}) → loop.create_task(bridge.notify_email_received) → bus.publish_sync (delivers to the bridge subscription) → bridge._on_bus_event → asyncio.to_thread(engine.fire_event, topic, data). Reminder: ReminderService._loop fires a due reminder → schedule_event_publish("reminder.fired", {reminder_id, title, category}) → same path. Files: FileWatcher thread polls DASH_WATCH_PATHS every 2s (mtime+size diff, max 32 events/scan) → bridge._on_file_event → engine.fire_event directly (file events need no bus round-trip).
+
+Matching: engine.fire_event(topic, payload) scans event_triggers — topic must equal, every match key must equal the payload value, workflow enabled + non-template → engine.execute(wf_id, {"event": {topic, **payload}}, source="event") → trigger_count += 1, last_fired_at stamped, state persisted.
+
+Delivery guarantees (stated, not hidden): fire is at-least-once from the producer's view and immediate on bus delivery; execution runs OFF the event loop (to_thread) so real delay-node sleeps cannot stall polling or delivery; no replay after restart — events during downtime are dropped.
+
+Delay nodes: respect_delays=True for source != "manual" → sleep(seconds clamped to MAX_DELAY_SECONDS=300) in a ThreadPoolExecutor (max 4) inside _traverse; WorkflowTriggerScheduler.tick and the bridge delivery both asyncio.to_thread the whole engine.execute call, so the loop only awaits the offload. Manual runs skip sleeps entirely.
+
+## 39. Vision Recognition Flow (decisions.md #55)
+
+Analyze: POST /vision/analyze (raw image) or /vision/camera/analyze (CameraVision.capture first; 503 names cv2/camera/permission causes) → decode_to_rgb_array (Pillow; 422 on undecodable) → FaceRecognitionService.analyze_frame → _detect_faces (YuNet ONNX 320×320, conf col 14, letterbox + un-map) → _aligned_embedding per face (SFace 112×112, 128-d, ±1/128 normalization) → cosine vs FaceStore (threshold 0.50 env-tunable) → match or honest "unknown person"/"no persons enrolled" → ObjectDetectorONNX.detect (YOLOv8n 640×640 letterbox, center-xywh→corners, NMS, un-map to original px) → VisionResult with backend provenance.
+
+Enroll: POST /vision/enroll?name=X → largest detected face → embedding → FaceStore.add_sample (JSON persisted at models/vision/known_faces.json).
+
+Honesty: missing model = named reason (file + scripts/fetch_vision_models.py pointer), backend "onnx"|"none"|"llm-description" on every result, empty results are empty. The legacy LLM-as-detector path (which returned prose as fake detections with invented confidences and never attached the image) is dead; LLM survives only as labeled description/UI-opinion endpoints.
+
+## 41. Self-Reliance Flow (decisions.md #59)
+
+Self-heal (background): lifespan starts SelfHealingLoop (600s) → run_cycle(): checks run in order (disk_space → flush_temp, event_loop_lag → force_gc, memory_pressure → force_gc, trigger_scheduler → restart_trigger_scheduler) → issues diagnosed by repair_action → repairs run (monitoring/repair.py routines, or the scheduler restarter) → VERIFY re-runs only the fired checks → recovered[] / still_unhealthy[] / degraded (critical unresolved) → SELF_HEAL audit entry → /status services.self_healing. Injected checks + fake repairs in tests; skipped ≠ healthy; recovery requires a passing re-run.
+
+Self-edit (tool: self_code_edit, CONFIRM): agent proposes (path, old_string, new_string, reason) → validation (reason required; protected markers refuse: tests/, test_, conftest, security, auth, identity, audit, secrets, this tool, self_heal) → file read; old_string must match EXACTLY ONCE → checkpoint (commit target file's dirty state on current branch, DASH git-identity fallback) → apply replace(1) → GATE: pytest tests -q -x (real subprocess, 900s cap, output tail captured) → green: git commit "self-edit ..." / red: restore in-memory pre-edit content to that file only + git checkout -- file → SELF_CODE_EDIT audit entry + history. Every attempt (kept/rolled back/aborted) is on the record.
+
+## 42. Guardian Flow (decisions.md #60)
+
+Scan loop: lifespan starts Guardian (60s) → run_scan(): listeners + processes via psutil in worker threads, then audit sweep → incidents recorded (GUARDIAN_INCIDENT audit entry, severity-labeled) → respond() per incident, rate-limited per key: notify (desktop) + publish guardian.<kind> on the event bus; cooldown-skip or unavailable-skip reported honestly.
+
+Listeners: scan 1 = baseline (trusted) → later scans diff; new (port, process) = incident (warning on uncommon ports). Processes: small pattern list (xmrig/nc/mimikatz-class) → critical, pid named, never auto-killed. Failed logins: login route logs source_ip + feeds record_login_failure live; per-IP burst 8/5min → warning, global 2x → critical; audit sweep backfills.
+
+## 43. Vision Watch Flow (decisions.md #62)
+
+Every 30s (backoff ×2 per consecutive failure, ×32 cap): capture frame →
+decode+analyze in a thread → classify. Known person (recognizer matched,
+never watcher-guessed) → `vision.person_seen` + `persons_seen` count.
+Unknown face → `unknown_person`, no identity guessed. Objects only →
+`scene` summary. Capture/model failure → named cause verbatim, backoff
+grows; recovery → `watch_recovered` once. Each event (per-key cooldown
+600s) → AgentCore working memory (DASH reasons from it), `vision.*` bus
+event (workflows react), VISION_WATCH audit entry; delivery status is
+recorded per channel and a broken brain never loses the event. Watch:
+`GET /vision/watch/status`, manual cycle: `POST /vision/watch/scan-now`.
+
+## 44. Pause/Resume + History Flow (decisions.md #63)
+
+Triggers tab row → Pause (`PUT /workflows/{id}/schedule/enabled {enabled:false}`)
+→ schedule.enabled=false persisted; scheduler's due_schedules() skips it
+(no fire, no marker; cron/history kept). Resume → re-arms from next
+matching minute. History button → GET /workflows/{id}/executions?limit=20
+→ 10 most recent runs inline (status · time · via source · duration ·
+nodes), overflow counter, honest empty state.

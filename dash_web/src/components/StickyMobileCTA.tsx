@@ -16,7 +16,7 @@ export function StickyMobileCTA() {
         right: 0,
         zIndex: 98,
         padding: "12px 16px",
-        background: "rgba(10, 10, 15, 0.95)",
+        background: "rgba(6, 8, 12, 0.95)",
         backdropFilter: "blur(12px)",
         borderTop: "1px solid var(--border)",
         transform: isVisible ? "translateY(0)" : "translateY(100%)",

@@ -17,6 +17,7 @@ import {
   Smartphone,
   Globe,
   Sliders,
+  Sparkles,
   ShieldCheck,
   Download,
   Trash2,
@@ -28,11 +29,19 @@ import {
   Keyboard,
   Volume2,
   BellOff,
+  Bot,
   Plus,
   X,
 } from "lucide-react";
 import { GlassCard, StatusIndicator } from "@/components/ultron";
 import { PrivacySection } from "@/components/PrivacySection";
+import PlasmaRing from "@/components/PlasmaRing";
+import {
+  ORB_PALETTES,
+  resolveOrbSpeed,
+  resolveOrbWave,
+  useOrbAppearanceStore,
+} from "@/stores/orbAppearanceStore";
 
 export const SettingsPage: React.FC = () => {
   const [providers, setProviders] = useState<any[]>([]);
@@ -56,6 +65,21 @@ export const SettingsPage: React.FC = () => {
   const [sounds, setSounds] = useState<any>(null);
   const [dnd, setDnd] = useState<any>(null);
   const [dndException, setDndException] = useState("");
+  // DASH owner-contact policy (decisions.md #122): proactive digest +
+  // urgency floor + quiet hours, backed by /assistant/preferences.
+  const [assistantPrefs, setAssistantPrefs] = useState<any>(null);
+  const [assistantPrefsSaving, setAssistantPrefsSaving] = useState(false);
+  const [assistantPrefsSavedAt, setAssistantPrefsSavedAt] = useState(0);
+
+  const loadAssistantPrefs = useCallback(async () => {
+    try {
+      const r = await authFetch("/assistant/preferences");
+      if (r?.ok) setAssistantPrefs(await r.json());
+      else setAssistantPrefs(null);
+    } catch {
+      setAssistantPrefs(null); // backend unreachable — honest empty state
+    }
+  }, []);
 
   const loadShortcutSettings = useCallback(async () => {
     try {
@@ -74,7 +98,8 @@ export const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     loadShortcutSettings();
-  }, [loadShortcutSettings]);
+    loadAssistantPrefs();
+  }, [loadShortcutSettings, loadAssistantPrefs]);
 
   const saveShortcut = async (action: string, shortcut: string) => {
     await authFetch("/enhanced/shortcuts/update", {
@@ -191,9 +216,11 @@ export const SettingsPage: React.FC = () => {
     { id: "ai", label: "AI Providers", icon: Cpu },
     { id: "voice", label: "Voice", icon: Mic },
     { id: "appearance", label: "Appearance", icon: Palette },
+    { id: "orb", label: "Orb Studio", icon: Sparkles },
     { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
     { id: "sounds", label: "Sounds", icon: Volume2 },
     { id: "dnd", label: "Do Not Disturb", icon: BellOff },
+    { id: "assistant", label: "Assistant", icon: Bot },
     { id: "security", label: "Security", icon: Shield },
     { id: "privacy", label: "Privacy", icon: ShieldCheck },
     { id: "integrations", label: "Integrations", icon: Globe },
@@ -933,6 +960,35 @@ export const SettingsPage: React.FC = () => {
           </div>
         )}
 
+        {activeSection === "assistant" && (
+          <AssistantContactSection
+            prefs={assistantPrefs}
+            saving={assistantPrefsSaving}
+            savedAt={assistantPrefsSavedAt}
+            onReload={() => {
+              authFetch("/assistant/preferences")
+                .then((r) => (r.ok ? r.json() : null))
+                .then((d) => setAssistantPrefs(d))
+                .catch(() => setAssistantPrefs(null));
+            }}
+            onPatch={(patch) => {
+              setAssistantPrefsSaving(true);
+              authFetch("/assistant/preferences", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patch),
+              })
+                .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+                .then((d) => {
+                  setAssistantPrefs(d);
+                  setAssistantPrefsSavedAt(Date.now());
+                })
+                .catch(() => setAssistantPrefsSaving(false))
+                .finally(() => setAssistantPrefsSaving(false));
+            }}
+          />
+        )}
+
         {activeSection === "dnd" && (
           <div>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--dash-text)", marginBottom: 4 }}>
@@ -1181,6 +1237,8 @@ export const SettingsPage: React.FC = () => {
             </GlassCard>
           </div>
         )}
+
+        {activeSection === "orb" && <OrbStudioSection />}
 
         {activeSection === "security" && (
           <div>
@@ -1556,4 +1614,467 @@ export const SettingsPage: React.FC = () => {
   );
 };
 
+/**
+ * Orb Studio — customize the DASH core orb's palette, speed and wave height.
+ * Settings persist via orbAppearanceStore and apply live to all three orb
+ * surfaces (home, voice, floating). Includes a live WebGL preview.
+ */
+function OrbStudioSection() {
+  const appearance = useOrbAppearanceStore();
+  const [customDraft, setCustomDraft] = useState<string>(
+    appearance.customColors.join(", "),
+  );
+
+  const isCustom = appearance.paletteId === "custom";
+  const previewColors = isCustom
+    ? appearance.customColors
+    : (ORB_PALETTES.find((p) => p.id === appearance.paletteId)?.colors ?? [
+        "#3fa9f5",
+        "#a855f7",
+        "#e200ff",
+      ]);
+
+  const applyCustomDraft = () => {
+    const parsed = customDraft
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean)
+      .slice(0, 5);
+    if (parsed.length > 0) {
+      appearance.setCustomColors(parsed);
+      appearance.setPalette("custom");
+    }
+  };
+
+  return (
+    <div>
+      <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--dash-text)", marginBottom: 4 }}>
+        Orb Studio
+      </h2>
+      <p style={{ fontSize: 12, color: "var(--dash-text-secondary)", marginBottom: 20 }}>
+        Customize the core orb's colors and motion. Applies live to the home orb,
+        voice orb, and floating orb.
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 16, alignItems: "start" }}>
+        {/* Left: live preview */}
+        <GlassCard padding={16}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--dash-text)", marginBottom: 12 }}>
+            Live Preview
+          </div>
+          <div style={{ width: "100%", aspectRatio: "1 / 1", position: "relative" }}>
+            <PlasmaRing
+              background="transparent"
+              colors={previewColors}
+              speed={resolveOrbSpeed(appearance, 90)}
+              waveHeight={resolveOrbWave(appearance, 24)}
+              scale={28}
+              density={56}
+              style={{ borderRadius: "var(--dash-radius-md)" }}
+            />
+          </div>
+        </GlassCard>
+
+        {/* Right: controls */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Palette presets */}
+          <GlassCard padding={16}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--dash-text)", marginBottom: 12 }}>
+              Palette
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8 }}>
+              {ORB_PALETTES.map((p) => {
+                const selected = appearance.paletteId === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => appearance.setPalette(p.id)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "8px 10px",
+                      borderRadius: "var(--dash-radius-sm)",
+                      background: selected ? "var(--ultron-surface)" : "var(--dash-bg-subtle)",
+                      border: selected ? "1px solid var(--dash-accent)" : "1px solid var(--dash-border-subtle)",
+                      boxShadow: selected ? "0 0 12px var(--dash-accent-glow)" : "none",
+                      cursor: "pointer",
+                      color: "var(--dash-text)",
+                      textAlign: "left",
+                    }}
+                  >
+                    {/* swatch */}
+                    {p.colors.length > 0 ? (
+                      <span
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 6,
+                          flexShrink: 0,
+                          background: `linear-gradient(135deg, ${p.colors.join(", ")})`,
+                          border: "1px solid var(--dash-border)",
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 6,
+                          flexShrink: 0,
+                          background:
+                            "linear-gradient(135deg, #3fa9f5, #a855f7, #ef4444, #22c55e)",
+                          border: "1px solid var(--dash-border)",
+                        }}
+                      />
+                    )}
+                    <span style={{ fontSize: 11 }}>{p.label}</span>
+                    {selected && <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--dash-accent)" }}>✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </GlassCard>
+
+          {/* Custom colors */}
+          <GlassCard padding={16}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--dash-text)", marginBottom: 4 }}>
+              Custom Palette
+            </div>
+            <div style={{ fontSize: 11, color: "var(--dash-text-muted)", marginBottom: 10 }}>
+              Up to 5 hex colors, comma separated (e.g. #ff3300, #0055ff). The ring
+              ramps between stops pole-to-pole.
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                value={customDraft}
+                onChange={(e) => setCustomDraft(e.target.value)}
+                placeholder="#3fa9f5, #a855f7, #e200ff"
+                style={{
+                  flex: 1,
+                  padding: "8px 10px",
+                  borderRadius: "var(--dash-radius-sm)",
+                  background: "var(--dash-bg-subtle)",
+                  border: "1px solid var(--dash-border)",
+                  color: "var(--dash-text)",
+                  fontSize: 12,
+                  fontFamily: "JetBrains Mono, monospace",
+                }}
+              />
+              <input
+                type="color"
+                value={/^#[0-9a-fA-F]{6}$/.test(previewColors[0] ?? "") ? previewColors[0] : "#3fa9f5"}
+                onChange={(e) => {
+                  appearance.setCustomColors([e.target.value, ...appearance.customColors].slice(0, 5));
+                  appearance.setPalette("custom");
+                  setCustomDraft([e.target.value, ...appearance.customColors].slice(0, 5).join(", "));
+                }}
+                title="Add a color"
+                style={{
+                  width: 36,
+                  height: 34,
+                  padding: 0,
+                  border: "1px solid var(--dash-border)",
+                  borderRadius: "var(--dash-radius-sm)",
+                  background: "transparent",
+                  cursor: "pointer",
+                }}
+              />
+              <button
+                onClick={applyCustomDraft}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: "var(--dash-radius-sm)",
+                  background: "var(--ultron-surface)",
+                  border: "1px solid var(--dash-accent)",
+                  color: "var(--dash-accent)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Apply
+              </button>
+            </div>
+          </GlassCard>
+
+          {/* Speed + wave sliders */}
+          <GlassCard padding={16}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dash-text)", display: "flex", alignItems: "center", gap: 6 }}>
+                    <Sparkles size={13} style={{ color: "var(--dash-accent)" }} /> Wave speed
+                  </span>
+                  <span style={{ fontSize: 11, fontFamily: "JetBrains Mono, monospace", color: "var(--dash-accent)" }}>
+                    {appearance.speedPercent}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={200}
+                  step={5}
+                  value={appearance.speedPercent}
+                  onChange={(e) => appearance.setSpeedPercent(Number(e.target.value))}
+                  style={{ width: "100%", accentColor: "var(--dash-accent)" }}
+                />
+              </div>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--dash-text)", display: "flex", alignItems: "center", gap: 6 }}>
+                    <Sliders size={13} style={{ color: "var(--dash-accent)" }} /> Wave height
+                  </span>
+                  <span style={{ fontSize: 11, fontFamily: "JetBrains Mono, monospace", color: "var(--dash-accent)" }}>
+                    {appearance.wavePercent}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={200}
+                  step={5}
+          value={appearance.wavePercent}
+                  onChange={(e) => appearance.setWavePercent(Number(e.target.value))}
+                  style={{ width: "100%", accentColor: "var(--dash-accent)" }}
+                />
+              </div>
+            </div>
+          </GlassCard>
+
+          <button
+            onClick={() => {
+              appearance.resetOrbAppearance();
+              setCustomDraft(appearance.customColors.join(", "));
+            }}
+            style={{
+              alignSelf: "flex-start",
+              padding: "7px 14px",
+              borderRadius: "var(--dash-radius-sm)",
+              background: "transparent",
+              border: "1px solid var(--dash-border)",
+              color: "var(--dash-text-secondary)",
+              fontSize: 12,
+              cursor: "pointer",
+            }}
+          >
+            Reset to defaults
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default SettingsPage;
+
+// ── DASH owner-contact policy (decisions.md #122) ─────────────────────────
+// How DASH may reach the owner proactively: the urgency floor lifts the
+// minimum urgency for desktop/phone notifications, quiet hours silence
+// intrusive channels on a schedule (critical still breaks through — a
+// 3am fire must reach someone), and the digest toggle governs the
+// proactive loop itself. All backed by GET/PUT /assistant/preferences.
+
+const URGENCY_FLOORS = ["low", "normal", "important", "urgent", "critical"];
+
+function AssistantContactSection({
+  prefs,
+  saving,
+  savedAt,
+  onReload,
+  onPatch,
+}: {
+  prefs: any;
+  saving: boolean;
+  savedAt: number;
+  onReload: () => void;
+  onPatch: (patch: Record<string, unknown>) => void;
+}) {
+  if (!prefs) {
+    return (
+      <div>
+        <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--dash-text)", marginBottom: 4 }}>
+          Assistant Contact Policy
+        </h2>
+        <p style={{ fontSize: 12, color: "var(--dash-text-secondary)", marginBottom: 20 }}>
+          How DASH proactively reaches you — urgency floor, quiet hours, and the proactive loop.
+        </p>
+        <GlassCard padding={18}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 12, color: "var(--dash-text-muted)", flex: 1 }}>
+              Could not load assistant preferences. Is the backend running?
+            </span>
+            <button onClick={onReload} className="dash-btn-ghost" style={{ minHeight: 24, fontSize: 11 }}>
+              <RefreshCw size={12} />
+            </button>
+          </div>
+        </GlassCard>
+      </div>
+    );
+  }
+
+  const qh = prefs.quiet_hours || { start: 0, end: 0 };
+  const qhActive = !(qh.start === 0 && qh.end === 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  const setQuietHours = (start: number, end: number) =>
+    onPatch({ quiet_hours: { start, end } });
+
+  return (
+    <div>
+      <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--dash-text)", marginBottom: 4 }}>
+        Assistant Contact Policy
+      </h2>
+      <p style={{ fontSize: 12, color: "var(--dash-text-secondary)", marginBottom: 20 }}>
+        How DASH proactively reaches you — urgency floor, quiet hours, and the proactive loop.
+      </p>
+
+      <GlassCard padding={18} style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <BellOff size={16} style={{ color: qhActive ? "var(--dash-warning)" : "var(--dash-accent)" }} />
+          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--dash-text)", flex: 1 }}>
+            Quiet hours {qhActive ? `active (${pad(qh.start)}:00–${pad(qh.end)}:00)` : "off"}
+          </span>
+          <button
+            onClick={() => setQuietHours(qhActive ? 0 : 22, qhActive ? 0 : 7)}
+            role="switch"
+            aria-checked={qhActive}
+            aria-label="Enable or disable quiet hours"
+            style={{
+              width: 40,
+              height: 22,
+              borderRadius: 11,
+              border: "none",
+              cursor: "pointer",
+              background: qhActive ? "var(--dash-warning)" : "var(--dash-border)",
+              position: "relative",
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: 3,
+                left: qhActive ? 21 : 3,
+                width: 16,
+                height: 16,
+                borderRadius: "50%",
+                background: "#fff",
+                transition: "left var(--dash-transition-fast)",
+              }}
+            />
+          </button>
+        </div>
+        {qhActive && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+            <select
+              value={qh.start}
+              onChange={(e) => setQuietHours(Number(e.target.value), qh.end)}
+              aria-label="Quiet hours start"
+              style={{ padding: "6px 10px", borderRadius: "var(--dash-radius-sm)", border: "1px solid var(--dash-border)", background: "var(--dash-bg)", color: "var(--dash-text)", fontSize: 12 }}
+            >
+              {Array.from({ length: 24 }, (_, h) => (
+                <option key={h} value={h}>{pad(h)}:00</option>
+              ))}
+            </select>
+            <span style={{ fontSize: 12, color: "var(--dash-text-muted)" }}>to</span>
+            <select
+              value={qh.end}
+              onChange={(e) => setQuietHours(qh.start, Number(e.target.value))}
+              aria-label="Quiet hours end"
+              style={{ padding: "6px 10px", borderRadius: "var(--dash-radius-sm)", border: "1px solid var(--dash-border)", background: "var(--dash-bg)", color: "var(--dash-text)", fontSize: 12 }}
+            >
+              {Array.from({ length: 24 }, (_, h) => (
+                <option key={h} value={h}>{pad(h)}:00</option>
+              ))}
+            </select>
+            <span style={{ fontSize: 11, color: "var(--dash-text-muted)" }}>
+              CRITICAL alerts always break through.
+            </span>
+          </div>
+        )}
+      </GlassCard>
+
+      <GlassCard padding={18} style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dash-text)", marginBottom: 8 }}>
+          Notification urgency floor
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {URGENCY_FLOORS.map((level) => {
+            const active = level === (prefs.notification_urgency_floor || "important");
+            return (
+              <button
+                key={level}
+                onClick={() => onPatch({ notification_urgency_floor: level })}
+                aria-pressed={active}
+                aria-label={`Set urgency floor to ${level}`}
+                style={{
+                  padding: "5px 12px",
+                  borderRadius: "var(--dash-radius-sm)",
+                  border: `1px solid ${active ? "var(--dash-accent)" : "var(--dash-border)"}`,
+                  background: active ? "var(--dash-accent)" : "transparent",
+                  color: active ? "#fff" : "var(--dash-text-secondary)",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  textTransform: "capitalize",
+                }}
+              >
+                {level}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ fontSize: 11, color: "var(--dash-text-muted)", marginTop: 8 }}>
+          Desktop notifications fire from “important”; the phone from “urgent”. Raising the floor silences everything below it. Critical is never silenced.
+        </div>
+      </GlassCard>
+
+      <GlassCard padding={18} style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Bot size={16} style={{ color: prefs.proactive_enabled ? "var(--dash-accent)" : "var(--dash-text-muted)" }} />
+          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--dash-text)", flex: 1 }}>
+            Proactive assistant loop {prefs.proactive_enabled ? "enabled" : "disabled"}
+          </span>
+          <button
+            onClick={() => onPatch({ proactive_enabled: !prefs.proactive_enabled })}
+            role="switch"
+            aria-checked={!!prefs.proactive_enabled}
+            aria-label="Enable or disable the proactive assistant loop"
+            style={{
+              width: 40,
+              height: 22,
+              borderRadius: 11,
+              border: "none",
+              cursor: "pointer",
+              background: prefs.proactive_enabled ? "var(--dash-accent)" : "var(--dash-border)",
+              position: "relative",
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: 3,
+                left: prefs.proactive_enabled ? 21 : 3,
+                width: 16,
+                height: 16,
+                borderRadius: "50%",
+                background: "#fff",
+                transition: "left var(--dash-transition-fast)",
+              }}
+            />
+          </button>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--dash-text-muted)", marginTop: 8 }}>
+          When disabled, DASH stops watching for meetings, deadlines, and pending work on its own.
+        </div>
+      </GlassCard>
+
+      <div style={{ fontSize: 11, color: "var(--dash-text-muted)", minHeight: 16 }}>
+        {saving
+          ? "Saving…"
+          : savedAt
+            ? `Saved at ${new Date(savedAt).toLocaleTimeString()}`
+            : ""}
+      </div>
+    </div>
+  );
+}

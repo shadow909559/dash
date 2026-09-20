@@ -65,7 +65,14 @@
           "!*.pyc",
           "!.venv",
           "!venv",
-          "!.git"
+          "!.git",
+          "!.env",
+          "!.env.*",
+          "!*.env",
+          "!*.env.*",
+          "!*.key",
+          "!*.pem",
+          "!secrets*"
         ]
       }
     ],
@@ -75,6 +82,7 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,

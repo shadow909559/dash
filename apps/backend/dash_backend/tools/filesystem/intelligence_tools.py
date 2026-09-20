@@ -16,6 +16,7 @@ from typing import Any
 from dash_backend.logging_config import get_logger
 from dash_backend.tools.base_tool import BaseTool, ToolParameter, ToolContext, PermissionLevel
 from dash_backend.tools.tool_result import ToolResult, ToolStatus
+from dash_backend.tools.filesystem.filesystem_service import resolve_path_within_sandbox
 
 logger = get_logger(__name__)
 
@@ -23,8 +24,23 @@ IS_WINDOWS = sys.platform == "win32"
 
 
 def _resolve(path: str) -> Path:
-    """Resolve a user-supplied path to an absolute path."""
+    """Resolve a user-supplied path to an absolute path (READ-ONLY tools)."""
     return Path(path).expanduser().resolve()
+
+
+def _resolve_sandboxed(path: str) -> Path:
+    """Resolve a path INSIDE the filesystem sandbox (write tools).
+
+    Decisions.md #91: CreateFileTool/CreateFolderTool/Zip/Unzip/Duplicate
+    wrote anywhere on disk with no containment — a real sandbox bypass
+    exposed live by the task orchestrator (create_file accepted an absolute
+    Temp path while write_file refused the same path). All tools that
+    CREATE or MODIFY files/folders now go through the same
+    ``resolve_path_within_sandbox`` check as the filesystem service tools;
+    read-only scanners keep unrestricted read by design.
+    """
+    _, resolved = resolve_path_within_sandbox(path)
+    return resolved
 
 
 class FindLargeFilesTool(BaseTool):
@@ -145,7 +161,7 @@ class CreateFileTool(BaseTool):
         if not path_str:
             return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message="path required")
         try:
-            p = _resolve(path_str)
+            p = _resolve_sandboxed(path_str)
             if p.exists() and not overwrite:
                 return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message=f"File already exists: {p}")
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -171,7 +187,7 @@ class CreateFolderTool(BaseTool):
         if not path_str:
             return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message="path required")
         try:
-            p = _resolve(path_str)
+            p = _resolve_sandboxed(path_str)
             p.mkdir(parents=True, exist_ok=True)
             return ToolResult(
                 tool_name=self.name, status=ToolStatus.SUCCESS,
@@ -202,7 +218,7 @@ class ZipTool(BaseTool):
                 return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message=f"Source not found: {src}")
             if not dst:
                 dst = str(src_path) + ".zip"
-            dst_path = _resolve(dst)
+            dst_path = _resolve_sandboxed(dst)
             dst_path.parent.mkdir(parents=True, exist_ok=True)
 
             with zipfile.ZipFile(dst_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -243,7 +259,7 @@ class UnzipTool(BaseTool):
                 return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message=f"Not a valid zip: {archive}")
             if not dst:
                 dst = str(archive_path.parent / archive_path.stem)
-            dst_path = _resolve(dst)
+            dst_path = _resolve_sandboxed(dst)
             dst_path.mkdir(parents=True, exist_ok=True)
 
             with zipfile.ZipFile(archive_path, "r") as zf:
@@ -296,7 +312,7 @@ class DuplicateItemTool(BaseTool):
         if not path_str:
             return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message="path required")
         try:
-            src = _resolve(path_str)
+            src = _resolve_sandboxed(path_str)
             if not src.exists():
                 return ToolResult(tool_name=self.name, status=ToolStatus.ERROR, error_message=f"Not found: {src}")
             base = src.stem + " copy" + src.suffix

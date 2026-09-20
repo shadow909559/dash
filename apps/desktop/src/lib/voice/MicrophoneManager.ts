@@ -11,6 +11,10 @@
  */
 
 import { EventEmitter } from '../EventEmitter';
+import {
+  registerMicAmplitudeSource,
+  type MicAmplitudeHandle,
+} from './micAmplitudeProducer';
 
 export interface MicrophoneDevice {
   deviceId: string;
@@ -30,6 +34,8 @@ export class MicrophoneManager extends EventEmitter {
   private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
+  // Shared mic-amplitude producer registration (#131).
+  private ampHandle: MicAmplitudeHandle | null = null;
   private gainNode: GainNode | null = null;
   private noiseFilter: BiquadFilterNode | null = null;
   private analyser: AnalyserNode | null = null;
@@ -106,6 +112,12 @@ export class MicrophoneManager extends EventEmitter {
       // Create audio processing chain
       this.createAudioChain();
 
+      // Shared producer (#131): its analyser is already wired into this
+      // chain — register it so the orbs pulse while this manager records.
+      if (this.analyser) {
+        this.ampHandle = registerMicAmplitudeSource(this.analyser);
+      }
+
       this.isRecording = true;
       this.emit('started');
 
@@ -131,6 +143,9 @@ export class MicrophoneManager extends EventEmitter {
       }
 
       // Disconnect audio nodes
+      this.ampHandle?.stop();
+      this.ampHandle = null;
+
       if (this.sourceNode) {
         this.sourceNode.disconnect();
         this.sourceNode = null;

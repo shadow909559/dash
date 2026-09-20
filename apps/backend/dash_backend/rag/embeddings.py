@@ -13,6 +13,7 @@ from typing import List
 import httpx
 
 from dash_backend.config import get_settings
+from dash_backend.http_client import get_shared_client
 from dash_backend.logging_config import get_logger
 from dash_backend.cache.simple_cache import get_cache
 
@@ -107,25 +108,26 @@ async def _ollama_embedding(text: str) -> list[float] | None:
     base = settings.ollama_base_url.rstrip("/")
     model = settings.ollama_embedding_model or "nomic-embed-text"
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            result = await _ollama_embed_batch_api(client, base, model, [text])
-            if result is not None:
-                cache = get_cache()
-                cache.set(f"embedding_{text[:500]}", result[0], ttl=86400.0)
-                return result[0]
+        # Shared client: reuses the TCP connection for every embedding call
+        client = get_shared_client(60.0)
+        result = await _ollama_embed_batch_api(client, base, model, [text])
+        if result is not None:
+            cache = get_cache()
+            cache.set(f"embedding_{text[:500]}", result[0], ttl=86400.0)
+            return result[0]
 
-            # Legacy fallback: one text per request.
-            resp = await client.post(
-                f"{base}/api/embeddings", json={"model": model, "prompt": text}
-            )
-            resp.raise_for_status()
-            emb = resp.json().get("embedding")
-            if isinstance(emb, list):
-                embedding = [float(x) for x in emb]
-                get_cache().set(f"embedding_{text[:500]}", embedding, ttl=86400.0)
-                return embedding
-            logger.warning("Ollama embedding response missing 'embedding' field")
-            return None
+        # Legacy fallback: one text per request.
+        resp = await client.post(
+            f"{base}/api/embeddings", json={"model": model, "prompt": text}
+        )
+        resp.raise_for_status()
+        emb = resp.json().get("embedding")
+        if isinstance(emb, list):
+            embedding = [float(x) for x in emb]
+            get_cache().set(f"embedding_{text[:500]}", embedding, ttl=86400.0)
+            return embedding
+        logger.warning("Ollama embedding response missing 'embedding' field")
+        return None
     except Exception as exc:  # pragma: no cover - network/IO
         logger.warning("Ollama embedding request failed: %s", exc)
         return None
@@ -182,26 +184,27 @@ async def create_embeddings_batch(texts: List[str]) -> List[list[float] | None]:
         payload = {"input": uncached_texts, "model": model}
         
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.post(url, json=payload, headers=headers)
-                resp.raise_for_status()
-                data = resp.json()
-                
-                # OpenAI batch embeddings response structure
-                embeddings_data = data.get("data", [])
-                
-                # Map results back to original indices
-                for idx, emb_data in zip(uncached_indices, embeddings_data):
-                    emb = emb_data.get("embedding")
-                    if isinstance(emb, list):
-                        embedding = [float(x) for x in emb]
-                        # Cache the result
-                        cache_key = f"embedding_{uncached_texts[uncached_indices.index(idx)][:500]}"
-                        cache.set(cache_key, embedding, ttl=86400.0)
-                        results[idx] = embedding
-                    else:
-                        results[idx] = None
-                        
+            # Shared client: reuses the TCP connection across calls
+            client = get_shared_client(60.0)
+            resp = await client.post(url, json=payload, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            # OpenAI batch embeddings response structure
+            embeddings_data = data.get("data", [])
+            
+            # Map results back to original indices
+            for idx, emb_data in zip(uncached_indices, embeddings_data):
+                emb = emb_data.get("embedding")
+                if isinstance(emb, list):
+                    embedding = [float(x) for x in emb]
+                    # Cache the result
+                    cache_key = f"embedding_{uncached_texts[uncached_indices.index(idx)][:500]}"
+                    cache.set(cache_key, embedding, ttl=86400.0)
+                    results[idx] = embedding
+                else:
+                    results[idx] = None
+                    
         except Exception as exc:
             logger.warning("Batch embedding request failed: %s", exc)
             # Fill uncached results with None
@@ -214,23 +217,24 @@ async def create_embeddings_batch(texts: List[str]) -> List[list[float] | None]:
         base = settings_.ollama_base_url.rstrip("/")
         model = settings_.ollama_embedding_model or "nomic-embed-text"
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                embs = await _ollama_embed_batch_api(client, base, model, uncached_texts)
-                if embs is None:
-                    # Legacy fallback: sequential per-text requests.
-                    embs = []
-                    for text in uncached_texts:
-                        resp = await client.post(
-                            f"{base}/api/embeddings",
-                            json={"model": model, "prompt": text},
-                        )
-                        resp.raise_for_status()
-                        emb = resp.json().get("embedding")
-                        embs.append([float(x) for x in emb] if isinstance(emb, list) else None)
-                for idx, emb in zip(uncached_indices, embs):
-                    if emb is not None:
-                        cache.set(f"embedding_{uncached_texts[uncached_indices.index(idx)][:500]}", emb, ttl=86400.0)
-                        results[idx] = emb
+            # Shared client: reuses the TCP connection across calls
+            client = get_shared_client(120.0)
+            embs = await _ollama_embed_batch_api(client, base, model, uncached_texts)
+            if embs is None:
+                # Legacy fallback: sequential per-text requests.
+                embs = []
+                for text in uncached_texts:
+                    resp = await client.post(
+                        f"{base}/api/embeddings",
+                        json={"model": model, "prompt": text},
+                    )
+                    resp.raise_for_status()
+                    emb = resp.json().get("embedding")
+                    embs.append([float(x) for x in emb] if isinstance(emb, list) else None)
+            for idx, emb in zip(uncached_indices, embs):
+                if emb is not None:
+                    cache.set(f"embedding_{uncached_texts[uncached_indices.index(idx)][:500]}", emb, ttl=86400.0)
+                    results[idx] = emb
         except Exception as exc:
             logger.warning("Batch embedding request failed: %s", exc)
             for idx in uncached_indices:

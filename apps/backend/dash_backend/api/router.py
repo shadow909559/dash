@@ -38,6 +38,8 @@ from dash_backend.api.routes.ollama_proxy import router as ollama_proxy_router
 from dash_backend.api.routes.ec2_control import router as ec2_control_router
 from dash_backend.api.routes.ollama_tunnel import router as ollama_tunnel_router
 from dash_backend.autonomous.api import router as agent_router
+from dash_backend.api.routes.task_routes import router as task_routes_router
+from dash_backend.assistant.routes import router as assistant_routes_router
 from dash_backend.api.routes.fine_tuning import router as fine_tuning_router
 from dash_backend.api.routes.context import router as context_router
 from dash_backend.api.routes.proactive import router as proactive_router
@@ -53,6 +55,8 @@ from dash_backend.api.routes.phase3_features import router as phase3_features_ro
 from dash_backend.api.routes.phase4_features import router as phase4_features_router
 from dash_backend.api.routes.integrations_all import router as integrations_all_router
 from dash_backend.api.routes.integration_connectors import router as integration_connectors_router
+from dash_backend.api.routes.vision_routes import router as vision_routes_router
+from dash_backend.api.routes.voice_wake_routes import router as voice_wake_routes_router
 
 
 api_router = APIRouter()
@@ -293,6 +297,18 @@ api_router.include_router(
     tags=["agent"],
 )
 
+# Persistent task orchestrator (decisions.md #90) — /agent/task/*
+api_router.include_router(
+    task_routes_router,
+    tags=["agent-tasks"],
+)
+
+# Assistant: clients, requirements, meetings, approvals, attention (decisions.md #92)
+api_router.include_router(
+    assistant_routes_router,
+    tags=["assistant"],
+)
+
 # Legal documents (privacy policy, terms, accessibility) — no auth required
 api_router.include_router(
     legal_router,
@@ -310,6 +326,18 @@ api_router.include_router(
 api_router.include_router(
     enhanced_features_router,
     tags=["enhanced"],
+)
+
+# Vision recognition: real ONNX object detection + face recognition (Phase 1)
+api_router.include_router(
+    vision_routes_router,
+    tags=["vision"],
+)
+
+# Always-listening wake-word loop (server-side mic → whisper → chat → TTS)
+api_router.include_router(
+    voice_wake_routes_router,
+    tags=["voice"],
 )
 
 # Phase 2 features: email, security, voice, browser, collaboration, AI, infrastructure

@@ -30,6 +30,7 @@ from typing import Any, AsyncIterator
 import httpx
 
 from dash_backend.config import get_settings
+from dash_backend.http_client import get_shared_client
 from dash_backend.llm.openai_message_validator import validate_openai_message_history
 from dash_backend.logging_config import get_logger
 from dash_backend.security.input_sanitizer import sanitize_for_llm, sanitize_memory_context
@@ -388,7 +389,7 @@ async def _native_tool_calls_ollama(
         "messages": payload_messages,
         "stream": False,
         "tools": tools,
-        "options": {"num_ctx": settings.ollama_num_ctx},
+        "options": {"num_ctx": settings.ollama_num_ctx, **({"num_thread": settings.ollama_num_thread} if settings.ollama_num_thread else {})},
     }
     if not settings.ollama_thinking:
         payload["think"] = False
@@ -398,10 +399,11 @@ async def _native_tool_calls_ollama(
         payload["keep_alive"] = settings.ollama_keep_alive
 
     url = f"{settings.ollama_base_url.rstrip('/')}/api/chat"
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        resp = await client.post(url, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+    # Shared client: reuses the TCP connection instead of re-connecting per call
+    client = get_shared_client(180.0)
+    resp = await client.post(url, json=payload)
+    resp.raise_for_status()
+    data = resp.json()
 
     message = data.get("message") or {}
     assistant_text = message.get("content") or ""
@@ -469,7 +471,7 @@ async def stream_chat_completion_with_native_tool_calls(
         "messages": payload_messages,
         "stream": True,
         "tools": tools,
-        "options": {"num_ctx": settings.ollama_num_ctx},
+        "options": {"num_ctx": settings.ollama_num_ctx, **({"num_thread": settings.ollama_num_thread} if settings.ollama_num_thread else {})},
     }
     # Resolve model via provider manager for consistency with non-stream path.
     try:
@@ -496,8 +498,9 @@ async def stream_chat_completion_with_native_tool_calls(
     raw_tool_calls: list[dict[str, Any]] = []
 
     try:
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            async with client.stream("POST", url, json=payload) as resp:
+        # Shared client: reuses the TCP connection across chat messages
+        client = get_shared_client(180.0)
+        async with client.stream("POST", url, json=payload) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
                     if not line.strip():
@@ -604,10 +607,11 @@ async def chat_completion_with_native_tool_calls(
     if tool_choice is not None:
         payload["tool_choice"] = tool_choice
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(url, json=payload, headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
+    # Shared client: reuses the TCP connection across calls
+    client = get_shared_client(60.0)
+    resp = await client.post(url, json=payload, headers=headers)
+    resp.raise_for_status()
+    data = resp.json()
 
     choice0 = (data.get("choices") or [{}])[0]
     message = choice0.get("message") or {}
@@ -674,8 +678,9 @@ async def _stream_openai(
 
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            async with client.stream("POST", url, json=payload, headers=headers) as response:
+        # Shared client: reuses the TCP connection across calls
+        client = get_shared_client(60.0)
+        async with client.stream("POST", url, json=payload, headers=headers) as response:
                 if response.status_code != 200:
                     error_text = await response.aread()
                     logger.error(
@@ -774,6 +779,9 @@ async def _stream_ollama(
         "options": {
             # Configurable context window (memory/history must fit).
             "num_ctx": get_settings().ollama_num_ctx,
+            # Measured inference-thread pin (#136): 8 threads on this 16-logical-
+            # core box beat Ollama's default. None = keep Ollama's default.
+            **({"num_thread": get_settings().ollama_num_thread} if get_settings().ollama_num_thread else {}),
             # Limit response length to prevent huge payloads
             "num_predict": 1024,
         },
@@ -792,8 +800,9 @@ async def _stream_ollama(
 
     for attempt in range(max_retries):
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                async with client.stream("POST", url, json=payload) as response:
+            # Shared client: reuses the TCP connection across retries
+            client = get_shared_client(120.0)
+            async with client.stream("POST", url, json=payload) as response:
                     if response.status_code != 200:
                         error_text = await response.aread()
                         logger.error(

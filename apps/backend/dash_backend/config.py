@@ -39,6 +39,16 @@ class Settings(BaseSettings):
     # Stored as comma-separated string from env, parsed via property below
     cors_origins_raw: str = "http://localhost:5173,http://10.0.2.2:8000,ws://10.0.2.2:8000,https://dash-backend.fly.dev,*"
 
+    # Allow any localhost/127.0.0.1 port to call the API (decisions.md #75).
+    # A browser on this machine is trusted for dev regardless of which port
+    # its dev server drifted to (vite: 5173/5174/...). Explicit origins
+    # above remain the mechanism for REMOTE hosts; this toggle is for the
+    # machine itself. Override with DASH_CORS_LOCALHOST_DEV=0.
+    cors_localhost_dev: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("DASH_CORS_LOCALHOST_DEV", "cors_localhost_dev"),
+    )
+
     database_url: str = "postgresql+asyncpg://dash:dash@localhost:5432/dash"
     redis_url: str = "redis://localhost:6379/0"
 
@@ -100,6 +110,10 @@ class Settings(BaseSettings):
     ollama_embedding_model: str = "nomic-embed-text"
     # Thinking models (qwen3/deepseek-r1) spend tokens+time on hidden reasoning.
     ollama_thinking: bool = False  # Disabled for fast response; enable for qwen3 thinking
+    # Worker threads for llama.cpp inference. None = Ollama's default (often
+    # oversubscribes hyperthreads). Measured sweet spot on 16 logical cores:
+    # 8 threads = -11% TTFT, -19% total on dash-finetuned (#136).
+    ollama_num_thread: int | None = None
     # Ollama context window; must fit system prompt + memory + history.
     ollama_num_ctx: int = Field(default=4096, gt=128)
     # How long Ollama keeps the model in memory between requests. Some

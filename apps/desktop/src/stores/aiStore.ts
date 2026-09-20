@@ -4,6 +4,33 @@ import type { OrbState } from "@/three/aistates";
 import type { DASHState } from "@/stores/dashState";
 import { mapLegacyState, mapLegacyOrbState } from "@/stores/dashState";
 
+/** Backend presence state → orb DASHState (decisions.md #117).
+ *  States without a dedicated orb visual map to the closest existing
+ *  animation — never invent new visuals per backend state here. */
+export function mapPresenceState(p: string): DASHState {
+  const mapping: Record<string, DASHState> = {
+    idle: "idle",
+    listening: "listening",
+    thinking: "thinking",
+    speaking: "speaking",
+    interrupted: "listening",
+    processing: "thinking",
+    executing: "executing",
+    observing: "researching",
+    monitoring: "background",
+    waiting_for_approval: "warning",
+    waiting_for_user: "warning",
+    verifying: "coding",
+    recovering: "debugging",
+    calling: "executing",
+    in_call: "executing",
+    in_meeting: "researching",
+    paused: "background",
+    error: "error",
+  };
+  return mapping[p] ?? "idle";
+}
+
 type AIState = "idle" | "listening" | "thinking" | "researching" | "talking" | "processing" | "waiting" | "sleeping" | "reacting";
 
 /** Small status-pill state (top-right). Distinct from the full AIState. */
@@ -68,6 +95,16 @@ export interface AIStore {
   /** Small top-right status pill state. */
   coreStatus: AICoreStatus;
   setCoreStatus: (status: AICoreStatus) => void;
+
+  /** Backend PresenceEngine signal (decisions.md #117). */
+  presenceState: string | null;
+  presenceSource: string;
+  presenceDetail: string;
+  applyPresence: (p: { state: string; source?: string; detail?: string }) => void;
+
+  /** Backend wake-loop interim transcript (decisions.md #118). */
+  voicePartial: { text: string; final: boolean } | null;
+  applyVoicePartial: (p: { text: string; final: boolean }) => void;
   
   // Separate system statuses
   systemStatus: SystemStatus;
@@ -218,6 +255,34 @@ export const useAIStore = create<AIStore>((set, get) => ({
   },
   coreStatus: "idle",
   setCoreStatus: (status) => set({ coreStatus: status }),
+
+  // PresenceEngine (decisions.md #117): the backend's one authoritative
+  // presence signal, fused from voice/orchestrator/approvals/meetings.
+  // The orb prefers this over local heuristics when the backend reports.
+  presenceState: null as null | string,
+  presenceSource: "" as string,
+  presenceDetail: "" as string,
+  applyPresence: (p: { state: string; source?: string; detail?: string }) => {
+    const mapped = mapPresenceState(p.state);
+    set({
+      presenceState: p.state,
+      presenceSource: p.source || "",
+      presenceDetail: p.detail || "",
+      dashState: mapped,
+    });
+  },
+
+  // Backend wake-loop interim transcript: shown as DASH HEARS while the
+  // server-side loop transcribes (decisions.md #118). final:true clears
+  // the interim line because the final command transcript publishes right
+  // after as a completed history entry.
+  voicePartial: null as null | { text: string; final: boolean },
+  applyVoicePartial: (p: { text: string; final: boolean }) => {
+    set({
+      voicePartial: p,
+      currentSpeech: p.text,
+    });
+  },
   
   // Initialize separate system statuses
   systemStatus: "online",

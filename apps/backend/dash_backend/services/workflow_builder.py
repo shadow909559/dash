@@ -1,14 +1,27 @@
 """Workflow builder: templates, triggers, conditional logic, error handling, execution history."""
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import copy
-import json
 import logging
+import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _push_trigger_update(workflow_id: str, engine: Any = None) -> None:
+    """Best-effort WS push of trigger state (decisions.md #80). Never
+    raises, no-op without connected clients — safe on every fire/pause
+    path, including under test doubles."""
+    try:
+        from dash_backend.services.trigger_push import push_trigger_update
+        push_trigger_update(workflow_id, engine=engine)
+    except Exception:  # noqa: BLE001 — a push must never break a fire
+        pass
 
 
 # ── Workflow Templates ─────────────────────────────────────────────────────
@@ -126,6 +139,176 @@ def _state_path() -> _Path:
 # history panel survives backend restarts without unbounded growth.
 MAX_PERSISTED_EXECUTIONS = 500
 
+# Delay-node honesty limits (decisions.md #57): a delay is real, but one
+# workflow must not be able to pin a worker thread for an hour. Larger
+# values are clamped (and the run record shows the clamped duration).
+MAX_DELAY_SECONDS = 300.0
+MAX_DELAY_WORKERS = 4
+
+# Real action execution (decisions.md #72): bounded worker pool so action
+# nodes dispatch actual side effects without being able to pin the
+# traversal thread or the event loop. An action longer than the timeout is
+# recorded as failed — the run record tells the truth either way.
+ACTION_WORKERS = 2
+ACTION_TIMEOUT_S = 30.0
+
+
+# ── Cron evaluation (workflow trigger schedules) ──────────────────────────
+
+# Cron convention: 0=Sunday … 6=Saturday (sun/mon/... aliases map to it).
+_WEEKDAY_ALIASES = {"sun": 0, "mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6}
+_MONTH_ALIASES = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+_CRON_FIELD_NAMES = ("minute", "hour", "day-of-month", "month", "day-of-week")
+
+
+class InvalidCronError(ValueError):
+    """A schedule expression the engine can evaluate honestly.
+
+    The supported dialect is limited (see _parse_cron_field) — anything else
+    is REJECTED rather than silently mis-firing, because a trigger that
+    never fires (or fires at the wrong times) is a dishonest UI.
+    """
+
+
+def _parse_cron_field(field: str, name: str) -> frozenset[int]:
+    """Parse one cron field into the set of matching values.
+
+    Supports: "*", "*/N" steps, "a,b,c" lists, "a-b" ranges, and single
+    values. Day-of-week accepts 0-6 (cron convention: 0=Sunday) plus
+    mon/tue/... aliases; month accepts 1-12 plus jan/feb/... aliases.
+    Values outside the field's range are rejected (a minute of 61 would
+    otherwise be stored as a trigger that silently never fires).
+    Everything else raises InvalidCronError — the caller decides whether
+    that means "reject the schedule" or "skip it and log".
+    """
+    bounds = {
+        "minute": (0, 59),
+        "hour": (0, 23),
+        "day-of-month": (1, 31),
+        "month": (1, 12),
+        "day-of-week": (0, 6),
+    }[name]
+    aliases = _WEEKDAY_ALIASES if name == "day-of-week" else _MONTH_ALIASES if name == "month" else None
+    field = field.strip().lower()
+    values: set[int] = set()
+    for part in field.split(","):
+        part = part.strip()
+        step = 1
+        if "/" in part:
+            base, step_s = part.split("/", 1)
+            try:
+                step = int(step_s)
+            except ValueError:
+                raise InvalidCronError(f"invalid step in {name} field: {part!r}")
+            if step < 1:
+                raise InvalidCronError(f"step must be >= 1 in {name} field: {part!r}")
+        else:
+            base = part
+
+        if base in ("*", ""):
+            if base == "" and "/" not in part:
+                raise InvalidCronError(f"empty {name} field")
+            lo, hi = bounds
+            values.update(range(lo, hi + 1, step))
+            continue
+
+        if aliases and base in aliases:
+            base = str(aliases[base])
+
+        if "-" in base and not base.lstrip("-").isdigit():
+            lo_s, hi_s = base.split("-", 1)
+            if aliases:
+                lo_s = str(aliases.get(lo_s, lo_s))
+                hi_s = str(aliases.get(hi_s, hi_s))
+            try:
+                lo, hi = int(lo_s), int(hi_s)
+            except ValueError:
+                raise InvalidCronError(f"invalid range in {name} field: {part!r}")
+        else:
+            try:
+                lo = int(base)
+            except ValueError:
+                raise InvalidCronError(f"invalid {name} value: {part!r}")
+            hi = lo
+        values.update(range(lo, hi + 1, step))
+
+    if not values:
+        raise InvalidCronError(f"empty {name} field")
+    lo, hi = bounds
+    if any(v < lo or v > hi for v in values):
+        raise InvalidCronError(f"{name} value out of range ({lo}-{hi}): {field!r}")
+    return frozenset(values)
+
+
+def parse_cron(expression: str) -> tuple[frozenset[int], frozenset[int], frozenset[int], frozenset[int], frozenset[int]]:
+    """Parse a 5-field cron expression (minute hour dom month dow).
+
+    Raises InvalidCronError for anything the engine cannot evaluate exactly
+    (6-field expressions, "?", seconds, unknown names, out-of-range values).
+    """
+    fields = expression.strip().split()
+    if len(fields) != 5:
+        raise InvalidCronError(
+            f"expected 5 cron fields (minute hour day-of-month month day-of-week), got {len(fields)}"
+        )
+    minute, hour, dom, month, dow = (_parse_cron_field(f, n) for f, n in zip(fields, _CRON_FIELD_NAMES))
+    return minute, hour, dom, month, dow
+
+
+def _fields_match(fields: tuple[frozenset[int], ...], now: datetime) -> bool:
+    """True when `now` (a local datetime) matches pre-parsed cron fields.
+
+    Single evaluator for both cron_matches_due() and next_cron_due() —
+    one cron semantics, no drift. DOM/DOW follow standard cron OR
+    semantics: when BOTH are restricted (neither is "*"), a match on
+    either day field fires.
+    """
+    minute, hour, dom, month, dow = fields
+    if now.minute not in minute:
+        return False
+    if now.hour not in hour:
+        return False
+    if now.month not in month:
+        return False
+    dom_restricted = dom != frozenset(range(1, 32))
+    dow_restricted = dow != frozenset(range(0, 7))
+    if dom_restricted and dow_restricted:
+        day_ok = now.day in dom or ((now.weekday() + 1) % 7) in dow
+    else:
+        day_ok = now.day in dom and ((now.weekday() + 1) % 7) in dow
+    return day_ok
+
+
+def cron_matches_due(expression: str, now: datetime) -> bool:
+    """True when `now` (a local datetime) matches the cron expression."""
+    return _fields_match(parse_cron(expression), now)
+
+
+def next_cron_due(expression: str, after: datetime,
+                  horizon_days: int = 366) -> Optional[datetime]:
+    """Next local datetime strictly AFTER `after` matching the expression.
+
+    Scans minute-by-minute with the engine's own field evaluator — what
+    this promises is exactly what due_schedules() will do. Returns None
+    for expressions that never match within the horizon (e.g. Feb 30:
+    the parser accepts it, the calendar never delivers it) — reported as
+    such rather than invented. Invalid expressions also return None; the
+    caller decides whether to log.
+    """
+    try:
+        fields = parse_cron(expression)
+    except InvalidCronError:
+        return None
+    candidate = (after + timedelta(minutes=1)).replace(second=0, microsecond=0)
+    for _ in range(horizon_days * 24 * 60):
+        if _fields_match(fields, candidate):
+            return candidate
+        candidate += timedelta(minutes=1)
+    return None
+
 
 def _trim_executions(executions: list[dict]) -> list[dict]:
     """Keep the newest MAX_PERSISTED_EXECUTIONS entries (list is append-order)."""
@@ -151,6 +334,18 @@ class WorkflowEngine:
         self._executions: list[dict] = []
         self._schedules: dict[str, dict] = {}
         self._webhooks: dict[str, dict] = {}
+        self._event_triggers: dict[str, dict] = {}
+
+        # Real action dispatch (decisions.md #72). Action tools run on a
+        # small dedicated pool under a hard timeout, so a slow or wedged
+        # tool occupies a worker — never the event loop or the traversal
+        # thread indefinitely.
+        self._action_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=ACTION_WORKERS, thread_name_prefix="dash-action"
+        )
+        # Optional override map: action name -> callable(config, context) ->
+        # dict. Tests inject here instead of monkeypatching module globals.
+        self._action_overrides: dict[str, Callable[[dict, dict], dict]] = {}
 
         # Register templates
         for tmpl in WORKFLOW_TEMPLATES:
@@ -162,6 +357,7 @@ class WorkflowEngine:
             }
         self._load_custom()
         self._load_executions()
+        self._load_schedules_and_webhooks()
 
     # ── State file I/O (custom workflows only) ─────────────────────
 
@@ -187,7 +383,14 @@ class WorkflowEngine:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(
                 _json.dumps(
-                    {"version": 1, "custom_workflows": custom, "executions": _trim_executions(self._executions)},
+                    {
+                        "version": 1,
+                        "custom_workflows": custom,
+                        "executions": _trim_executions(self._executions),
+                        "schedules": self._schedules,
+                        "webhooks": self._webhooks,
+                        "event_triggers": self._event_triggers,
+                    },
                     indent=2,
                 ),
                 encoding="utf-8",
@@ -206,6 +409,33 @@ class WorkflowEngine:
                 self._executions = list(data.get("executions", []))[-MAX_PERSISTED_EXECUTIONS:]
         except Exception:
             logger.debug("No prior workflow executions loaded", exc_info=True)
+
+    def _load_schedules_and_webhooks(self) -> None:
+        """Restore trigger schedules + webhooks from the state file.
+
+        Persisted since decisions.md #53: before this, add_schedule only
+        wrote to an in-memory dict, so a backend restart silently dropped
+        every trigger and the scheduler never had anything to fire.
+        Entries pointing at workflows that no longer exist are dropped.
+        """
+        try:
+            import json as _json
+
+            path = self._state_file
+            if not path.exists():
+                return
+            data = _json.loads(path.read_text(encoding="utf-8"))
+            for wf_id, sched in data.get("schedules", {}).items():
+                if wf_id in self._workflows:
+                    self._schedules[wf_id] = sched
+            for wf_id, hook in data.get("webhooks", {}).items():
+                if wf_id in self._workflows:
+                    self._webhooks[wf_id] = hook
+            for wf_id, trig in data.get("event_triggers", {}).items():
+                if wf_id in self._workflows:
+                    self._event_triggers[wf_id] = trig
+        except Exception:
+            logger.debug("No prior workflow schedules/webhooks loaded", exc_info=True)
 
     # ── CRUD ────────────────────────────────────────────────────────
 
@@ -252,6 +482,7 @@ class WorkflowEngine:
         del self._workflows[workflow_id]
         self._schedules.pop(workflow_id, None)
         self._webhooks.pop(workflow_id, None)
+        self._event_triggers.pop(workflow_id, None)
         self._save_custom()
         return {"ok": True}
 
@@ -324,17 +555,115 @@ class WorkflowEngine:
         wf = self._workflows.get(workflow_id)
         if not wf:
             return {"ok": False, "reason": "Workflow not found"}
+        if wf.get("is_template"):
+            return {"ok": False, "reason": "Cannot schedule a template"}
+        # Honest validation: reject expressions the engine cannot evaluate
+        # exactly rather than storing a trigger that will silently never fire.
+        try:
+            parse_cron(cron)
+        except InvalidCronError as exc:
+            return {"ok": False, "reason": f"Unsupported cron expression: {exc}"}
         self._schedules[workflow_id] = {
             "cron": cron,
             "timezone": timezone_,
             "enabled": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_fired_at": None,
+            "last_status": None,
+            "paused_since": None,
+            "skipped_fires": 0,
         }
+        self._save_custom()
         return {"ok": True, "schedule": self._schedules[workflow_id]}
 
     def remove_schedule(self, workflow_id: str) -> dict:
         self._schedules.pop(workflow_id, None)
+        self._save_custom()
         return {"ok": True}
+
+    def set_schedule_enabled(self, workflow_id: str, enabled: bool) -> dict:
+        """Pause (False) or resume (True) a schedule without deleting it.
+
+        A paused schedule keeps its cron, timestamps, and last-fired
+        history; due_schedules() skips it, so the pause is real, not
+        cosmetic. Resume re-arms it from the next matching minute.
+
+        Pausing stamps `paused_since` (the audit line: since WHEN has
+        this been off) and RESUMING clears it — a resumed schedule has
+        no pause to report, and stale pause state can never linger.
+        `skipped_fires` (accrued by due_schedules() while paused) is
+        kept on resume on purpose: it answers "what did pausing cost
+        me?", which stays true after re-arming. add_schedule() clears
+        it, because replacing the cron is a new arrangement.
+        """
+        sched = self._schedules.get(workflow_id)
+        if sched is None:
+            return {"ok": False, "reason": "No schedule for this workflow"}
+        sched["enabled"] = bool(enabled)
+        if enabled:
+            sched["paused_since"] = None
+        else:
+            sched["paused_since"] = datetime.now(timezone.utc).isoformat()
+            sched.setdefault("skipped_fires", 0)
+            sched["last_skipped_minute"] = None  # fresh pause, fresh ledger
+        self._save_custom()
+        _push_trigger_update(workflow_id, engine=self)
+        return {"ok": True, "schedule": sched}
+
+    def set_all_schedules_enabled(self, enabled: bool) -> dict:
+        """Pause or resume EVERY schedule at once (decisions.md #85).
+
+        Delegates each workflow to set_schedule_enabled() so the pause
+        semantics are identical to the single toggle — paused_since stamp,
+        fresh skip ledger, persistence, per-workflow WS push — and this
+        method is deliberately idempotent: schedules already in the
+        requested state are left untouched (re-pausing does not restamp
+        paused_since, re-resuming does not clear a ledger).
+
+        Returned totals report what ACTUALLY changed, not what exists:
+        changed == the number of schedules that flipped state here.
+        """
+        changed = 0
+        for wf_id in list(self._schedules.keys()):
+            sched = self._schedules.get(wf_id)
+            if sched is None:
+                continue
+            currently = bool(sched.get("enabled"))
+            if currently == bool(enabled):
+                continue  # already there: do not restamp or re-clear
+            self.set_schedule_enabled(wf_id, enabled)
+            changed += 1
+        return {"ok": True, "changed": changed, "total": len(self._schedules)}
+
+    def set_event_trigger_enabled(self, workflow_id: str, enabled: bool) -> dict:
+        """Pause (False) or resume (True) an event trigger.
+
+        A paused trigger keeps its topic, match keys, count, and last-fired
+        history; fire_event() skips it, so the pause is real, not cosmetic
+        (decisions.md #79). Resume re-arms it for the next matching event.
+        """
+        trig = self._event_triggers.get(workflow_id)
+        if trig is None:
+            return {"ok": False, "reason": "No event trigger for this workflow"}
+        trig["enabled"] = bool(enabled)
+        self._save_custom()
+        _push_trigger_update(workflow_id, engine=self)
+        return {"ok": True, "trigger": trig}
+
+    def set_webhook_enabled(self, workflow_id: str, enabled: bool) -> dict:
+        """Pause (False) or resume (True) a webhook trigger.
+
+        fire_webhook() already refused disabled webhooks with 409 — this
+        setter is the missing control surface. The secret, URL, and call
+        count are kept; paused webhooks simply refuse calls until resumed.
+        """
+        entry = self._webhooks.get(workflow_id)
+        if entry is None:
+            return {"ok": False, "reason": "No webhook for this workflow"}
+        entry["enabled"] = bool(enabled)
+        self._save_custom()
+        _push_trigger_update(workflow_id, engine=self)
+        return {"ok": True, "webhook": entry}
 
     def get_schedules(self) -> dict:
         result = {}
@@ -347,6 +676,10 @@ class WorkflowEngine:
         wf = self._workflows.get(workflow_id)
         if not wf:
             return {"ok": False, "reason": "Workflow not found"}
+        if wf.get("is_template"):
+            return {"ok": False, "reason": "Cannot create a webhook for a template"}
+        if not secret:
+            secret = uuid.uuid4().hex  # auto-mint: the caller may not have one
         webhook_id = f"wh_{uuid.uuid4().hex[:16]}"
         self._webhooks[workflow_id] = {
             "webhook_id": webhook_id,
@@ -355,14 +688,225 @@ class WorkflowEngine:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "trigger_count": 0,
         }
+        self._save_custom()
         return {"ok": True, "webhook": self._webhooks[workflow_id]}
 
     def remove_webhook(self, workflow_id: str) -> dict:
         self._webhooks.pop(workflow_id, None)
+        self._save_custom()
         return {"ok": True}
 
     def get_webhooks(self) -> dict:
         return dict(self._webhooks)
+
+    # ── Event triggers (decisions.md #57) ───────────────────────────
+
+    def add_event_trigger(self, workflow_id: str, event: str,
+                          match: Optional[dict] = None) -> dict:
+        """Attach an event trigger: the workflow runs when a DASH event
+
+        with this topic is published on the event bus. `match` optionally
+        narrows the trigger to specific payload values (e.g. {"glob":
+        "**/*.py"} on file.changed) — every key must match the payload.
+        """
+        wf = self._workflows.get(workflow_id)
+        if not wf:
+            return {"ok": False, "reason": "Workflow not found"}
+        if wf.get("is_template"):
+            return {"ok": False, "reason": "Cannot trigger a template"}
+        topic = (event or "").strip()
+        if not topic or ".." in topic or any(
+            part == "" for part in topic.split(".")
+        ):
+            return {"ok": False,
+                    "reason": "Event topic must be a non-empty dot-separated "
+                              "name (e.g. email.received)"}
+        self._event_triggers[workflow_id] = {
+            "event": topic,
+            "match": dict(match or {}),
+            "enabled": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "trigger_count": 0,
+            "last_fired_at": None,
+        }
+        self._save_custom()
+        return {"ok": True, "trigger": self._event_triggers[workflow_id]}
+
+    def remove_event_trigger(self, workflow_id: str) -> dict:
+        self._event_triggers.pop(workflow_id, None)
+        self._save_custom()
+        return {"ok": True}
+
+    def get_event_triggers(self) -> dict:
+        result = {}
+        for wf_id, trig in self._event_triggers.items():
+            wf = self._workflows.get(wf_id, {})
+            result[wf_id] = {**trig, "workflow_name": wf.get("name", "Unknown")}
+        return result
+
+    def fire_event(self, topic: str, payload: Optional[dict] = None) -> list[str]:
+        """Fire every workflow whose event trigger matches this topic.
+
+        A trigger matches when its topic equals the published topic, every
+        configured match key equals the payload value, and the workflow is
+        enabled and non-template. Payload is merged into the run's input as
+        `event` so downstream nodes can act on it. Returns fired wf ids.
+        """
+        fired: list[str] = []
+        payload = payload or {}
+        for wf_id, trig in list(self._event_triggers.items()):
+            if trig.get("event") != topic:
+                continue
+            if not trig.get("enabled", True):
+                # Paused via set_event_trigger_enabled: the pause is real
+                # gating, not cosmetic (decisions.md #79).
+                continue
+            match = trig.get("match") or {}
+            if any(payload.get(k) != v for k, v in match.items()):
+                continue
+            wf = self._workflows.get(wf_id)
+            if wf is None or wf.get("is_template") or not wf.get("enabled", True):
+                continue
+            result = self.execute(wf_id, {"event": {"topic": topic, **payload}},
+                                  source="event")
+            if result.get("ok"):
+                trig["trigger_count"] = int(trig.get("trigger_count", 0)) + 1
+                trig["last_fired_at"] = datetime.now(timezone.utc).isoformat()
+                self._save_custom()
+                fired.append(wf_id)
+                _push_trigger_update(wf_id, engine=self)
+                logger.info("Event workflow %s fired on %s (%s)",
+                            wf_id, topic, result["execution"]["id"])
+            else:
+                logger.warning("Event workflow %s did not run on %s: %s",
+                               wf_id, topic, result.get("reason"))
+        return fired
+
+    def fire_webhook(self, webhook_id: str, provided_secret: Optional[str], payload: Optional[dict] = None) -> dict:
+        """Validate an inbound webhook call and execute its workflow.
+
+        Auth is the webhook secret, checked with hmac.compare_digest so a
+        timing side channel cannot probe the token. Idempotent bookkeeping:
+        the call is rejected while a run is already in flight.
+        """
+        import hmac
+
+        hit = next(((wf_id, h) for wf_id, h in self._webhooks.items() if h.get("webhook_id") == webhook_id), None)
+        if hit is None:
+            return {"ok": False, "status_code": 404, "reason": "Webhook not found"}
+        wf_id, entry = hit
+        if not entry.get("enabled"):
+            return {"ok": False, "status_code": 409, "reason": "Webhook disabled"}
+        expected = entry.get("secret") or ""
+        if not expected or provided_secret is None or not hmac.compare_digest(expected, str(provided_secret)):
+            return {"ok": False, "status_code": 401, "reason": "Invalid webhook secret"}
+
+        if self._workflows.get(wf_id, {}).get("is_template"):
+            return {"ok": False, "status_code": 409, "reason": "Webhook points at a template"}
+
+        result = self.execute(wf_id, dict(payload or {}), source="webhook")
+        if not result.get("ok"):
+            return {"ok": False, "status_code": 409, "reason": result.get("reason", "execution failed")}
+        entry["trigger_count"] = int(entry.get("trigger_count", 0)) + 1
+        self._save_custom()
+        # Push the new count/last-fired to live clients (best-effort; no-op
+        # when nobody is connected or the engine path is a test double).
+        _push_trigger_update(wf_id, engine=self)
+        return {"ok": True, "execution": result["execution"], "trigger_count": entry["trigger_count"]}
+
+    def due_schedules(self, now: datetime) -> list[str]:
+        """Workflow ids whose enabled schedule is due at `now`.
+
+        `now` must be a LOCAL naive datetime (cron fields are evaluated in
+        local wall time). Idempotence per minute: a schedule already fired
+        in the same minute is skipped, so the 60s poll fires once and a
+        restart cannot double-fire (last_fired_at persists with the state).
+        """
+        due: list[str] = []
+        for wf_id, sched in self._schedules.items():
+            if not sched.get("enabled"):
+                # Skipped-fire accounting (#84): count every minute whose
+                # cron matched but did not run because of the pause, and
+                # only minutes AFTER the pause began — minutes before a
+                # re-pause belong to the previous pause's ledger. The
+                # per-minute idempotence window is the same one
+                # due_schedules() uses for real fires, including the
+                # last_fired_at guard: a minute that genuinely fired in
+                # the seconds before the pause was NOT skipped, and must
+                # not be counted as if it were.
+                if sched.get("paused_since"):
+                    try:
+                        paused_dt = datetime.fromisoformat(str(sched["paused_since"]))
+                        if paused_dt.tzinfo is not None:
+                            paused_dt = paused_dt.replace(tzinfo=None)
+                        now_min = now.replace(second=0, microsecond=0)
+                        already_fired = False
+                        last = sched.get("last_fired_at")
+                        if last:
+                            try:
+                                already_fired = (
+                                    datetime.fromisoformat(str(last)).replace(
+                                        second=0, microsecond=0
+                                    )
+                                    == now_min
+                                )
+                            except ValueError:
+                                pass  # corrupt timestamp: re-evaluate
+                        last_skipped = sched.get("last_skipped_minute")
+                        if last_skipped:
+                            try:
+                                # Per-minute idempotence: repeated evaluations
+                                # of the SAME minute (overlapping polls, test
+                                # clocks) count once.
+                                if last_skipped >= now_min.isoformat():
+                                    continue
+                            except TypeError:
+                                last_skipped = None
+                        if (
+                            now_min >= paused_dt.replace(second=0, microsecond=0)
+                            and not already_fired
+                            and cron_matches_due(sched.get("cron", ""), now)
+                        ):
+                            sched["skipped_fires"] = sched.get("skipped_fires", 0) + 1
+                            sched["last_skipped_minute"] = now_min.isoformat()
+                            self._save_custom()
+                    except ValueError:
+                        pass  # corrupt stamp: count nothing rather than lie
+                continue
+            wf = self._workflows.get(wf_id)
+            if wf is None or wf.get("is_template") or not wf.get("enabled", True):
+                continue
+            last = sched.get("last_fired_at")
+            if last:
+                try:
+                    last_dt = datetime.fromisoformat(str(last))
+                    if last_dt.replace(tzinfo=None, second=0, microsecond=0) == now.replace(second=0, microsecond=0):
+                        continue
+                except ValueError:
+                    pass  # corrupt timestamp: re-evaluate rather than lock out
+            try:
+                if cron_matches_due(sched.get("cron", ""), now):
+                    due.append(wf_id)
+            except InvalidCronError:
+                logger.warning("Workflow %s has unparseable cron %r — skipped", wf_id, sched.get("cron"))
+        return due
+
+    def mark_fired(self, workflow_id: str, status: str, at: Optional[datetime] = None) -> None:
+        """Record that a scheduled fire happened (idempotence marker).
+
+        `at` is the evaluation time that triggered the fire (naive local).
+        It must be stamped — not the wall clock — so the marker matches what
+        due_schedules() will later compare against, under any clock (real
+        or the fake clock tests drive the scheduler with).
+        """
+        sched = self._schedules.get(workflow_id)
+        if sched is not None:
+            sched["last_fired_at"] = (at or datetime.now()).isoformat()
+            sched["last_status"] = status
+            self._save_custom()
+            # Scheduled fires land here from the scheduler loop (and its
+            # to_thread worker) — push the new last-fired to live clients.
+            _push_trigger_update(workflow_id, engine=self)
 
     # ── Execution ───────────────────────────────────────────────────
 
@@ -458,11 +1002,125 @@ class WorkflowEngine:
                 out.append(t)
         return out
 
+    # ── Real action execution (decisions.md #72) ────────────────────
+
+    def _execute_action_bounded(self, tool: str, config: dict,
+                                context: dict) -> dict:
+        """Run one action node's tool in the bounded worker pool with a
+        hard timeout.
+
+        The handler runs on a pool thread (never the caller's thread, so a
+        bad tool cannot wedge the event loop or the traversal thread
+        forever); the caller waits at most ACTION_TIMEOUT_S and records an
+        honest timeout failure if the tool exceeds it. The pool has two
+        workers — a hung action occupies a worker, it does not multiply.
+        """
+        fut = self._action_executor.submit(
+            self._execute_action_sync, tool, config, context
+        )
+        try:
+            return fut.result(timeout=ACTION_TIMEOUT_S)
+        except concurrent.futures.TimeoutError:
+            fut.cancel()
+            return {
+                "status": "failed",
+                "reason": f"action timed out after {ACTION_TIMEOUT_S}s",
+            }
+        except Exception as exc:  # noqa: BLE001 — the record must say why
+            return {"status": "failed", "reason": f"{type(exc).__name__}: {exc}"}
+
+    def _execute_action_sync(self, tool: str, config: dict,
+                             context: dict) -> dict:
+        """Dispatch table: what an action node actually does.
+
+        Registered actions are real side effects. An unregistered tool is
+        an honest no-op: the run still completes, the node's result says
+        "no handler registered" — a workflow must not lie about work it
+        did not do.
+        """
+        override = self._action_overrides.get(tool)
+        if override is not None:
+            return dict(override(config, context) or {})
+
+        if tool == "notification.send":
+            return self._act_notification_send(config, context)
+        if tool == "audit.log":
+            return self._act_audit_log(config, context)
+        if tool == "bus.publish":
+            return self._act_bus_publish(config, context)
+        return {
+            "status": "skipped",
+            "reason": f"no handler registered for tool '{tool}'",
+        }
+
+    def _act_notification_send(self, config: dict, context: dict) -> dict:
+        """Real desktop toast via NotificationService (async API, sync here:
+        the service already does its own to_thread; park it on a private
+        loop inside the worker thread — the worker pool is the concurrency
+        limit, not the loop)."""
+        try:
+            from dash_backend.services.notifications import NotificationService
+
+            title = str(config.get("title") or "DASH")
+            message = str(config.get("message") or "")
+            svc = NotificationService()
+
+            async def _run() -> dict:
+                return await svc.show(title=title, message=message)
+
+            return {
+                "status": "ok",
+                "result": asyncio.run(_run()),
+            }
+        except Exception as exc:  # noqa: BLE001 — the record must say why
+            return {"status": "failed", "reason": f"{type(exc).__name__}: {exc}"}
+
+    def _act_audit_log(self, config: dict, context: dict) -> dict:
+        """Append to the real audit log (dashboard-visible, persisted)."""
+        try:
+            from dash_backend.services.audit_logs import get_audit_service
+
+            event_type = str(config.get("event_type") or "workflow.action")
+            action = str(config.get("action") or "")
+            message = str(config.get("message") or "")
+            severity = str(config.get("severity") or "INFO")
+            get_audit_service().log(
+                event_type=event_type,
+                action=action or message[:120],
+                category="workflow",
+                status="success",
+                details={"message": message} if message else {},
+                severity=severity,
+            )
+            return {"status": "ok", "result": {"logged": True,
+                                               "event_type": event_type}}
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "failed", "reason": f"{type(exc).__name__}: {exc}"}
+
+    def _act_bus_publish(self, config: dict, context: dict) -> dict:
+        """Publish a follow-on event (sync, worker thread — the bus handles
+        its own delivery tasking)."""
+        try:
+            from dash_backend.events.event_bus import get_event_bus
+
+            topic = str(config.get("topic") or "").strip()
+            if not topic or not all(p.isalnum() for p in topic.split(".")):
+                return {"status": "failed",
+                        "reason": "topic must be a dot-separated alphanumeric name"}
+            payload = config.get("payload")
+            payload = dict(payload) if isinstance(payload, dict) else {}
+            payload.setdefault("via_workflow", True)
+            get_event_bus().publish_sync(topic, payload, source="workflow_action")
+            return {"status": "ok", "result": {"topic": topic}}
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "failed", "reason": f"{type(exc).__name__}: {exc}"}
+
     def _traverse(
         self,
         wf: dict,
         exec_record: dict,
         context: dict,
+        respect_delays: bool = False,
     ) -> None:
         """Walk the workflow graph in edge order, evaluating condition nodes.
 
@@ -470,6 +1128,11 @@ class WorkflowEngine:
         ignored edges entirely — if/else flows executed BOTH branches. This
         walk starts at trigger nodes (or the first node when a workflow has
         none), executes each node once, and follows only matching branches.
+
+        respect_delays: delay nodes genuinely sleep (in bounded worker
+        threads) so scheduled/event runs behave as built. Manual/API runs
+        keep the instant walk — an interactive click should not hang the
+        request for minutes.
         """
         nodes_by_id = {n["id"]: n for n in wf.get("nodes", [])}
         edges = wf.get("edges", [])
@@ -499,7 +1162,21 @@ class WorkflowEngine:
             exec_record["nodes_executed"].append(node_id)
 
             ntype = node.get("type")
-            if ntype == "condition":
+            if ntype == "action":
+                # A real run: dispatch the node's tool and record what it
+                # actually did. Called with respect_delays=False (manual)
+                # actions still run — a manual 'Execute now' click that did
+                # nothing would be the #61 class of lie. Actions run on the
+                # event path (source="event") like any other source.
+                result = self._execute_action_bounded(
+                    str(node.get("config", {}).get("tool", "")),
+                    dict(node.get("config", {})),
+                    context,
+                )
+                exec_record["action_results"][node_id] = result
+                for nxt in self._successors(edges, node_id, branch=None):
+                    queue.append((nxt, None))
+            elif ntype == "condition":
                 result = self._evaluate_condition(node.get("config", {}), context)
                 exec_record["condition_results"][node_id] = result
                 nxts = self._successors(edges, node_id, branch=result)
@@ -514,8 +1191,25 @@ class WorkflowEngine:
                 for nxt in nxts:
                     queue.append((nxt, None))
             elif ntype == "delay":
-                # Simulated: no real sleep. config.seconds is honored by the
-                # real scheduler path, not the manual-run walk.
+                seconds = 0.0
+                try:
+                    seconds = float(node.get("config", {}).get("seconds", 0))
+                except (TypeError, ValueError):
+                    seconds = 0.0
+                seconds = max(0.0, min(seconds, MAX_DELAY_SECONDS))
+                if respect_delays and seconds > 0:
+                    # Real delay semantics. A plain time.sleep() here would
+                    # freeze the poll/event loop, so the sleep happens in a
+                    # bounded worker pool and _traverse blocks on the result
+                    # — the run's timeline genuinely includes the pause.
+                    executor = concurrent.futures.ThreadPoolExecutor(
+                        max_workers=MAX_DELAY_WORKERS,
+                        thread_name_prefix="dash-delay",
+                    )
+                    try:
+                        executor.submit(time.sleep, seconds).result()
+                    finally:
+                        executor.shutdown(wait=False)
                 for nxt in self._successors(edges, node_id, branch=None):
                     queue.append((nxt, None))
             else:
@@ -529,7 +1223,7 @@ class WorkflowEngine:
             "conditions": dict(exec_record["condition_results"]),
         }
 
-    def execute(self, workflow_id: str, input_data: Optional[dict] = None) -> dict:
+    def execute(self, workflow_id: str, input_data: Optional[dict] = None, source: str = "manual") -> dict:
         wf = self._workflows.get(workflow_id)
         if not wf:
             return {"ok": False, "reason": "Workflow not found"}
@@ -545,11 +1239,13 @@ class WorkflowEngine:
             "started_at": datetime.now(timezone.utc).isoformat(),
             "completed_at": None,
             "nodes_executed": [],
+            "action_results": {},
             "condition_results": {},
             "input": input_data,
             "output": None,
             "error": None,
             "duration_ms": 0,
+            "source": source,  # manual | scheduled | webhook | event
         }
         self._executions.append(exec_record)
 
@@ -557,10 +1253,10 @@ class WorkflowEngine:
         # condition nodes, and execute only the matching branch. The old
         # simulation walked every node in list order and ignored edges
         # entirely, so if/else flows executed BOTH branches.
-        import time
         start_time = time.perf_counter()
         try:
-            self._traverse(wf, exec_record, dict(input_data or {}))
+            self._traverse(wf, exec_record, dict(input_data or {}),
+                           respect_delays=source != "manual")
             exec_record["status"] = "completed"
             exec_record["completed_at"] = datetime.now(timezone.utc).isoformat()
         except Exception as e:
@@ -611,8 +1307,184 @@ class WorkflowEngine:
             "total_executions": len(execs),
             "schedules_active": len(self._schedules),
             "webhooks_active": len(self._webhooks),
+            "event_triggers_active": len(self._event_triggers),
+        }
+
+    def get_trigger_status(self) -> dict:
+        """Aggregate trigger status for the System page (decisions.md #81).
+
+        Honest by construction: active/paused counts reflect exactly the
+        enabled flags the fire gates read, next-due comes from the same
+        cron evaluator the scheduler polls, and a paused schedule is
+        excluded from next-due because the scheduler really will skip it.
+        """
+        schedules = self.get_schedules()  # + workflow_name per entry
+        webhooks = self._webhooks
+        triggers = self._event_triggers
+
+        now = datetime.now()
+        now_min = now.replace(second=0, microsecond=0)
+        next_due: Optional[dict] = None
+        for wf_id, sched in schedules.items():
+            if not sched.get("enabled"):
+                continue
+            wf = self._workflows.get(wf_id)
+            if wf is None or wf.get("is_template") or not wf.get("enabled", True):
+                continue
+            cron = sched.get("cron", "")
+            # Due RIGHT NOW when the current minute matches and this
+            # minute has not already been fired (same idempotence window
+            # due_schedules uses). Otherwise the first future match.
+            fired_this_minute = False
+            last = sched.get("last_fired_at")
+            if last:
+                try:
+                    fired_this_minute = (
+                        datetime.fromisoformat(str(last)).replace(second=0, microsecond=0)
+                        == now_min
+                    )
+                except ValueError:
+                    pass  # corrupt timestamp: treat as not fired
+            try:
+                if _fields_match(parse_cron(cron), now_min) and not fired_this_minute:
+                    due = now_min
+                else:
+                    due = next_cron_due(cron, now)
+            except InvalidCronError:
+                continue
+            if due is not None and (next_due is None or due < next_due["_dt"]):
+                next_due = {
+                    "_dt": due,
+                    "workflow_id": wf_id,
+                    "workflow_name": sched.get("workflow_name", "Unknown"),
+                    "cron": cron,
+                    "due_at": due.isoformat(),
+                }
+        if next_due is not None:
+            next_due.pop("_dt")
+
+        return {
+            "schedules_total": len(schedules),
+            "schedules_active": sum(1 for s in schedules.values() if s.get("enabled")),
+            "schedules_paused": sum(1 for s in schedules.values() if not s.get("enabled")),
+            "webhooks_total": len(webhooks),
+            "webhooks_active": sum(1 for w in webhooks.values() if w.get("enabled")),
+            "webhooks_paused": sum(1 for w in webhooks.values() if not w.get("enabled")),
+            "event_triggers_total": len(triggers),
+            "event_triggers_active": sum(1 for t in triggers.values() if t.get("enabled")),
+            "event_triggers_paused": sum(1 for t in triggers.values() if not t.get("enabled")),
+            "next_due": next_due,
         }
 
 
 # Singleton
 workflow_engine = WorkflowEngine()
+
+
+# ── Trigger Scheduler (decisions.md #53) ──────────────────────────────
+
+class WorkflowTriggerScheduler:
+    """Fires workflows whose schedule is due, via a low-frequency poll loop.
+
+    Each cycle evaluates every persisted schedule with the engine's
+    due_schedules() against the local wall clock (cron fields are evaluated
+    in local time — matching what a user typed on their machine), executes
+    the due workflows, and stamps them fired so a restart cannot
+    double-fire. Every exception in a cycle is contained: the loop logs and
+    keeps polling instead of dying silently.
+    """
+
+    def __init__(self, engine: Optional[WorkflowEngine] = None, poll_seconds: int = 60) -> None:
+        self._engine = engine or workflow_engine
+        self._poll_seconds = poll_seconds
+        self._task: Optional[asyncio.Task] = None
+        self._last_tick_at: Optional[datetime] = None
+
+    @property
+    def running(self) -> bool:
+        return self._task is not None and not self._task.done()
+
+    @property
+    def poll_seconds(self) -> int:
+        """Configured cycle length (public for status routes)."""
+        return self._poll_seconds
+
+    @property
+    def last_tick_at(self) -> Optional[str]:
+        """ISO stamp of the last cycle start (None = never ticked)."""
+        return self._last_tick_at.isoformat() if self._last_tick_at else None
+
+    @property
+    def engine(self) -> WorkflowEngine:
+        """The engine this scheduler fires into (public for status routes)."""
+        return self._engine
+
+    async def tick(self, now: Optional[datetime] = None) -> list[str]:
+        """One scheduler pass; returns the workflow ids fired.
+
+        Public so tests (and the loop) can drive time forward without
+        sleeping. `now` is a naive LOCAL datetime.
+        """
+        now = now or datetime.now()
+        self._last_tick_at = now  # cycle start: the last time due work was evaluated
+        fired: list[str] = []
+        for wf_id in self._engine.due_schedules(now):
+            # Offload: a due workflow may contain a delay node whose real
+            # sleep (decisions.md #57) must never block the event loop.
+            result = await asyncio.to_thread(
+                self._engine.execute, wf_id, None, "scheduled"
+            )
+            if result.get("ok"):
+                self._engine.mark_fired(wf_id, result["execution"]["status"], at=now)
+                fired.append(wf_id)
+                logger.info("Scheduled workflow %s fired (%s)", wf_id, result["execution"]["id"])
+            else:
+                self._engine.mark_fired(wf_id, "failed", at=now)
+                logger.warning("Scheduled workflow %s did not run: %s", wf_id, result.get("reason"))
+        return fired
+
+    async def _loop(self) -> None:
+        while True:
+            try:
+                await self.tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Workflow trigger poll failed")
+            await asyncio.sleep(self._poll_seconds)
+
+    def start(self) -> None:
+        if self.running:
+            return
+        self._task = asyncio.create_task(self._loop())
+        logger.info("Workflow trigger scheduler started (poll=%ss)", self._poll_seconds)
+
+    async def stop(self) -> None:
+        had_task = self._task is not None
+        if had_task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+        # Liveness honesty (decisions.md #104): a stopped scheduler is not
+        # "running but last ticked a while ago" — it is stopped. Clearing
+        # the tick stamp here keeps the status route truthful across a
+        # stop/start cycle (a restart ticks afresh) instead of reporting a
+        # stale timestamp from the previous run. This also covers a bare
+        # tick() without start(), which leaves a stamp but no task.
+        self._last_tick_at = None
+        if had_task:
+            logger.info("Workflow trigger scheduler stopped")
+
+
+_trigger_scheduler: Optional[WorkflowTriggerScheduler] = None
+
+
+def get_workflow_trigger_scheduler() -> WorkflowTriggerScheduler:
+    """Singleton accessor; main.py starts it during lifespan startup."""
+    global _trigger_scheduler
+    if _trigger_scheduler is None:
+        _trigger_scheduler = WorkflowTriggerScheduler()
+    return _trigger_scheduler

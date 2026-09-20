@@ -153,6 +153,23 @@ from dash_backend.tools.code_execution_tools import (
     CodeWriteTool,
 )
 
+# Self-reliance tools (Phase 2): gated self-modification
+from dash_backend.tools.self_code_edit_tool import SelfCodeEditTool
+
+# Gated desktop-automation input family (§25, decisions.md #129). Registered
+# explicitly FIRST so the name collisions with the friendlier enhanced
+# families (mouse_drag, mouse_click, keyboard_type, ...) resolve to these
+# permission levels deterministically, regardless of discovery order.
+from dash_backend.tools.desktop_automation import (
+    MouseMoveTool,
+    MouseClickTool,
+    MouseDragTool,
+    KeyboardTypeTool,
+    KeyboardHotkeyTool,
+    ScreenshotTool,
+    GetAutomationHistoryTool,
+)
+
 from dash_backend.tools.file_tools import (
     ListFavoritesTool,
     PreviewFileTool,
@@ -182,6 +199,14 @@ from dash_backend.services.enhanced_tools import (
 def register_desktop_tools() -> None:
     registry = get_registry()
     tool_classes = [
+        # Gated input family first — deterministic collision winners (§25 #129)
+        MouseMoveTool,
+        MouseClickTool,
+        MouseDragTool,
+        KeyboardTypeTool,
+        KeyboardHotkeyTool,
+        ScreenshotTool,
+        GetAutomationHistoryTool,
         # Desktop window and app tools (17 tools)
         OpenApplicationTool,
         CloseApplicationTool,
@@ -306,6 +331,8 @@ def register_desktop_tools() -> None:
         CodeExecuteTool,
         CodeReadTool,
         CodeWriteTool,
+        # Self-reliance (Phase 2): git-checkpointed, test-gated self-edit
+        SelfCodeEditTool,
     ]
     logger.info("Registering %d desktop tools", len(tool_classes))
     for cls in tool_classes:

@@ -17,6 +17,7 @@ import {
   Check,
 } from "lucide-react";
 import { useAIStore } from "@/stores/aiStore";
+import { CountUp, ShinyText, StaggerReveal, StaggerItem, Aurora } from "@/components/fx";
 import { authFetch, commandCenter } from "@/lib/api";
 import type {
   UpcomingItem,
@@ -497,8 +498,11 @@ export const CommandCenterPage: React.FC = () => {
         margin: "0 auto",
         height: "100%",
         overflowY: "auto",
+        position: "relative",
       }}
     >
+      {/* Ambient light field behind the command surfaces */}
+      <Aurora intensity={0.9} />
       {/* Screen reader summary of Command Center status */}
       <LiveRegion>
         {`${deadlines.length} upcoming deadline${deadlines.length === 1 ? "" : "s"}, ${risks.length} predictive risk${risks.length === 1 ? "" : "s"}, ${suggestions.length - acknowledged.size} pending suggestion${suggestions.length - acknowledged.size === 1 ? "" : "s"}.`}
@@ -538,7 +542,9 @@ export const CommandCenterPage: React.FC = () => {
               margin: 0,
             }}
           >
-            Command Center
+            <ShinyText color="rgba(224, 240, 255, 0.75)" shineColor="#7dd3fc" speed={4}>
+              Command Center
+            </ShinyText>
           </h1>
           <p
             style={{
@@ -727,7 +733,7 @@ export const CommandCenterPage: React.FC = () => {
                         fontFamily: "'JetBrains Mono', monospace",
                       }}
                     >
-                      {value.toFixed(1)}%
+                      <CountUp to={value} decimals={1} suffix="%" durationMs={900} />
                     </span>
                   </div>
                   <div
@@ -856,7 +862,7 @@ export const CommandCenterPage: React.FC = () => {
           ) : deadlines.length === 0 ? (
             <EmptyState text="No deadlines in the next 7 days" />
           ) : (
-            <div
+            <StaggerReveal
               style={{
                 display: "flex",
                 flexDirection: "column",
@@ -864,8 +870,8 @@ export const CommandCenterPage: React.FC = () => {
               }}
             >
               {deadlines.slice(0, 5).map((item) => (
+                <StaggerItem key={`${item.type}-${item.id}`} distance={10}>
                 <button
-                  key={`${item.type}-${item.id}`}
                   onClick={() => navigate("/planner")}
                   title={`View goals (${item.name})`}
                   style={{
@@ -959,8 +965,9 @@ export const CommandCenterPage: React.FC = () => {
                     }}
                   />
                 </button>
+                </StaggerItem>
               ))}
-            </div>
+            </StaggerReveal>
           )}
         </div>
 

@@ -222,7 +222,10 @@ async def worker_loop(poll_interval: float = 2.0, stuck_seconds: float = 60.0):
 
 async def reset_stuck_tasks(session: AsyncSession, stuck_seconds: float = 60.0) -> int:
     """Reset tasks that were claimed but have not heartbeat within stuck_seconds."""
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=stuck_seconds)
+    # last_heartbeat is TIMESTAMP WITHOUT TIME ZONE — asyncpg cannot bind a
+    # tz-aware datetime in a WHERE comparison against it (naive/aware mix
+    # raised on every worker poll). Bind naive UTC, matching the column.
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=stuck_seconds)
     stmt = (
         update(executive_models.ExecutiveTask)
         .where(

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
 
 * {
   margin: 0;
@@ -6,26 +6,28 @@
   box-sizing: border-box;
 }
 :root {
-  /* DASH JARVIS — Dark Cyan Glowing Design Tokens */
-  --dash-bg: #080c14;
-  --dash-bg-subtle: #0a0e18;
-  --dash-surface: rgba(10, 18, 32, 0.85);
-  --dash-surface-hover: rgba(15, 25, 45, 0.90);
-  --dash-surface-active: rgba(20, 35, 60, 0.95);
-  --dash-elevated: rgba(12, 20, 38, 0.90);
-  --dash-elevated-hover: rgba(18, 30, 50, 0.95);
+  /* DASH — Engineered Instrument: cold layered darks, disciplined
+     cyan energy, precise 1px structure. Values redesigned; every
+     token name preserved so all existing surfaces keep working. */
+  --dash-bg: #05080f;
+  --dash-bg-subtle: #070b13;
+  --dash-surface: rgba(10, 17, 30, 0.82);
+  --dash-surface-hover: rgba(14, 24, 44, 0.90);
+  --dash-surface-active: rgba(18, 32, 58, 0.95);
+  --dash-elevated: rgba(11, 19, 36, 0.92);
+  --dash-elevated-hover: rgba(17, 29, 52, 0.96);
 
-  /* Borders — Cyan glows */
-  --dash-border: rgba(63, 169, 245, 0.15);
-  --dash-border-hover: rgba(63, 169, 245, 0.35);
-  --dash-border-subtle: rgba(63, 169, 245, 0.08);
-  --dash-border-accent: rgba(63, 169, 245, 0.40);
+  /* Borders — structured lines that ignite on hover */
+  --dash-border: rgba(96, 150, 210, 0.14);
+  --dash-border-hover: rgba(63, 169, 245, 0.42);
+  --dash-border-subtle: rgba(96, 150, 210, 0.07);
+  --dash-border-accent: rgba(63, 169, 245, 0.45);
 
   /* Primary — Cyan */
   --dash-accent: #3fa9f5;
-  --dash-accent-hover: #5ab8f5;
-  --dash-accent-glow: rgba(63, 169, 245, 0.25);
-  --dash-accent-intense: rgba(63, 169, 245, 0.45);
+  --dash-accent-hover: #5cbcf8;
+  --dash-accent-glow: rgba(63, 169, 245, 0.28);
+  --dash-accent-intense: rgba(63, 169, 245, 0.50);
 
   /* Secondary — Teal */
   --dash-accent-secondary: #4ecdc4;
@@ -33,37 +35,37 @@
 
   /* Tertiary — Cyan */
   --dash-cyan: #3fa9f5;
-  --dash-cyan-glow: rgba(63, 169, 245, 0.30);
+  --dash-cyan-glow: rgba(63, 169, 245, 0.32);
 
   /* JARVIS Core */
   --ultron-core: #3fa9f5;
-  --ultron-core-bright: #5ab8f5;
-  --ultron-core-deep: #1a5276;
-  --ultron-energy: rgba(63, 169, 245, 0.35);
-  --ultron-glow: rgba(63, 169, 245, 0.30);
-  --ultron-glow-intense: rgba(63, 169, 245, 0.55);
-  --ultron-ring: rgba(47, 143, 214, 0.60);
+  --ultron-core-bright: #5cbcf8;
+  --ultron-core-deep: #123a5c;
+  --ultron-energy: rgba(63, 169, 245, 0.38);
+  --ultron-glow: rgba(63, 169, 245, 0.32);
+  --ultron-glow-intense: rgba(63, 169, 245, 0.60);
+  --ultron-ring: rgba(47, 143, 214, 0.65);
   --ultron-surface: rgba(63, 169, 245, 0.08);
-  --ultron-surface-hover: rgba(63, 169, 245, 0.14);
-  --ultron-border: rgba(63, 169, 245, 0.25);
-  --ultron-text: #b3daf7;
+  --ultron-surface-hover: rgba(63, 169, 245, 0.15);
+  --ultron-border: rgba(63, 169, 245, 0.28);
+  --ultron-text: #b8dcf9;
 
   /* Functional / Semantic */
   --dash-success: #22c55e;
-  --dash-success-bg: rgba(34, 197, 94, 0.15);
-  --dash-success-glow: rgba(34, 197, 94, 0.25);
+  --dash-success-bg: rgba(34, 197, 94, 0.14);
+  --dash-success-glow: rgba(34, 197, 94, 0.28);
   --dash-warning: #eab308;
-  --dash-warning-bg: rgba(234, 179, 8, 0.15);
+  --dash-warning-bg: rgba(234, 179, 8, 0.14);
   --dash-danger: #ef4444;
-  --dash-danger-bg: rgba(239, 68, 68, 0.15);
-  --dash-danger-glow: rgba(239, 68, 68, 0.25);
+  --dash-danger-bg: rgba(239, 68, 68, 0.14);
+  --dash-danger-glow: rgba(239, 68, 68, 0.28);
   --dash-info: #3fa9f5;
 
   /* Typography */
-  --dash-text: #e0f0ff;
-  --dash-text-secondary: #8ab4d8;
-  --dash-text-muted: #4a6a8a;
-  --dash-text-inverse: #080c14;
+  --dash-text: #e4effc;
+  --dash-text-secondary: #8fb2d4;
+  --dash-text-muted: #4d6a8a;
+  --dash-text-inverse: #05080f;
 
   /* Spacing */
   --dash-space-xs: 4px;
@@ -74,34 +76,34 @@
   --dash-space-2xl: 32px;
 
   /* Radii */
-  --dash-radius-xs: 4px;
-  --dash-radius-sm: 6px;
-  --dash-radius-md: 10px;
-  --dash-radius-lg: 14px;
-  --dash-radius-xl: 20px;
+  --dash-radius-xs: 5px;
+  --dash-radius-sm: 7px;
+  --dash-radius-md: 11px;
+  --dash-radius-lg: 15px;
+  --dash-radius-xl: 22px;
   --dash-radius-full: 9999px;
 
-  /* Shadows — Cyan glow */
-  --dash-shadow-sm: 0 1px 3px rgba(63, 169, 245, 0.08);
-  --dash-shadow-md: 0 4px 12px rgba(63, 169, 245, 0.12);
-  --dash-shadow-lg: 0 8px 32px rgba(63, 169, 245, 0.18);
-  --dash-shadow-glow: 0 0 20px rgba(63, 169, 245, 0.15);
-  --dash-shadow-glow-accent: 0 0 30px rgba(63, 169, 245, 0.25);
+  /* Shadows — layered elevation + restrained cyan energy */
+  --dash-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(200, 228, 255, 0.04);
+  --dash-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.45), 0 8px 28px rgba(0, 0, 0, 0.35);
+  --dash-shadow-lg: 0 4px 14px rgba(0, 0, 0, 0.5), 0 18px 52px rgba(0, 0, 0, 0.45);
+  --dash-shadow-glow: 0 0 0 1px rgba(63, 169, 245, 0.16), 0 4px 24px rgba(63, 169, 245, 0.14);
+  --dash-shadow-glow-accent: 0 0 0 1px rgba(63, 169, 245, 0.28), 0 0 34px rgba(63, 169, 245, 0.28);
 
   /* Transitions */
-  --dash-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --dash-transition-fast: 140ms cubic-bezier(0.4, 0, 0.2, 1);
   --dash-transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-  --dash-transition-smooth: 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  --dash-transition-smooth: 320ms cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Glass */
-  --dash-glass-bg: rgba(8, 12, 20, 0.92);
-  --dash-glass-border: rgba(63, 169, 245, 0.15);
-  --dash-glass-blur: blur(16px);
+  --dash-glass-bg: rgba(6, 10, 18, 0.88);
+  --dash-glass-border: rgba(96, 150, 210, 0.14);
+  --dash-glass-blur: blur(18px) saturate(1.15);
 
   /* Gradients */
-  --dash-gradient-hero: linear-gradient(135deg, rgba(63, 169, 245, 0.06), transparent 60%);
-  --dash-gradient-surface: linear-gradient(180deg, rgba(63,169,245,0.03) 0%, transparent 100%);
-  --dash-gradient-border: linear-gradient(135deg, rgba(63, 169, 245, 0.2), rgba(63, 169, 245, 0.08));
+  --dash-gradient-hero: linear-gradient(135deg, rgba(63, 169, 245, 0.07), transparent 60%);
+  --dash-gradient-surface: linear-gradient(180deg, rgba(96, 160, 235, 0.04) 0%, transparent 100%);
+  --dash-gradient-border: linear-gradient(135deg, rgba(63, 169, 245, 0.24), rgba(63, 169, 245, 0.08));
 }
 
 html, body {
@@ -110,11 +112,12 @@ html, body {
   margin: 0;
   padding: 0;
   background-color: var(--dash-bg);
-  /* JARVIS grid overlay */
+  /* Instrument grid — quieter, wider cells than before */
   background-image:
-    linear-gradient(rgba(63, 169, 245, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63, 169, 245, 0.03) 1px, transparent 1px);
-  background-size: 60px 60px;
+    radial-gradient(1200px 480px at 24% -160px, rgba(63, 169, 245, 0.055), transparent 70%),
+    linear-gradient(rgba(90, 140, 200, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 140, 200, 0.028) 1px, transparent 1px);
+  background-size: 100% 100%, 72px 72px, 72px 72px;
   color: var(--dash-text);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -132,7 +135,7 @@ html, body {
   z-index: 9999;
   padding: 8px 16px;
   background: var(--dash-accent);
-  color: #fff;
+  color: #04121f;
   font-size: 13px;
   font-weight: 600;
   border-radius: var(--dash-radius-sm);
@@ -146,6 +149,7 @@ html, body {
   outline: 2px solid var(--dash-accent);
   outline-offset: 2px;
   border-radius: var(--dash-radius-xs);
+  box-shadow: 0 0 0 4px rgba(63, 169, 245, 0.15);
 }
 :focus:not(:focus-visible) {
   outline: none;
@@ -179,17 +183,17 @@ button, [role="button"], a {
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(63, 169, 245, 0.20); border-radius: var(--dash-radius-full); }
-::-webkit-scrollbar-thumb:hover { background: rgba(63, 169, 245, 0.35); }
+::-webkit-scrollbar-thumb { background: rgba(96, 150, 210, 0.22); border-radius: var(--dash-radius-full); }
+::-webkit-scrollbar-thumb:hover { background: rgba(63, 169, 245, 0.45); }
 
-/* ── Cards ─────────────────────────────────────────────────── */
+/* ── Cards — 1px structure, top-edge light, layered lift ─── */
 .dash-card {
   background: var(--dash-surface);
   background-image: var(--dash-gradient-surface);
   border: 1px solid var(--dash-border);
   border-radius: var(--dash-radius-md);
   box-shadow: var(--dash-shadow-sm);
-  transition: border-color var(--dash-transition-fast), background-color var(--dash-transition-fast), box-shadow var(--dash-transition-fast);
+  transition: border-color var(--dash-transition-fast), background-color var(--dash-transition-fast), box-shadow var(--dash-transition-smooth), transform var(--dash-transition-smooth);
 }
 .dash-card:hover {
   border-color: var(--dash-border-hover);
@@ -257,9 +261,9 @@ button, [role="button"], a {
 /* ── JARVIS Grid Overlay ───────────────────────────────── */
 .dash-jarvis-page {
   background-image:
-    linear-gradient(rgba(63, 169, 245, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63, 169, 245, 0.02) 1px, transparent 1px);
-  background-size: 50px 50px;
+    linear-gradient(rgba(90, 140, 200, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 140, 200, 0.02) 1px, transparent 1px);
+  background-size: 56px 56px;
 }
 
 /* ── JARVIS Sidebar ────────────────────────────────────── */
@@ -314,11 +318,11 @@ button, [role="button"], a {
   gap: 16px;
 }
 .dash-page-title {
-  font-family: 'Orbitron', 'JetBrains Mono', monospace;
+  font-family: 'Space Grotesk', 'Orbitron', 'JetBrains Mono', monospace;
   font-size: 18px;
   font-weight: 600;
   color: var(--dash-text);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
 .dash-page-subtitle {
   font-size: 13px;
@@ -356,7 +360,7 @@ button, [role="button"], a {
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   color: var(--dash-accent);
   margin-bottom: 8px;
 }

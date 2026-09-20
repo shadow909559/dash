@@ -46,15 +46,19 @@ class GoalRequest(BaseModel):
 
 @router.post("/goal")
 async def start_goal(req: GoalRequest, user_id: str = __import__("fastapi").Depends(get_current_user_id)):
-    from dash_backend.autonomous.agent_core import get_agent_core
+    from dash_backend.autonomous.agent_core import GoalRefusedError, get_agent_core
     core = get_agent_core()
 
-    goal = await core.run_goal(
-        description=req.description,
-        context={**req.context, "user_id": user_id},
-        max_iterations=req.max_iterations,
-        timeout=req.timeout,
-    )
+    try:
+        goal = await core.run_goal(
+            description=req.description,
+            context={**req.context, "user_id": user_id},
+            max_iterations=req.max_iterations,
+            timeout=req.timeout,
+        )
+    except GoalRefusedError as exc:
+        # Candor refusal (decisions.md #65): a named 400, not a 500.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"goal_id": goal.id, "status": goal.state.value}
 
 
@@ -162,7 +166,12 @@ async def agent_ws(websocket: WebSocket) -> None:
                 ctx = msg.get("context", {})
                 max_iter = msg.get("max_iterations", 30)
                 timeout_s = msg.get("timeout", 300.0)
-                goal = await core.run_goal(desc, ctx, max_iter, timeout_s)
+                from dash_backend.autonomous.agent_core import GoalRefusedError
+                try:
+                    await core.run_goal(desc, ctx, max_iter, timeout_s)
+                except GoalRefusedError as exc:
+                    await websocket.send_json({"type": "agent.refused", "error": str(exc)})
+                    continue
                 # Ack only — the core's _notify callback broadcasts the event
 
             elif msg_type == "agent.pause":

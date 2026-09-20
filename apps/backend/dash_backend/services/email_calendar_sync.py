@@ -239,6 +239,20 @@ class ExtendedEmailService(EmailService):
         self._inbox.append(email)
         self._store.put_doc("emails", email["id"], email,
                             seq=self._store.next_seq("emails"))
+        # Publish to the workflow event bus (decisions.md #57): only for a
+        # genuinely NEW message — deduped replays never re-trigger flows.
+        # Best-effort: ingest must succeed even if the bus is not running.
+        try:
+            from dash_backend.services.workflow_event_bridge import schedule_event_publish
+            schedule_event_publish("email.received", {
+                "email_id": email["id"],
+                "from": email["from"],
+                "subject": email["subject"],
+                "importance": email["importance"],
+                "source": source,
+            })
+        except Exception:  # noqa: BLE001
+            pass
         return True, email
 
     def ingest_eml(self, raw: bytes) -> dict:

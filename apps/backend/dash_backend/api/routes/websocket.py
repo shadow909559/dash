@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import time
 import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -150,6 +151,47 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     except Exception:
         logger.exception("Failed to register WebSocket for notifications")
 
+    # Trigger-state pushes (decisions.md #80): the same socket also
+    # receives trigger.update whenever a workflow fires or a trigger is
+    # paused/resumed. Best-effort registration like notifications.
+    _unregister_triggers = None
+    try:
+        from dash_backend.services.trigger_push import (
+            register_trigger_socket,
+            unregister_trigger_socket as _unregister_triggers,
+        )
+
+        register_trigger_socket(user_id, websocket)
+    except Exception:
+        logger.exception("Failed to register WebSocket for trigger pushes")
+
+    # Task-orchestrator pushes (decisions.md #90): task.created / step /
+    # waiting_confirmation / completed / failed events over the same socket,
+    # same best-effort registration pattern.
+    _unregister_tasks = None
+    try:
+        from dash_backend.autonomous.task_push import (
+            register_task_socket,
+            unregister_task_socket as _unregister_tasks,
+        )
+
+        register_task_socket(user_id, websocket)
+    except Exception:
+        logger.exception("Failed to register WebSocket for task pushes")
+
+    # Assistant pushes (decisions.md #92): approval.created / approval.resolved
+    # / meeting.alert over the same socket, same best-effort pattern.
+    _unregister_assistant = None
+    try:
+        from dash_backend.assistant.push import (
+            register_assistant_socket,
+            unregister_assistant_socket as _unregister_assistant,
+        )
+
+        register_assistant_socket(user_id, websocket)
+    except Exception:
+        logger.exception("Failed to register WebSocket for assistant pushes")
+
     # ── Start notification listener — push system notifications to this client ──
     async def _push_notification(notification: dict) -> None:
         await send_json({
@@ -239,6 +281,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         assistant_content = ""
         request_id = chat_msg.message_id or str(uuid.uuid4())
         chat_msg.message_id = request_id
+        _chat_t0 = time.perf_counter()  # latency metric (#45/#114)
 
         from dash_backend.chat.service import add_message, create_conversation
         from dash_backend.db.models.message import MessageRole
@@ -283,52 +326,42 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 pass
             return
 
-        # ── Autonomous brain: route through the JARVIS orchestrator ──
+        # ── 0) Explicit agent prefixes ("do:", "go:", "execute:", …) strip
+        # to the bare task and continue through the fast paths below.
         agent_prefixes = ("agent:", "autonomous:", "do:", "go:", "execute:")
-        is_agent_msg = chat_msg.content.lower().strip().startswith(agent_prefixes)
-        is_complex = not is_agent_msg  # let the brain decide for non-prefixed messages
+        for prefix in agent_prefixes:
+            if chat_msg.content.lower().strip().startswith(prefix):
+                stripped = chat_msg.content.strip()
+                chat_msg.content = stripped[len(prefix):].strip()
+                break
 
-        if is_agent_msg:
-            # Strip prefix
-            goal_desc = chat_msg.content
-            for prefix in agent_prefixes:
-                if chat_msg.content.lower().strip().startswith(prefix):
-                    goal_desc = chat_msg.content[len(prefix):].strip()
-                    break
-            chat_msg.content = goal_desc
-
+        # ── 1) Command interception: deterministic desktop commands, no LLM.
+        # Previously reachable only as dead code AFTER a `return` (found by
+        # the latency audit, decisions.md #89); restored to the live path so
+        # fixed commands answer in milliseconds instead of an LLM round trip.
+        # Assistant commands (decisions.md #92) run here too: grounded answers
+        # about clients/approvals/attention from structured state — never an
+        # LLM hallucinating status.
         try:
-            from dash_backend.autonomous.brain import get_brain
-            brain = get_brain()
-            response = await brain.handle_chat(chat_msg.content, user_id, agent_mode=getattr(chat_msg, 'agent_mode', 'general'))
-            assistant_content = response
-            await send_json({"type": "chat.token", "message_id": request_id, "content": response})
-            await send_json({"type": "chat.done", "message_id": request_id, "conversation_id": chat_msg.conversation_id})
-            try:
-                async with AsyncSessionLocal() as save_session:
-                    await add_message(save_session, chat_msg.conversation_id, MessageRole.ASSISTANT, assistant_content)
-            except Exception:
-                pass
-            # Auto-TTS: speak the response so DASH talks like JARVIS
-            try:
-                from dash_backend.voice import synthesize_text
-                tts_text = response[:500]  # cap for TTS to avoid long syntheses
-                audio_b64 = await synthesize_text(tts_text, provider_name="piper", user_id=user_id)
-                if audio_b64:
-                    await send_json({
-                        "type": "voice.tts_ready",
-                        "message_id": request_id,
-                        "audio_base64": audio_b64,
-                    })
-            except Exception as exc:
-                logger.debug("Auto-TTS failed for brain response: %s", exc)
+            from dash_backend.assistant.commands import try_assistant_command_async
+            _assistant_reply = await try_assistant_command_async(chat_msg.content)
+            if _assistant_reply is not None:
+                from dash_backend.assistant.metrics import observe_latency
+                observe_latency("intent_to_answer",
+                                (time.perf_counter() - _chat_t0) * 1000.0)
+                await send_json({
+                    "type": "chat.token",
+                    "message_id": request_id,
+                    "content": _assistant_reply,
+                })
+                await send_json({
+                    "type": "chat.done",
+                    "message_id": request_id,
+                    "conversation_id": chat_msg.conversation_id,
+                })
+                return
         except Exception as exc:
-            logger.exception("Brain chat failed: %s", exc)
-            await send_json({"type": "chat.token", "message_id": request_id, "content": f"I encountered an issue: {exc}"})
-            await send_json({"type": "chat.done", "message_id": request_id, "conversation_id": chat_msg.conversation_id})
-        return
-
-        # ── Command interception: detect desktop-control commands ──
+            logger.exception("assistant command check failed: %s", exc)
         try:
             from dash_backend.services.command_interceptor import try_intercept
             cmd_result = await try_intercept(chat_msg.content)
@@ -376,10 +409,78 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 except Exception as exc:
                     logger.exception("Auto-TTS failed for command: %s", exc)
                 logger.info("Command intercepted and executed: %s -> %s", chat_msg.content, summary)
-                return  # Skip normal LLM flow
+                return  # Deterministic command handled — no LLM involved
         except Exception as exc:
-            logger.exception("Command interceptor failed: %s — falling through to LLM", exc)
+            logger.exception("Command interceptor failed: %s — falling through to brain", exc)
 
+        # ── 2) Autonomous brain, STREAMING per token (decisions.md #89) ──
+        # The old code awaited brain.handle_chat() and sent the whole reply as
+        # ONE chat.token: TTFT equaled the entire generation time (measured
+        # ~10s for a one-line answer). handle_chat_stream yields each token as
+        # the model produces it. The tool loop below becomes the live fallback
+        # when the brain path raises, instead of unreachable dead code.
+        streamed_via_brain = False
+        try:
+            from dash_backend.autonomous.brain import get_brain
+            brain = get_brain()
+            await send_json({
+                "type": "chat.status",
+                "message_id": request_id,
+                "status": "responding",
+            })
+            chunks: list[str] = []
+            _ttft: float | None = None
+            async for chunk in brain.handle_chat_stream(
+                chat_msg.content,
+                user_id=user_id,
+                voice_mode=getattr(chat_msg, "voice_mode", False),
+                agent_mode=getattr(chat_msg, "agent_mode", "general"),
+            ):
+                chunks.append(chunk)
+                if _ttft is None:
+                    # Measured TTFT (#45/#114) — first token on the wire
+                    from dash_backend.assistant.metrics import observe_latency
+                    _ttft = (time.perf_counter() - _chat_t0) * 1000.0
+                    observe_latency("chat_ttft", _ttft)
+                await send_json({"type": "chat.token", "message_id": request_id, "content": chunk})
+            if chunks:
+                streamed_via_brain = True
+                from dash_backend.assistant.metrics import observe_latency as _ol
+                _ol("chat_total", (time.perf_counter() - _chat_t0) * 1000.0)
+        except Exception as exc:
+            logger.exception("Brain chat failed: %s — falling back to tool loop", exc)
+            if streamed_via_brain or chunks:
+                # Close a partially streamed message cleanly before the
+                # fallback produces a fresh reply.
+                try:
+                    await send_json({"type": "chat.done", "message_id": request_id, "conversation_id": chat_msg.conversation_id})
+                except Exception:
+                    pass
+
+        if streamed_via_brain:
+            assistant_content = "".join(chunks)
+            await send_json({"type": "chat.done", "message_id": request_id, "conversation_id": chat_msg.conversation_id})
+            try:
+                async with AsyncSessionLocal() as save_session:
+                    await add_message(save_session, chat_msg.conversation_id, MessageRole.ASSISTANT, assistant_content)
+            except Exception:
+                logger.exception("Failed to save brain assistant message")
+            # Auto-TTS: speak the response so DASH talks like JARVIS
+            try:
+                from dash_backend.voice import synthesize_text
+                audio_b64 = await synthesize_text(assistant_content[:500], provider_name="piper", user_id=user_id)
+                if audio_b64:
+                    await send_json({
+                        "type": "voice.tts_ready",
+                        "message_id": request_id,
+                        "audio_base64": audio_b64,
+                    })
+            except Exception as exc:
+                logger.debug("Auto-TTS failed for brain response: %s", exc)
+            logger.info("Completed streaming brain response for user=%s message_id=%s", user_id, request_id)
+            return
+
+        # ── 3) Tool-loop path (memory/RAG/candor/tools) — live fallback ──
         try:
             try:
                 await send_json({
@@ -390,6 +491,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             except Exception as exc:
                 logger.exception("Failed to send responding status for message_id=%s: %s", request_id, exc)
 
+            assistant_content = ""
             async with AsyncSessionLocal() as session:
                 async for event in handle_chat_send(chat_msg, session=session, user_id=user_id):
                     if event.type == "chat.token":
@@ -733,6 +835,21 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         keepalive_task.cancel()
         for task in list(chat_tasks):
             task.cancel()
+        if _unregister_triggers is not None:
+            try:
+                _unregister_triggers(user_id, websocket)
+            except Exception:
+                pass
+        if _unregister_tasks is not None:
+            try:
+                _unregister_tasks(user_id, websocket)
+            except Exception:
+                pass
+        if _unregister_assistant is not None:
+            try:
+                _unregister_assistant(user_id, websocket)
+            except Exception:
+                pass
         try:
             await system_task
         except asyncio.CancelledError:

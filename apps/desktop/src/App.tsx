@@ -7,7 +7,8 @@ import { DASHSidebar } from "@/components/DASHSidebar";
 import { TitleBar } from "@/components/TitleBar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { initializeWebSocket } from "@/lib/ws";
-import { resetWsClient } from "@/lib/wsClient";
+import { getWsClient, resetWsClient } from "@/lib/wsClient";
+import { useAIStore } from "@/stores/aiStore";
 import { resetAnimationController } from "@/lib/animationSystem";
 import { startSystemStatsPolling } from "@/stores/aiStore";
 import { startBadgePolling } from "@/stores/badgeStore";
@@ -29,6 +30,8 @@ const PlannerPage = lazy(() => import("@/pages/PlannerPage"));
 const AgentsPage = lazy(() => import("@/pages/AgentsPage"));
 const NotificationsPage = lazy(() => import("@/pages/NotificationsPage"));
 const ApprovalsPage = lazy(() => import("@/pages/ApprovalsPage"));
+const ClientsPage = lazy(() => import("@/pages/ClientsPage"));
+const AssistantCenterPage = lazy(() => import("@/pages/AssistantCenterPage"));
 const PluginsPage = lazy(() => import("@/pages/PluginsPage"));
 const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
@@ -55,6 +58,7 @@ const FileBrowserPage = lazy(() => import("@/pages/FileBrowserPage"));
 const BookmarkManagerPage = lazy(() => import("@/pages/BookmarkManagerPage"));
 const ReadingListPage = lazy(() => import("@/pages/ReadingListPage"));
 const MeetingNotesPage = lazy(() => import("@/pages/MeetingNotesPage"));
+const MeetingsPage = lazy(() => import("@/pages/MeetingsPage"));
 const ActionItemsPage = lazy(() => import("@/pages/ActionItemsPage"));
 const TimeTrackingPage = lazy(() => import("@/pages/TimeTrackingPage"));
 const SprintBoardPage = lazy(() => import("@/pages/SprintBoardPage"));
@@ -133,6 +137,42 @@ export function App() {
     const statsInterval = startSystemStatsPolling(5000);
     const badgeInterval = startBadgePolling(60000);
 
+    // PresenceEngine feed (decisions.md #117): backend presence updates
+    // drive the orb via applyPresence — one authoritative signal instead
+    // of per-surface heuristics. Snapshot fetched once at startup as the
+    // reconciliation fallback for missed pushes.
+    const ws = getWsClient();
+    const onPresence = (payload: { presence?: { state: string; source?: string; detail?: string } }) => {
+      if (payload?.presence?.state) {
+        useAIStore.getState().applyPresence(payload.presence);
+      }
+    };
+    ws.on("presence.update", onPresence);
+    // Wake-loop interim transcripts (decisions.md #118): live "DASH hears"
+    // partials from the backend voice loop, throttled server-side.
+    const onVoicePartial = (payload: { text?: string; final?: boolean }) => {
+      if (typeof payload?.text === "string" && payload.text) {
+        useAIStore.getState().applyVoicePartial({
+          text: payload.text,
+          final: Boolean(payload.final),
+        });
+      }
+    };
+    ws.on("voice.partial", onVoicePartial);
+    (async () => {
+      try {
+        const snap = await fetch("/api/v1/assistant/presence", {
+          headers: { Authorization: `Bearer ${localStorage.getItem("dash.token") || ""}` },
+        });
+        if (snap.ok) {
+          const data = await snap.json();
+          if (data?.state) useAIStore.getState().applyPresence(data);
+        }
+      } catch {
+        /* offline: orb stays on local heuristics */
+      }
+    })();
+
     // Audio stop handler for clean window close/suspend
     const handleStopAllAudio = () => {
       const allAudio = document.querySelectorAll("audio");
@@ -157,6 +197,8 @@ export function App() {
     const removeAudioListener = onAudioStopAll?.(() => handleStopAllAudio());
 
     return () => {
+      ws.off("presence.update", onPresence);
+      ws.off("voice.partial", onVoicePartial);
       if (statsInterval) clearInterval(statsInterval);
       if (badgeInterval) clearInterval(badgeInterval);
       if (removeAudioListener) removeAudioListener();
@@ -239,6 +281,8 @@ export function App() {
                   <Route path="/agents" element={<Suspense fallback={<PageSkeleton />}><AgentsPage /></Suspense>} />
                   <Route path="/notifications" element={<Suspense fallback={<PageSkeleton />}><NotificationsPage /></Suspense>} />
                   <Route path="/approvals" element={<Suspense fallback={<PageSkeleton />}><ApprovalsPage /></Suspense>} />
+                  <Route path="/clients" element={<Suspense fallback={<PageSkeleton />}><ClientsPage /></Suspense>} />
+                  <Route path="/assistant" element={<Suspense fallback={<PageSkeleton />}><AssistantCenterPage /></Suspense>} />
                   <Route path="/plugins" element={<Suspense fallback={<PageSkeleton />}><PluginsPage /></Suspense>} />
                   <Route path="/analytics" element={<Suspense fallback={<PageSkeleton />}><AnalyticsPage /></Suspense>} />
                   <Route path="/system-monitor" element={<Suspense fallback={<PageSkeleton />}><SystemMonitorPage /></Suspense>} />
@@ -264,6 +308,7 @@ export function App() {
                   <Route path="/bookmarks" element={<Suspense fallback={<PageSkeleton />}><BookmarkManagerPage /></Suspense>} />
                   <Route path="/reading-list" element={<Suspense fallback={<PageSkeleton />}><ReadingListPage /></Suspense>} />
                   <Route path="/meetings" element={<Suspense fallback={<PageSkeleton />}><MeetingNotesPage /></Suspense>} />
+                  <Route path="/assistant/meetings" element={<Suspense fallback={<PageSkeleton />}><MeetingsPage /></Suspense>} />
                   <Route path="/action-items" element={<Suspense fallback={<PageSkeleton />}><ActionItemsPage /></Suspense>} />
                   <Route path="/time-tracking" element={<Suspense fallback={<PageSkeleton />}><TimeTrackingPage /></Suspense>} />
                   <Route path="/sprint-board" element={<Suspense fallback={<PageSkeleton />}><SprintBoardPage /></Suspense>} />

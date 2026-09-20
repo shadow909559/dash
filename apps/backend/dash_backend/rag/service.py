@@ -66,14 +66,24 @@ async def create_document(
     content: str,
     filename: str | None = None,
     metadata: dict | None = None,
+    client_id: str | None = None,
 ) -> models.Document:
-    """Create a new document and process it into chunks."""
+    """Create a new document and process it into chunks.
+
+    ``client_id`` (decisions.md #120, spec §31) tags the document with a
+    CRM client so retrieval can be entity-scoped: while handling client A,
+    client B's tagged documents are excluded. Untagged documents remain
+    general owner knowledge retrievable in any scope.
+    """
     uid = _safe_uuid(user_id)
+    merged_metadata = dict(metadata or {})
+    if client_id:
+        merged_metadata.setdefault("client_id", str(client_id))
     doc = models.Document(
         user_id=uid,
         filename=filename,
         content=content,
-        metadata_=metadata or {},
+        metadata_=merged_metadata,
     )
     session.add(doc)
     await session.commit()
@@ -212,6 +222,24 @@ def _cosine_sim(a: List[float], b: List[float]) -> float:
     return dot / (na * nb)
 
 
+# Client isolation (decisions.md #120, spec §31): the SQL fragment that
+# keeps retrieval entity-aware. A tagged document matches ONLY its client;
+# untagged documents are general knowledge, retrievable in any scope.
+# This is application-level enforcement — the LLM cannot leak Client B's
+# content into Client A's context by asking nicely.
+_CLIENT_DOC = models.Document.metadata_["client_id"].as_string()
+
+
+def _scope_clause(client_id: str | None):
+    if not client_id:
+        return None  # unscoped retrieval behaves exactly as before
+    from sqlalchemy import or_
+    return or_(
+        _CLIENT_DOC == str(client_id),
+        _CLIENT_DOC.is_(None),
+    )
+
+
 async def search_documents(
     session: AsyncSession,
     user_id: uuid.UUID | str,
@@ -219,6 +247,7 @@ async def search_documents(
     top_k: int = 5,
     candidate_limit: int = 200,
     file_extension: str | None = None,
+    client_id: str | None = None,
 ) -> List[Tuple[models.DocumentChunk, float]]:
     """Search for relevant document chunks to the query.
 
@@ -226,7 +255,10 @@ async def search_documents(
     embedding-based similarity search (in Python). Otherwise fallback to text
     substring search.
 
-    Supports filtering by file extension for source code search.
+    Supports filtering by file extension for source code search, and by
+    owning client for entity-scoped retrieval (§31): with a ``client_id``
+    the pool is that client's tagged docs PLUS untagged general docs —
+    never another client's.
     """
     uid = _safe_uuid(user_id)
 
@@ -242,6 +274,10 @@ async def search_documents(
 
         if file_extension:
             stmt = stmt.where(models.Document.metadata_["file_extension"].as_string() == file_extension)
+
+        scope = _scope_clause(client_id)
+        if scope is not None:
+            stmt = stmt.where(scope)
 
         stmt = stmt.order_by(models.DocumentChunk.created_at.desc()).limit(candidate_limit)
 
@@ -295,6 +331,10 @@ async def search_documents(
     if file_extension:
         stmt = stmt.where(models.Document.metadata_["file_extension"].as_string() == file_extension)
 
+    scope = _scope_clause(client_id)
+    if scope is not None:
+        stmt = stmt.where(scope)
+
     stmt = stmt.order_by(models.DocumentChunk.created_at.desc()).limit(top_k)
     result = await session.execute(stmt)
     rows = result.all()
@@ -307,10 +347,13 @@ async def retrieve_context(
     query: str | None = None,
     max_chunks: int = 5,
     file_extension: str | None = None,
+    client_id: str | None = None,
 ) -> str:
     """Retrieve a context string composed of top matching chunks with citations.
 
     If `query` is None, return most important recent chunks (by created_at).
+    ``client_id`` scopes retrieval (§31): the context may contain that
+    client's documents and general documents — never another client's.
     """
     uid = _safe_uuid(user_id)
 
@@ -319,6 +362,7 @@ async def retrieve_context(
             session, uid, query,
             top_k=max_chunks,
             file_extension=file_extension,
+            client_id=client_id,
         )
     else:
         stmt = (
@@ -328,6 +372,9 @@ async def retrieve_context(
             .order_by(models.DocumentChunk.created_at.desc())
             .limit(max_chunks)
         )
+        scope = _scope_clause(client_id)
+        if scope is not None:
+            stmt = stmt.where(scope)
         res = await session.execute(stmt)
         results = [(row[0], 0.0) for row in res.all()]
 

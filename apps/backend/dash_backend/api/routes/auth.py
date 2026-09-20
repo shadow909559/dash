@@ -70,6 +70,7 @@ async def login(
 ) -> TokenResponse:
     """Authenticate a user and issue authentication tokens."""
     user = None
+    ip, _ua = _client_info(request)
     try:
         user = await authenticate_user(session, payload)
     except InvalidCredentialsError as exc:
@@ -78,9 +79,20 @@ async def login(
             action="login",
             category="auth",
             status="failure",
-            details={"reason": "invalid_credentials"},
+            details={"reason": "invalid_credentials", "source_ip": ip},
             severity="WARNING",
+            source_ip=ip or "",
         )
+        # Guardian (Phase 4): feed the live detector — bursts are caught
+        # the moment they cross the threshold, not on the next sweep.
+        try:
+            from dash_backend.security.guardian import get_guardian
+
+            incident = get_guardian().record_login_failure(ip)
+            if incident is not None:
+                await get_guardian().respond(incident)
+        except Exception:
+            pass  # guardian must never break the auth error path
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

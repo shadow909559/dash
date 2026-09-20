@@ -301,7 +301,10 @@ class AutonomousBrain:
         agent_mode selects the personality: general, coder, planner, research, executor.
         Returns the response text.
         """
-        # Store in conversation history
+        from dash_backend.autonomous.planner import is_complex_goal
+
+        # Store in conversation history (the user turn). The assistant turn
+        # is appended once at the end, after the response completes.
         self._conversations.append({
             "role": "user",
             "content": message,
@@ -310,92 +313,54 @@ class AutonomousBrain:
         if len(self._conversations) > self._max_conversations:
             self._conversations = self._conversations[-self._max_conversations:]
 
-        from dash_backend.autonomous.planner import is_complex_goal
+        # Candor hard gate (decisions.md #65): refuse-class requests NEVER
+        # reach the goal executor, no matter how "complex" they look. The
+        # complex branch below dispatches the raw user message to an agent
+        # with real tool access — it must not be reachable by malware /
+        # attack / credential-theft asks. Found live: "create a virus…"
+        # matched is_complex_goal("create a") and ran as goal ee10ca40
+        # while the simple-question branch's candor prompt never saw it.
+        from dash_backend.autonomous.candor import refusal_for
+        refusal = refusal_for(message)
+        if refusal:
+            self._conversations.append({
+                "role": "assistant",
+                "content": refusal,
+                "timestamp": time.time(),
+            })
+            return refusal
 
         if is_complex_goal(message):
-            # Complex task — create an autonomous goal
+            # Complex task — persistent orchestrated task (decisions.md #90):
+            # validated plan, dependency graph, verification, confirmations,
+            # checkpoints that survive restarts, and streamed progress events.
+            # Progress reaches the UI via task.* WS pushes; the chat reply
+            # stays a short immediate acknowledgement.
             try:
-                from dash_backend.autonomous.agent_core import get_agent_core
-                core = get_agent_core()
-                goal = await core.run_goal(
-                    description=message,
-                    context={"source": "chat", "user_id": user_id},
-                    max_iterations=10,
-                    timeout=180.0,
+                from dash_backend.autonomous.task_orchestrator import get_task_orchestrator
+                task = await get_task_orchestrator().create_task(
+                    message, user_id=user_id, context={"source": "chat"},
                 )
                 response = (
-                    f"I've started working on that. "
-                    f"Goal {goal.id[:8]} is now running autonomously. "
-                    f"I'll let you know when it's complete."
+                    f"On it. Task {task.id} is planned and running — "
+                    f"I'll stream progress and ask before anything risky."
                 )
+            except ValueError as exc:
+                # Candor refusal or concurrency cap from the orchestrator
+                response = f"I can't do that: {exc}"
             except Exception as exc:
                 response = f"I encountered an issue starting that task: {exc}"
         else:
-            # Simple question — answer via LLM
+            # Simple question — answer via LLM, streaming token by token
+            # (decisions.md #89). Prompt construction, memory/RAG retrieval
+            # and the cloud fallback live in handle_chat_stream; this wrapper
+            # only collects the chunks for the in-memory history.
+            response = ""
             try:
-                from dash_backend.llm.service import build_chat_messages, collect_streamed_response
-                from dash_backend.llm.fine_tuner import get_fine_tuning_manager
-                context = self._build_context()
-                # Retrieve relevant memories for context
-                memory_context = await self._retrieve_memories(message, user_id)
-                if memory_context:
-                    context = f"{context}\n\n{memory_context}"
-                # RAG: search Obsidian vault and code repos for relevant context
-                rag_context = ""
-                try:
-                    ftm = get_fine_tuning_manager()
-                    await ftm.rag_engine.initialize()
-                    rag_results = await ftm.rag_engine.search(message, top_k=3)
-                    if rag_results:
-                        rag_parts = []
-                        for r in rag_results:
-                            rag_parts.append(f"[{r.source.split(chr(92))[-1]}] {r.content[:300]}")
-                        rag_context = "\n\nRELEVANT DOCUMENTS:\n" + "\n".join(rag_parts)
-                except Exception:
-                    pass  # RAG not initialized yet, skip silently
-                # Get agent-mode-specific system prompt
-                spoken_rules = (
-                    " RULES FOR VOICE MODE: Keep replies under 2 sentences. "
-                    "No formatting, no lists, no markdown. Just speak naturally."
-                    if voice_mode else ""
-                )
-                try:
-                    ftm = get_fine_tuning_manager()
-                    system_prompt = ftm.prompt_engine.get_system_prompt(agent_mode)
-                except Exception:
-                    system_prompt = (
-                        "You are DASH, an AI assistant similar to JARVIS. "
-                        "You are running on the user's Windows computer. "
-                        "Be concise, helpful, and slightly formal."
-                    )
-                messages = build_chat_messages(
-                    system_prompt=(
-                        f"{system_prompt}"
-                        f"{spoken_rules}"
-                        f"\n\nSYSTEM STATUS:\n{context}"
-                        f"{rag_context}"
-                    ),
-                    user_message=message,
-                )
-                # Try local Ollama first, fall back to cloud (Groq/Gemini) if slow
-                response = ""
-                try:
-                    response = await asyncio.wait_for(
-                        collect_streamed_response(messages),
-                        timeout=45.0,
-                    )
-                except asyncio.TimeoutError:
-                    logger.info("Brain: local Ollama timed out, trying cloud fallback")
-                    try:
-                        from dash_backend.llm.cloud_call import cloud_chat
-                        response = await asyncio.wait_for(
-                            cloud_chat(messages, timeout=30.0),
-                            timeout=35.0,
-                        )
-                    except Exception as cloud_exc:
-                        logger.warning("Brain: cloud fallback failed: %s", cloud_exc)
-                if not response:
-                    response = "I'm thinking about that, but the response is taking longer than expected."
+                async for chunk in self.handle_chat_stream(
+                    message, user_id=user_id, voice_mode=voice_mode, agent_mode=agent_mode
+                ):
+                    response += chunk
             except Exception as exc:
                 response = f"I encountered an issue: {exc}"
 
@@ -407,6 +372,114 @@ class AutonomousBrain:
         })
 
         return response
+
+    async def handle_chat_stream(
+        self,
+        message: str,
+        user_id: str = "user",
+        voice_mode: bool = False,
+        agent_mode: str = "general",
+    ):
+        """Streaming form of handle_chat's simple-question branch.
+
+        Yields response text chunks as the model produces them so the
+        websocket route can forward each token immediately (decisions.md
+        #89) — Time To First Token becomes the model's own first-token
+        latency instead of the full generation time. Complex-goal
+        dispatch and the candor refusal gate stay in handle_chat; this
+        generator re-checks the refusal gate so direct callers are
+        equally protected. Falls back to cloud (Groq/Gemini) when local
+        Ollama is slow, same contract as before.
+        """
+        from dash_backend.autonomous.candor import refusal_for
+        refusal = refusal_for(message)
+        if refusal:
+            # History is the caller's responsibility (handle_chat appends the
+            # response it collects); this generator only yields.
+            yield refusal
+            return
+
+        from dash_backend.llm.service import build_chat_messages, stream_chat_response
+        from dash_backend.llm.fine_tuner import get_fine_tuning_manager
+
+        context = self._build_context()
+        # Memory + RAG are independent — run them concurrently (they used to
+        # stack serially in front of the first token).
+        async def _rag() -> str:
+            try:
+                ftm = get_fine_tuning_manager()
+                await ftm.rag_engine.initialize()
+                rag_results = await ftm.rag_engine.search(message, top_k=3)
+                if not rag_results:
+                    return ""
+                rag_parts = [
+                    f"[{r.source.split(chr(92))[-1]}] {r.content[:300]}" for r in rag_results
+                ]
+                return "\n\nRELEVANT DOCUMENTS:\n" + "\n".join(rag_parts)
+            except Exception:
+                return ""  # RAG not initialized yet, skip silently
+
+        memory_context, rag_context = await asyncio.gather(
+            self._retrieve_memories(message, user_id),
+            _rag(),
+        )
+        if memory_context:
+            context = f"{context}\n\n{memory_context}"
+
+        # Agent-mode-specific system prompt
+        spoken_rules = (
+            " RULES FOR VOICE MODE: Keep replies under 2 sentences. "
+            "No formatting, no lists, no markdown. Just speak naturally."
+            if voice_mode else ""
+        )
+        try:
+            ftm = get_fine_tuning_manager()
+            system_prompt = ftm.prompt_engine.get_system_prompt(agent_mode)
+        except Exception:
+            system_prompt = (
+                "You are DASH, an AI assistant similar to JARVIS. "
+                "You are running on the user's Windows computer. "
+                "Be concise, helpful, and slightly formal."
+            )
+        # Candor Core (decisions.md #54): honesty contract + reality checks
+        # composed over whatever mode prompt was selected.
+        from dash_backend.autonomous.candor import compose_candor_system_prompt
+        system_prompt = compose_candor_system_prompt(system_prompt, message)
+        messages = build_chat_messages(
+            system_prompt=(
+                f"{system_prompt}"
+                f"{spoken_rules}"
+                f"\n\nSYSTEM STATUS:\n{context}"
+                f"{rag_context}"
+            ),
+            user_message=message,
+        )
+
+        got_any = False
+        try:
+            async with asyncio.timeout(45.0):
+                async for chunk in stream_chat_response(messages):
+                    got_any = True
+                    yield chunk
+        except TimeoutError:
+            logger.info("Brain: local Ollama timed out, trying cloud fallback")
+        except Exception:
+            logger.exception("Brain: local stream failed, trying cloud fallback")
+
+        if not got_any:
+            # Cloud fallback — only when the local model produced nothing.
+            try:
+                from dash_backend.llm.cloud_call import cloud_chat
+                response = await asyncio.wait_for(
+                    cloud_chat(messages, timeout=30.0),
+                    timeout=35.0,
+                )
+                if response:
+                    yield response
+                    return
+            except Exception as cloud_exc:
+                logger.warning("Brain: cloud fallback failed: %s", cloud_exc)
+            yield "I'm thinking about that, but the response is taking longer than expected."
 
     def _build_context(self) -> str:
         """Build a context string from current system state."""
@@ -548,14 +621,29 @@ class AutonomousBrain:
             return False
 
     async def _check_backend(self) -> bool:
-        """Check if the backend health endpoint responds."""
+        """Check if the backend health endpoint responds.
+
+        The URL is configurable (DASH_BRAIN_BACKEND_URL) so secondary
+        instances don't probe the production port, and a restart is only
+        attempted after TWO consecutive failures — a slow answer under LLM
+        load is not the same as the backend being down (found during the
+        latency audit, decisions.md #89: CPU saturation from a single
+        generation tripped the old 3s probe into 'restarting' the backend).
+        """
+        import os
+        import urllib.request
+        url = os.getenv("DASH_BRAIN_BACKEND_URL", "http://127.0.0.1:8000/health")
         try:
-            import urllib.request
-            req = urllib.request.Request("http://127.0.0.1:8000/health")
-            resp = await asyncio.to_thread(urllib.request.urlopen, req, timeout=3)
-            return resp.status == 200
+            req = urllib.request.Request(url)
+            resp = await asyncio.to_thread(urllib.request.urlopen, req, timeout=8)
+            ok = resp.status == 200
         except Exception:
-            return False
+            ok = False
+        if ok:
+            self._backend_fail_streak = 0
+        else:
+            self._backend_fail_streak = getattr(self, "_backend_fail_streak", 0) + 1
+        return getattr(self, "_backend_fail_streak", 0) < 2
 
     async def _restart_ollama(self) -> None:
         """Restart Ollama service."""

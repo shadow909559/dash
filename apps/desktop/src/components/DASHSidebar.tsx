@@ -13,6 +13,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Mic,
+  Radar,
+  Users,
+  Video,
 } from "lucide-react";
 import { useAIStore } from "@/stores/aiStore";
 import { useBadgeStore } from "@/stores/badgeStore";
@@ -36,6 +39,9 @@ const PRIMARY_NAV_ITEMS: NavItem[] = [
   { id: "home", path: "/", label: "Dashboard", icon: Home },
   { id: "chat", path: "/chat", label: "Chat", icon: MessageSquare },
   { id: "voice", path: "/voice", label: "Voice", icon: Mic },
+  { id: "assistant", path: "/assistant", label: "Assistant", icon: Radar },
+  { id: "clients", path: "/clients", label: "Clients", icon: Users },
+  { id: "assistant-meetings", path: "/assistant/meetings", label: "Meetings", icon: Video },
   { id: "memory", path: "/memory", label: "Memory", icon: Brain },
   { id: "research", path: "/research", label: "Research", icon: Globe },
   { id: "desktop", path: "/desktop", label: "Control", icon: Monitor },
@@ -101,9 +107,13 @@ export const DASHSidebar: React.FC<DASHSidebarProps> = ({ isExpanded, onToggle }
               justifyContent: isExpanded ? "flex-start" : "center",
               borderRadius: "var(--dash-radius-sm)",
               color: isActive ? "var(--dash-accent)" : "var(--dash-text-secondary)",
-              background: isActive ? "var(--ultron-surface)" : "transparent",
+              background: isActive
+                ? "linear-gradient(90deg, rgba(63, 169, 245, 0.14), rgba(63, 169, 245, 0.04))"
+                : "transparent",
               border: isActive ? "1px solid var(--ultron-border)" : "1px solid transparent",
-              boxShadow: isActive ? "0 0 12px rgba(63, 169, 245, 0.15)" : "none",
+              boxShadow: isActive
+                ? "inset 2px 0 0 var(--dash-accent), 0 0 16px rgba(63, 169, 245, 0.18)"
+                : "none",
               textDecoration: "none",
               fontSize: 13,
               fontWeight: isActive ? 500 : 400,
@@ -218,7 +228,7 @@ export const DASHSidebar: React.FC<DASHSidebarProps> = ({ isExpanded, onToggle }
               width: 32,
               height: 32,
               borderRadius: 8,
-              background: "linear-gradient(135deg, #3fa9f5, #1a5276)",
+              background: "linear-gradient(135deg, #3fa9f5, #123a5c)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",

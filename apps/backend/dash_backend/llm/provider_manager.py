@@ -61,6 +61,10 @@ class OllamaManager:
         self._current_status = ProviderStatus.CHECKING
         self._last_health_check: float = 0
         self._health_check_interval = 30.0  # seconds
+        # Cache of the last full health result for the fast path (see
+        # check_health). Reset whenever a real probe runs.
+        self._last_health: ProviderHealth | None = None
+        self._last_health_time: float = 0.0
         self._startup_timeout = 30.0  # seconds to wait for Ollama to start
         self._max_startup_retries = 3
 
@@ -242,12 +246,35 @@ class OllamaManager:
             for m in installed_models
         )
 
-    async def check_health(self) -> ProviderHealth:
+    async def check_health(self, force: bool = False) -> ProviderHealth:
         """Perform comprehensive provider health check.
+
+        By default returns the cached READY result within the health-check
+        interval (30s) instead of re-probing Ollama on every call — the
+        check involves a subprocess probe plus an /api/tags HTTP round trip
+        that used to run before EVERY chat message. Pass force=True to
+        bypass the cache (status endpoints, explicit refresh).
 
         Returns:
             ProviderHealth with current status and details.
         """
+        if (
+            not force
+            and self._last_health
+            is not None
+            and self._current_status == ProviderStatus.READY
+        ):
+            age = asyncio.get_event_loop().time() - self._last_health_time
+            if age < self._health_check_interval:
+                return self._last_health
+
+        result = await self._check_health_uncached()
+        self._last_health = result
+        self._last_health_time = asyncio.get_event_loop().time()
+        return result
+
+    async def _check_health_uncached(self) -> ProviderHealth:
+        """The full probe: process check, startup recovery, model listing."""
         settings = get_settings()
         provider = settings.ai_provider.lower()
         base_url = settings.ollama_base_url.rstrip("/")

@@ -83,6 +83,18 @@ class ReminderService:
                                 cb(r)
                             except Exception:
                                 pass
+                        # Workflow event trigger (decisions.md #57): reminders
+                        # can drive flows. Best-effort — the reminder still
+                        # fires even if the bus is not running.
+                        try:
+                            from dash_backend.services.workflow_event_bridge import schedule_event_publish
+                            schedule_event_publish("reminder.fired", {
+                                "reminder_id": r.id,
+                                "title": r.title,
+                                "category": r.category,
+                            })
+                        except Exception:
+                            pass
                         if r.repeat_interval:
                             r.trigger_at = now + r.repeat_interval
                         else:

@@ -19,20 +19,42 @@ import {
 
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api/v1";
 
+/** Compact relative time for last-tick / next-due stamps. Past → "2m ago",
+ * future → "in 30s", missing → "never" (not dressed up as something else). */
+function fmtRelative(iso: string | null | undefined): string {
+  if (!iso) return "never";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "unknown";
+  const diff = Math.round((t - Date.now()) / 1000);
+  const abs = Math.abs(diff);
+  const span =
+    abs < 60
+      ? `${abs}s`
+      : abs < 3600
+        ? `${Math.floor(abs / 60)}m`
+        : `${Math.floor(abs / 3600)}h ${Math.floor((abs % 3600) / 60)}m`;
+  return diff >= 0 ? `in ${span}` : `${span} ago`;
+}
+
 export const SystemMonitorPage: React.FC = () => {
   const { systemStats, systemStatus, websocketStatus, aiProviderStatus } = useAIStore();
   const [healthData, setHealthData] = useState<any>(null);
   const [monitorData, setMonitorData] = useState<any>(null);
+  const [triggerStatus, setTriggerStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
-      const [h, m] = await Promise.all([
+      const [h, m, t] = await Promise.all([
         authFetch(`${API.replace("/api/v1", "")}/health`).then((r) => r.json()),
         authFetch(`${API}/monitor/health`).then((r) => r.json()).catch(() => null),
+        authFetch(`${API}/enhanced/workflows/trigger-status`)
+          .then((r) => r.json())
+          .catch(() => null),
       ]);
       setHealthData(h);
       setMonitorData(m);
+      setTriggerStatus(t);
     } catch { }
     setLoading(false);
   }, []);
@@ -136,6 +158,65 @@ export const SystemMonitorPage: React.FC = () => {
         <ServiceStatus name="AI Provider" status={aiProviderStatus === "ready" ? "ok" : aiProviderStatus === "offline" ? "error" : "unknown"} detail={aiProviderStatus} />
         {components.obsidian && <ServiceStatus name="Obsidian" status={components.obsidian.status === "ok" ? "ok" : "unknown"} detail={components.obsidian.notes !== undefined ? `${components.obsidian.notes} notes` : ""} />}
         {components.backend && <ServiceStatus name="Backend Process" status={components.backend.status === "ok" ? "ok" : "unknown"} detail={components.backend.uptime ? `${Math.floor(components.backend.uptime / 60)}m` : ""} />}
+      </div>
+
+      {/* Workflow Triggers (decisions.md #81) */}
+      <div className="dash-section-title">Workflow Triggers</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+        {triggerStatus ? (
+          <>
+            <ServiceStatus
+              name="Trigger Scheduler"
+              status={triggerStatus.scheduler?.running ? "ok" : "error"}
+              detail={`poll ${triggerStatus.scheduler?.poll_seconds ?? "?"}s · last tick ${fmtRelative(triggerStatus.scheduler?.last_tick_at)}`}
+            />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+              <MetricCard
+                icon={Clock}
+                label="Schedules"
+                value={`${triggerStatus.schedules_active}/${triggerStatus.schedules_total}${triggerStatus.schedules_paused > 0 ? ` (${triggerStatus.schedules_paused} paused)` : ""}`}
+                color={triggerStatus.schedules_paused > 0 ? "var(--dash-warning)" : "var(--dash-success)"}
+                barPercent={triggerStatus.schedules_total > 0 ? (triggerStatus.schedules_active / triggerStatus.schedules_total) * 100 : 0}
+                barColor="var(--dash-success)"
+              />
+              <MetricCard
+                icon={Zap}
+                label="Webhooks"
+                value={`${triggerStatus.webhooks_active}/${triggerStatus.webhooks_total}${triggerStatus.webhooks_paused > 0 ? ` (${triggerStatus.webhooks_paused} paused)` : ""}`}
+                color={triggerStatus.webhooks_paused > 0 ? "var(--dash-warning)" : "var(--dash-success)"}
+                barPercent={triggerStatus.webhooks_total > 0 ? (triggerStatus.webhooks_active / triggerStatus.webhooks_total) * 100 : 0}
+                barColor="var(--dash-success)"
+              />
+              <MetricCard
+                icon={Activity}
+                label="Event Triggers"
+                value={`${triggerStatus.event_triggers_active}/${triggerStatus.event_triggers_total}${triggerStatus.event_triggers_paused > 0 ? ` (${triggerStatus.event_triggers_paused} paused)` : ""}`}
+                color={triggerStatus.event_triggers_paused > 0 ? "var(--dash-warning)" : "var(--dash-success)"}
+                barPercent={triggerStatus.event_triggers_total > 0 ? (triggerStatus.event_triggers_active / triggerStatus.event_triggers_total) * 100 : 0}
+                barColor="var(--dash-success)"
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: "var(--dash-radius-sm)", background: "var(--dash-bg-subtle)", border: "1px solid var(--dash-border-subtle)" }}>
+              <Clock size={13} style={{ color: "var(--dash-cyan)", flexShrink: 0 }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--dash-text)", flexShrink: 0 }}>Next due</span>
+              {triggerStatus.next_due ? (
+                <>
+                  <span style={{ fontSize: 11, color: "var(--dash-text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {triggerStatus.next_due.workflow_name}
+                    <span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--dash-text-muted)", marginLeft: 6 }}>{triggerStatus.next_due.cron}</span>
+                  </span>
+                  <span style={{ fontSize: 10, color: "var(--dash-cyan)", fontFamily: "JetBrains Mono, monospace" }}>{fmtRelative(triggerStatus.next_due.due_at)}</span>
+                </>
+              ) : (
+                <span style={{ fontSize: 11, color: "var(--dash-text-muted)" }}>none scheduled</span>
+              )}
+            </div>
+          </>
+        ) : (
+          <div style={{ padding: "10px 14px", borderRadius: "var(--dash-radius-sm)", background: "var(--dash-bg-subtle)", border: "1px solid var(--dash-border-subtle)", fontSize: 11, color: "var(--dash-text-muted)" }}>
+            Trigger status unavailable
+          </div>
+        )}
       </div>
 
       {/* Connected Devices */}

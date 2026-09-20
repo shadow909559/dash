@@ -27,6 +27,37 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/security", tags=["security"])
 
 
+# ── Guardian (Phase 4, decisions.md #60) ──────────────────────────────
+
+
+@router.get("/guardian")
+async def guardian_status(_user=Depends(get_current_user_id)) -> Dict[str, Any]:
+    """Guardian's live state: running, incidents seen, listeners tracked."""
+    from dash_backend.security.guardian import get_guardian
+
+    return get_guardian().get_status()
+
+
+@router.get("/guardian/incidents")
+async def guardian_incidents(
+    limit: int = Query(20, ge=1, le=100),
+    _user=Depends(get_current_user_id),
+) -> Dict[str, Any]:
+    """Recent in-memory incidents (the durable record is the audit log —
+    query /security/audit-log?event_type=GUARDIAN_INCIDENT for it)."""
+    from dash_backend.security.guardian import get_guardian
+
+    return {"incidents": get_guardian().recent_incidents(limit=limit)}
+
+
+@router.post("/guardian/scan")
+async def guardian_scan_now(_user=Depends(get_current_user_id)) -> Dict[str, Any]:
+    """Force one Guardian scan immediately (otherwise every 60s)."""
+    from dash_backend.security.guardian import get_guardian
+
+    return await get_guardian().run_scan()
+
+
 @router.get("/audit-log")
 async def get_audit_log(
     event_type: Optional[str] = Query(None, description="Filter by event type (e.g. LOGIN_SUCCESS)"),

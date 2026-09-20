@@ -220,6 +220,51 @@ def _services_section() -> dict[str, Any]:
         out["plugins"] = {"available": False, "error": str(exc)}
 
     try:
+        from dash_backend.services.workflow_builder import get_workflow_trigger_scheduler
+
+        trigger_sched = get_workflow_trigger_scheduler()
+        out["workflow_triggers"] = {
+            "running": trigger_sched.running,
+            "schedules": len(trigger_sched.engine.get_schedules()),
+            "webhooks": len(trigger_sched.engine.get_webhooks()),
+            "event_triggers": len(trigger_sched.engine.get_event_triggers()),
+        }
+    except Exception as exc:
+        out["workflow_triggers"] = {"available": False, "error": str(exc)}
+
+    try:
+        from dash_backend.services.workflow_event_bridge import get_workflow_event_bridge
+
+        bridge = get_workflow_event_bridge()
+        out["workflow_event_bridge"] = {
+            "subscribed": bridge.subscribed,
+            "file_watcher_running": bridge.watching_files,
+        }
+    except Exception as exc:
+        out["workflow_event_bridge"] = {"available": False, "error": str(exc)}
+
+    try:
+        from dash_backend.self_heal import get_self_healing_loop
+
+        out["self_healing"] = get_self_healing_loop().get_status()
+    except Exception as exc:
+        out["self_healing"] = {"available": False, "error": str(exc)}
+
+    try:
+        from dash_backend.security.guardian import get_guardian
+
+        out["guardian"] = get_guardian().get_status()
+    except Exception as exc:
+        out["guardian"] = {"available": False, "error": str(exc)}
+
+    try:
+        from dash_backend.vision.watcher import get_vision_watcher
+
+        out["vision_watcher"] = get_vision_watcher().get_status()
+    except Exception as exc:
+        out["vision_watcher"] = {"available": False, "error": str(exc)}
+
+    try:
         from dash_backend.autonomous.background_task_manager import get_background_task_manager
 
         btm = get_background_task_manager()

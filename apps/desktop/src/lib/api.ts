@@ -28,18 +28,25 @@ async function fetchBrowserDevToken(): Promise<string | null> {
 
 /** Shared token accessor — also used by wsClient for the WebSocket handshake. */
 export async function getDeviceToken(): Promise<string | null> {
-  if (cachedToken !== undefined) return cachedToken ?? null;
+  if (cachedToken !== undefined) return cachedToken;
+  // Electron bridge first (production path).
   try {
     const res = await window.electronAPI?.auth?.deviceToken();
-    cachedToken = res?.ok && res.token ? res.token : null;
+    if (res?.ok && res.token) {
+      cachedToken = res.token;
+      return cachedToken;
+    }
   } catch {
-    cachedToken = null;
+    /* bridge failed — fall through to the dev fallback */
   }
-  if (!cachedToken) {
-    // No Electron bridge (plain browser / web build): dev-only fallback.
-    cachedToken = await fetchBrowserDevToken();
-  }
-  return cachedToken ?? null;
+  // No bridge / bridge failure (plain browser or web build): dev-only
+  // fallback. ONLY a positive token is cached: caching a null here kept
+  // every authenticated call unauthenticated for the whole session when
+  // the UI booted before the backend (decisions.md #123) — the fallback
+  // now retries on the next call instead.
+  const token = await fetchBrowserDevToken();
+  if (token) cachedToken = token;
+  return token ?? null;
 }
 
 export async function isAuthenticated(): Promise<boolean> {
@@ -249,7 +256,16 @@ export const workflows = {
     request<{ ok: boolean }>(`/enhanced/workflows/${id}`, { method: "DELETE" }),
 
   execute: (id: string) =>
-    request<{ ok: boolean; execution: { id: string; status: string; nodes_executed: string[]; duration_ms: number } }>(
+    request<{
+      ok: boolean;
+      reason?: string;
+      execution?: {
+        id: string;
+        status: string;
+        nodes_executed: string[];
+        duration_ms: number;
+      };
+    }>(
       `/enhanced/workflows/${id}/execute`,
       { method: "POST" }
     ),
@@ -257,6 +273,130 @@ export const workflows = {
   duplicate: (id: string) =>
     request<{ ok: boolean; workflow: Workflow }>(`/enhanced/workflows/${id}/duplicate`, { method: "POST" }),
 };
+
+// Workflow triggers: schedules + webhooks (decisions.md #53/#56)
+export interface WorkflowSchedule {
+  cron: string;
+  timezone: string;
+  enabled: boolean;
+  created_at: string;
+  last_fired_at: string | null;
+  last_status: string | null;
+  /** ISO stamp of when the pause began (null = not paused). */
+  paused_since?: string | null;
+  /** Fires the scheduler skipped while paused (#84). Kept on resume. */
+  skipped_fires?: number;
+  workflow_name?: string;
+}
+
+export interface WorkflowWebhook {
+  webhook_id: string;
+  secret: string;
+  enabled: boolean;
+  created_at: string;
+  trigger_count: number;
+}
+
+/** One event trigger, as returned by /event-triggers/all. */
+export interface WorkflowEventTrigger {
+  event: string;
+  match: Record<string, unknown>;
+  enabled: boolean;
+  created_at: string;
+  trigger_count: number;
+  last_fired_at: string | null;
+}
+
+/** One historical run, as returned by /executions (history panel). */
+export interface WorkflowExecutionSummary {
+  id: string;
+  workflow_id: string;
+  status: string;
+  source: string;
+  started_at: string;
+  duration_ms: number;
+  nodes_executed: string[];
+  error?: string | null;
+}
+
+export const triggers = {
+  /** All schedules keyed by workflow_id. */
+  listSchedules: () =>
+    request<{ schedules: Record<string, WorkflowSchedule> }>("/enhanced/workflows/schedules/all"),
+
+  /** Set/replace the cron schedule for a workflow. Unsupported expressions
+   * are rejected with ok=false + a reason — surface that to the user. */
+  setSchedule: (id: string, cron: string, timezone = "UTC") =>
+    request<{ ok: boolean; reason?: string; schedule?: WorkflowSchedule }>(
+      `/enhanced/workflows/${id}/schedule`,
+      { method: "POST", body: { cron, timezone } }
+    ),
+
+  removeSchedule: (id: string) =>
+    request<{ ok: boolean; reason?: string }>(`/enhanced/workflows/${id}/schedule`, { method: "DELETE" }),
+
+  /** Pause (enabled=false) or resume (enabled=true) a schedule. Paused
+   * schedules keep their cron and history; the scheduler just skips them. */
+  setScheduleEnabled: (id: string, enabled: boolean) =>
+    request<{ ok: boolean; reason?: string; schedule?: WorkflowSchedule }>(
+      `/enhanced/workflows/${id}/schedule/enabled`,
+      { method: "PUT", body: { enabled } }
+    ),
+
+  /** Recent runs of one workflow (execution history panel). */
+  getExecutions: (id: string, limit = 20) =>
+    request<{ executions: WorkflowExecutionSummary[] }>(
+      `/enhanced/workflows/${id}/executions?limit=${limit}`
+    ),
+
+  /** Recent runs across ALL workflows, newest first (decisions.md #77) —
+   * powers the Triggers tab's at-a-glance recent-fires line per row. */
+  getAllExecutions: (limit = 50) =>
+    request<{ executions: WorkflowExecutionSummary[] }>(
+      `/enhanced/workflows/executions?limit=${limit}`
+    ),
+
+  /** All webhooks keyed by workflow_id (secret included — local app). */
+  listWebhooks: () =>
+    request<{ webhooks: Record<string, WorkflowWebhook> }>("/enhanced/workflows/webhooks/all"),
+
+  createWebhook: (id: string, secret?: string) =>
+    request<{ ok: boolean; reason?: string; webhook?: WorkflowWebhook }>(
+      `/enhanced/workflows/${id}/webhook`,
+      { method: "POST", body: { secret } }
+    ),
+
+  removeWebhook: (id: string) =>
+    request<{ ok: boolean }>(`/enhanced/workflows/${id}/webhook`, { method: "DELETE" }),
+
+  /** Pause (enabled=false) or resume (enabled=true) a webhook. Secret,
+   * URL, and call count are kept; paused webhooks refuse calls with 409. */
+  setWebhookEnabled: (id: string, enabled: boolean) =>
+    request<{ ok: boolean; reason?: string; webhook?: WorkflowWebhook }>(
+      `/enhanced/workflows/${id}/webhook/enabled`,
+      { method: "PUT", body: { enabled } }
+    ),
+
+  /** All event triggers keyed by workflow_id (decisions.md #57). */
+  listEventTriggers: () =>
+    request<{ triggers: Record<string, WorkflowEventTrigger> }>(
+      "/enhanced/workflows/event-triggers/all"
+    ),
+
+  /** Pause/resume an event trigger: paused triggers are skipped by
+   * fire_event — no run, no count, no last-fired update. */
+  setEventTriggerEnabled: (id: string, enabled: boolean) =>
+    request<{ ok: boolean; reason?: string; trigger?: WorkflowEventTrigger }>(
+      `/enhanced/workflows/${id}/event-trigger/enabled`,
+      { method: "PUT", body: { enabled } }
+    ),
+};
+
+/** The externally-callable URL for a workflow webhook trigger
+ * (decisions.md #53). Auth is the webhook secret, not the device token. */
+export function workflowWebhookUrl(webhookId: string): string {
+  return `${API_BASE}/enhanced/workflows/webhook/${webhookId}`;
+}
 
 // Notifications
 export const notifications = {

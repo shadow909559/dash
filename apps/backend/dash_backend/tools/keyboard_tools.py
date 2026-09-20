@@ -18,7 +18,7 @@ class ClipboardPasteTool(BaseTool):
     name = "clipboard_paste"
     description = "Paste clipboard content at the current cursor position using Ctrl+V."
     parameters = []
-    permission_level = PermissionLevel.AUTO
+    permission_level = PermissionLevel.CONFIRM  # §25: input tools gate like the family (decisions.md #129)
     category = "keyboard"
 
     async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:
@@ -38,7 +38,7 @@ class PressShortcutTool(BaseTool):
     parameters = [
         ToolParameter("shortcut", "Preset shortcut name", required=True),
     ]
-    permission_level = PermissionLevel.AUTO
+    permission_level = PermissionLevel.CONFIRM  # §25: input tools gate like the family (decisions.md #129)
     category = "keyboard"
 
     _SHORTCUTS = {
@@ -89,7 +89,7 @@ class TypeUnicodeTool(BaseTool):
     parameters = [
         ToolParameter("text", "Unicode text to type", required=True),
     ]
-    permission_level = PermissionLevel.AUTO
+    permission_level = PermissionLevel.CONFIRM  # §25: input tools gate like the family (decisions.md #129)
     category = "keyboard"
 
     async def execute(self, context: ToolContext, **kwargs: Any) -> ToolResult:

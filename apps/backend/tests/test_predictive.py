@@ -7,6 +7,7 @@ dormancy, stalled goals), engine sampling, and the REST endpoint.
 
 from __future__ import annotations
 
+import datetime as _dt
 import time
 
 import pytest
@@ -209,7 +210,11 @@ def test_dormant_repo_detected():
 
 
 def test_active_repo_not_dormant():
-    proj = {"repo_name": "dash", "branch": "main", "changed_files": 0, "last_commit": "a1b2c3d | 2026-09-06"}
+    # Date computed at runtime: a hardcoded date goes stale as real time
+    # passes (this very test started failing 14 days after its date).
+    recent = (_dt.date.today() - _dt.timedelta(days=2)).isoformat()
+    proj = {"repo_name": "dash", "branch": "main", "changed_files": 0,
+            "last_commit": f"a1b2c3d | {recent}"}
     assert predict_repo_dormancy(proj) is None
 
 

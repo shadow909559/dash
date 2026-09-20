@@ -59,6 +59,13 @@ vision = [
 voice = [
     "SpeechRecognition>=3.10.0",
 ]
+voice-stt = [
+    # Local speech-to-text engines, feature-detected at import. The provider
+    # prefers faster-whisper (CTranslate2, ~3-4x faster on CPU) and falls
+    # back to openai-whisper when it is absent or fails to load.
+    "faster-whisper>=1.0.0",
+    "openai-whisper>=20231117",
+]
 
 [project.scripts]
 dash-backend = "dash_backend.main:run"

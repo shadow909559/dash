@@ -6,6 +6,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { getWsClient } from "@/lib/wsClient";
 import DASHSpeechSynthesis from "@/lib/voice/SpeechSynthesis";
 import { DesktopSpeechCommands } from "@/lib/voice/DesktopSpeechCommands";
+import { registerMicAmplitudeSource, type MicAmplitudeHandle } from "@/lib/voice/micAmplitudeProducer";
 
 /**
  * Voice-first input + response display for the DASH orb interface.
@@ -49,6 +50,8 @@ const ttsRef = useRef<DASHSpeechSynthesis | null>(null);
   // Media recorder for backend STT
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  // Shared mic-amplitude producer registration (#131) for the live stream.
+  const ampHandleRef = useRef<MicAmplitudeHandle | null>(null);
 
   // Speak the provided text using the browser speech synthesis engine.
   const speakText = useCallback(async (textToSpeak: string) => {
@@ -384,6 +387,10 @@ const ttsRef = useRef<DASHSpeechSynthesis | null>(null);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Shared producer (#131): keep the orbs pulsing during backend STT.
+      // Auto-detaches when the tracks stop below; also stopped explicitly.
+      const ampHandle = registerMicAmplitudeSource(stream);
+      ampHandleRef.current = ampHandle;
       audioChunksRef.current = [];
 
       const mediaRecorder = new MediaRecorder(stream, {
@@ -402,6 +409,8 @@ const ttsRef = useRef<DASHSpeechSynthesis | null>(null);
         setAIState("idle");
 
         // Stop all tracks to release microphone
+        ampHandleRef.current?.stop();
+        ampHandleRef.current = null;
         stream.getTracks().forEach(track => track.stop());
 
         // Send audio to backend for STT

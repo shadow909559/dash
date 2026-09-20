@@ -40,15 +40,17 @@ data class DashColorScheme(
 )
 
 val DarkDashColors = DashColorScheme(
-    background = Color(0xFF0B0E14),
-    surface = Color(0xFF12161F),
-    surfaceContainer = Color(0xFF1A1F2E),
-    surfaceContainerLow = Color(0xFF161B26),
-    textPrimary = Color(0xFFF2F6FA),
-    textSecondary = Color(0xFF9AB4CC),
-    textMuted = Color(0xFF5A6F85),
-    borderGlass = Color(0xFF1E2533),
-    borderSubtle = Color(0xFF141820),
+    // Engineered-instrument pass: deeper cold layers, cooler text cast,
+    // matched to the desktop/website identity (see decisions.md #112).
+    background = Color(0xFF06090F),
+    surface = Color(0xFF0D1219),
+    surfaceContainer = Color(0xFF151B26),
+    surfaceContainerLow = Color(0xFF10151D),
+    textPrimary = Color(0xFFEDF4FC),
+    textSecondary = Color(0xFF8FB2D4),
+    textMuted = Color(0xFF4D6A8A),
+    borderGlass = Color(0xFF182030),
+    borderSubtle = Color(0xFF111620),
     primary = Color(0xFF3FA9F5),
     cyanPrimary = Color(0xFF3FA9F5),
     purplePrimary = Color(0xFF2F8FD6),

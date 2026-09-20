@@ -1,55 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAIStore, type AICoreStatus } from "@/stores/aiStore";
-import { DASH_COLORS, DASH_ANIMATIONS } from "@/stores/dashState";
+import {
+  installOrbAppearanceSync,
+  resolveOrbColors,
+  resolveOrbSpeed,
+  useOrbAppearanceStore,
+} from "@/stores/orbAppearanceStore";
+import { DASH_ANIMATIONS, type DASHState } from "@/stores/dashState";
+import PlasmaRing from "@/components/PlasmaRing";
 import "./JarvisHUD.css";
 
-// Helper to ensure numbers are finite and valid for SVG
-const safeNumber = (value: number, fallback: number = 0): number => {
-  return Number.isFinite(value) ? value : fallback;
-};
+/**
+ * Floating-orb HUD core — PlasmaRing edition.
+ *
+ * The old SVG ring HUD is replaced by the same WebGL PlasmaRing used by the
+ * home Orb and the voice orb, so all three orb surfaces match. What is kept
+ * from the original: the aiStore wiring (coreStatus text, DASH_COLORS-derived
+ * palette, DASH_ANIMATIONS drive speed/wave height) and the mic-amplitude
+ * reactivity, now expressed as plasma wave height instead of an SVG scale.
+ */
 
-// Helper to generate valid SVG rotate transform
-const svgRotate = (angle: number, cx: number, cy: number): string => {
-  const safeAngle = safeNumber(angle, 0);
-  const safeCx = safeNumber(cx, 0);
-  const safeCy = safeNumber(cy, 0);
-  return `rotate(${safeAngle} ${safeCx} ${safeCy})`;
-};
-
-// Helper to generate valid SVG translate transform
-const svgTranslate = (x: number, y: number): string => {
-  const safeX = safeNumber(x, 0);
-  const safeY = safeNumber(y, 0);
-  return `translate(${safeX} ${safeY})`;
-};
-
-// Helper to generate valid SVG scale transform
-const svgScale = (scale: number): string => {
-  const safeScale = safeNumber(scale, 1);
-  return `scale(${safeScale})`;
-};
-
-// Helper to generate circular path data
-const describeArc = (x: number, y: number, radius: number, startAngle: number, endAngle: number) => {
-  const safeX = safeNumber(x, 0);
-  const safeY = safeNumber(y, 0);
-  const safeRadius = safeNumber(radius, 0);
-  const safeStartAngle = safeNumber(startAngle, 0);
-  const safeEndAngle = safeNumber(endAngle, 0);
-  
-  const start = {
-    x: safeX + safeRadius * Math.cos((safeStartAngle * Math.PI) / 180),
-    y: safeY + safeRadius * Math.sin((safeStartAngle * Math.PI) / 180),
-  };
-  const end = {
-    x: safeX + safeRadius * Math.cos((safeEndAngle * Math.PI) / 180),
-    y: safeY + safeRadius * Math.sin((safeEndAngle * Math.PI) / 180),
-  };
-  const largeArcFlag = safeEndAngle - safeStartAngle <= 180 ? "0" : "1";
-  return `M ${safeNumber(start.x)} ${safeNumber(start.y)} A ${safeRadius} ${safeRadius} 0 ${largeArcFlag} 1 ${safeNumber(end.x)} ${safeNumber(end.y)}`;
-};
-
-const coreStatusToText: Record<AICoreStatus, string> = {
+const STATUS_TEXT: Record<AICoreStatus, string> = {
   idle: "READY",
   listening: "LISTENING",
   thinking: "THINKING",
@@ -58,179 +29,152 @@ const coreStatusToText: Record<AICoreStatus, string> = {
   error: "ERROR",
   provider_checking: "CHECKING",
   provider_starting: "STARTING",
-  provider_unavailable: "OFFLINE"
+  provider_unavailable: "OFFLINE",
+};
+
+/** DASH_COLORS stores rgba() strings; PlasmaRing wants hex ramps. The hex
+ * values here are the exact conversions of dashState.ts's rgb triplets. */
+const STATE_HEX: Record<DASHState, [string, string]> = {
+  idle: ["#60a5fa", "#90caf9"],
+  listening: ["#ff9600", "#ffb347"],
+  thinking: ["#ff8c00", "#ffb347"],
+  speaking: ["#ff9600", "#ffb347"],
+  coding: ["#22c55e", "#4ade80"],
+  researching: ["#3b82f6", "#60a5fa"],
+  debugging: ["#a855f7", "#c084fc"],
+  executing: ["#eab308", "#facc15"],
+  success: ["#22c55e", "#4ade80"],
+  warning: ["#3fa9f5", "#fb923c"],
+  error: ["#3fa9f5", "#f87171"],
+  offline: ["#6b7280", "#9ca3af"],
+  connecting: ["#3b82f6", "#60a5fa"],
+  background: ["#60a5fa", "#90caf9"],
+};
+
+const STATE_SPEED: Record<DASHState, number> = {
+  idle: 60,
+  listening: 110,
+  thinking: 90,
+  speaking: 100,
+  coding: 105,
+  researching: 130,
+  debugging: 100,
+  executing: 140,
+  success: 95,
+  warning: 80,
+  error: 150,
+  offline: 25,
+  connecting: 85,
+  background: 30,
 };
 
 export default function JarvisHUD() {
-  const { coreStatus, dashState, chatStatus, aiProviderStatus, voiceStatus } = useAIStore();
+  const { coreStatus, dashState } = useAIStore();
+  const appearance = useOrbAppearanceStore();
   const [amplitude, setAmplitude] = useState(0);
-  const [pulsePhase, setPulsePhase] = useState(0);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const draggedRef = useRef(false);
 
+  // Live palette/speed sync when settings change in the main window.
+  useEffect(() => installOrbAppearanceSync(), []);
+
+  // Owner's mic ('micamplitude') and DASH's own speech ('dashamplitude')
+  // both drive the pulse — the louder of the two wins per event; an
+  // explicit 0 (producer stopped) snaps to idle.
   useEffect(() => {
-    const handleMicAmplitude = (e: any) => setAmplitude(e.detail);
-    window.addEventListener('micamplitude', handleMicAmplitude);
-    return () => window.removeEventListener('micamplitude', handleMicAmplitude);
-  }, []);
-
-  // Performance: Use requestAnimationFrame for smooth animations
-  useEffect(() => {
-    let animationFrameId: number;
-    let lastTime = performance.now();
-
-    const animate = (currentTime: number) => {
-      const deltaTime = currentTime - lastTime;
-      
-      // Throttle updates to 60fps max
-      if (deltaTime >= 16.67) {
-        setPulsePhase(prev => (prev + 0.05) % (Math.PI * 2));
-        lastTime = currentTime;
-      }
-      
-      animationFrameId = requestAnimationFrame(animate);
-    };
-
-    animationFrameId = requestAnimationFrame(animate);
-    
+    const handleAmplitude = (e: any) =>
+      setAmplitude((prev) => (e.detail === 0 ? 0 : Math.max(prev * 0.7, e.detail)));
+    window.addEventListener('micamplitude', handleAmplitude);
+    window.addEventListener('dashamplitude', handleAmplitude);
     return () => {
-      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('micamplitude', handleAmplitude);
+      window.removeEventListener('dashamplitude', handleAmplitude);
     };
   }, []);
 
-  const stateClass = `hud--${coreStatus}`;
-  const dashColor = DASH_COLORS[dashState];
-  const dashAnim = DASH_ANIMATIONS[dashState];
-  const coreScale = 1 + amplitude * 0.3 + Math.sin(pulsePhase) * 0.05 * dashAnim.intensity;
-  const statusColor = coreStatus === "error" ? "#ff4444" : dashColor.primary;
-  const accentColor = dashColor.accent;
-  const glowIntensity = dashColor.glow;
+  const state = dashState as DASHState;
+  const colors = resolveOrbColors(appearance, STATE_HEX[state] ?? STATE_HEX.idle);
+  const speed = resolveOrbSpeed(appearance, STATE_SPEED[state] ?? STATE_SPEED.idle);
+  const anim = DASH_ANIMATIONS[state] ?? DASH_ANIMATIONS.idle;
+
+  // Mic amplitude drives the wave height — voice reactivity, plasma edition.
+  const waveHeight = useMemo(() => {
+    const base = 18 + anim.intensity * 22;
+    return Math.min(60, base + amplitude * 30);
+  }, [anim.intensity, amplitude]);
+
+  const isError = coreStatus === "error" || state === "error";
+  const statusText = STATUS_TEXT[coreStatus] ?? coreStatus.toUpperCase();
+  const statusColor = isError ? "#ff4444" : colors[0];
+
+  // Pointer tracking so drag-orbiting the PlasmaRing does not trigger the
+  // orb-mode click handler (which activates the voice interface).
+  const onPointerDown = () => { draggedRef.current = false; };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (e.buttons > 0) draggedRef.current = true;
+  };
+  const onClick = () => {
+    if (draggedRef.current) return;
+    const voiceButton = document.getElementById('voice-mic-button') as HTMLButtonElement | null;
+    if (voiceButton) voiceButton.click();
+  };
 
   return (
-    <div className={`hud-container ${stateClass}`}>
-      <svg className="hud-svg" viewBox="0 0 400 400">
-        <defs>
-          <filter id="hud-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation={2 + glowIntensity * 3} result="coloredBlur" />
-            <feMerge>
-              <feMergeNode in="coloredBlur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="core-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation={4 + glowIntensity * 5} result="coreBlur" />
-            <feMerge>
-              <feMergeNode in="coreBlur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <radialGradient id="core-gradient">
-            <stop offset="0%" stopColor={statusColor} stopOpacity={0.3} />
-            <stop offset="40%" stopColor="rgba(0, 20, 40, 0.9)" />
-            <stop offset="70%" stopColor="rgba(0, 10, 30, 0.8)" />
-            <stop offset="100%" stopColor="rgba(0, 5, 20, 0.6)" />
-          </radialGradient>
-          <radialGradient id="ring-gradient">
-            <stop offset="0%" stopColor={accentColor} stopOpacity={0.4} />
-            <stop offset="100%" stopColor={statusColor} stopOpacity={0.1} />
-          </radialGradient>
-        </defs>
-
-        {/* Animated Background Pulse */}
-        <circle cx="200" cy="200" r="190" fill="none" stroke={statusColor} strokeWidth="0.5" opacity={0.1 + Math.sin(pulsePhase) * 0.05} />
-
-        {/* Rotating Rings - Sci-Fi HUD */}
-        <g className="hud-ring-group" filter="url(#hud-glow)">
-          {/* Ring 1 (Outer) - Dynamic Ticks */}
-          <g className="hud-ring" style={{ animationDuration: `${60 / dashAnim.speed}s` }}>
-            <circle cx="200" cy="200" r="185" fill="none" stroke={statusColor} strokeWidth="0.5" opacity={0.15} />
-            {Array.from({ length: 72 }).map((_, i) => (
-              <line 
-                key={i} 
-                x1="200" y1="15" x2="200" y2="18" 
-                stroke={accentColor} 
-                strokeWidth="0.5" 
-                opacity={i % 6 === 0 ? 0.6 : 0.3}
-                transform={svgRotate(i * 5, 200, 200)} 
-              />
-            ))}
-          </g>
-
-          {/* Ring 2 - Segmented Arc with Status Color */}
-          <g className="hud-ring" style={{ animationDuration: `${45 / dashAnim.speed}s`, animationDirection: "reverse" }}>
-            <path d={describeArc(200, 200, 170, 0, 180)} fill="none" stroke={statusColor} strokeWidth="2" opacity={0.3} />
-            <path d={describeArc(200, 200, 170, 185, 195)} fill="none" stroke={accentColor} strokeWidth="3" />
-            <path d={describeArc(200, 200, 170, 200, 360)} fill="none" stroke={statusColor} strokeWidth="2" opacity={0.3} />
-          </g>
-
-          {/* Ring 3 - Inner Segments - Dynamic */}
-          <g className="hud-ring" style={{ animationDuration: `${30 / dashAnim.speed}s` }}>
-            <circle cx="200" cy="200" r="145" fill="none" stroke={statusColor} strokeWidth="0.5" opacity={0.1} />
-            {Array.from({ length: 12 }).map((_, i) => (
-              <path 
-                key={i} 
-                d={describeArc(200, 200, 145, i * 30 + 2, i * 30 + 18)} 
-                fill="none" 
-                stroke={accentColor} 
-                strokeWidth="1" 
-                opacity={0.5 + Math.sin(pulsePhase + i) * 0.2}
-              />
-            ))}
-          </g>
-
-          {/* Ring 4 - Status Indicator Ring - Animated Dash */}
-          <g className="hud-ring" style={{ animationDuration: `${25 / dashAnim.speed}s`, animationDirection: "reverse" }}>
-             <circle 
-               cx="200" cy="200" r="115" 
-               fill="none" 
-               stroke={statusColor} 
-               strokeWidth="2" 
-               opacity={0.6} 
-               strokeDasharray="10 5"
-               style={{ animation: `dashRotate ${10 / dashAnim.speed}s linear infinite` }}
-             />
-          </g>
-
-          {/* Ring 5 - Micro-ticks - Gold Accent */}
-          <g className="hud-ring" style={{ animationDuration: `${80 / dashAnim.speed}s` }}>
-             {Array.from({ length: 180 }).map((_, i) => (
-              <line
-                key={i}
-                x1="200" y1="80" x2="200" y2="82"
-                stroke={i % 10 === 0 ? accentColor : statusColor}
-                strokeWidth="0.3"
-                opacity={i % 10 === 0 ? 0.4 : 0.2}
-                transform={svgRotate(i * 2, 200, 200)}
-              />
-            ))}
-          </g>
-        </g>
-
-        {/* Static Core Elements - Stable Center */}
-        <g className="hud-core" style={{ transform: svgScale(coreScale), transformOrigin: 'center' }} filter="url(#core-glow)">
-          <circle cx="200" cy="200" r="55" fill="url(#core-gradient)" />
-          <circle cx="200" cy="200" r="58" fill="none" stroke={statusColor} strokeWidth="1.5" opacity={0.6} />
-          <circle cx="200" cy="200" r="52" fill="none" stroke={accentColor} strokeWidth="0.5" opacity={0.3} />
-          
-          {/* Inner pulsing ring */}
-          <circle 
-            cx="200" cy="200" r="45" 
-            fill="none" 
-            stroke={statusColor} 
-            strokeWidth="1" 
-            opacity={0.4 + Math.sin(pulsePhase * 2) * 0.2}
-          />
-          
-          <text x="200" y="205" className="hud-center-text" style={{ fill: statusColor }}>DASH</text>
-          <text x="200" y="225" className="hud-center-subtext" style={{ fill: accentColor }}>{coreStatus.toUpperCase()}</text>
-        </g>
-
-        {/* Animation styles */}
-        <style>{`
-          @keyframes dashRotate {
-            from { stroke-dashoffset: 0; }
-            to { stroke-dashoffset: -30; }
-          }
-        `}</style>
-      </svg>
+    <div
+      ref={hostRef}
+      className={`hud-container hud--${coreStatus}`}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onClick={onClick}
+      style={{ cursor: "pointer" }}
+    >
+      <PlasmaRing
+        background="transparent"
+        colors={colors}
+        speed={speed}
+        waveHeight={waveHeight}
+        scale={28}
+        density={64}
+      />
+      {/* Status overlay — same content the SVG HUD rendered */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          pointerEvents: "none",
+        }}
+      >
+        <span
+          className="hud-center-text"
+          style={{
+            fontSize: 26,
+            fontWeight: 700,
+            fontFamily: "'Orbitron', 'Segoe UI', 'Roboto', sans-serif",
+            color: statusColor,
+            letterSpacing: 4,
+            textShadow: `0 0 10px ${statusColor}cc, 0 0 20px ${statusColor}80`,
+          }}
+        >
+          DASH
+        </span>
+        <span
+          className="hud-center-subtext"
+          style={{
+            fontSize: 10,
+            fontFamily: "'Orbitron', 'Segoe UI', 'Roboto', sans-serif",
+            color: colors[1],
+            letterSpacing: 2,
+            marginTop: 6,
+            textShadow: `0 0 5px ${colors[1]}99`,
+          }}
+        >
+          {statusText}
+        </span>
+      </div>
     </div>
   );
 }

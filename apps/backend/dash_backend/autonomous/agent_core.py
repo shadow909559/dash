@@ -148,6 +148,14 @@ If you are stuck:
 """
 
 
+class GoalRefusedError(Exception):
+    """A goal description matched a refuse-class pattern (candor.py).
+
+    Raised by AgentCore.run_goal BEFORE any planning or execution; the
+    message is the user-facing refusal text.
+    """
+
+
 class AgentCore:
     """The autonomous agent brain.
 
@@ -226,6 +234,16 @@ class AgentCore:
         priority: int = 0,
     ) -> AgentGoal:
         """Start executing a goal autonomously. Returns the goal object."""
+        # Candor chokepoint (decisions.md #65): run_goal is reachable from
+        # chat dispatch, the REST API, and proactive loops — every caller
+        # gets the same deterministic refusal gate. Defense in depth: the
+        # brain checks its own dispatch too, but this is the one seam every
+        # autonomous execution must cross.
+        from dash_backend.autonomous.candor import refusal_for
+        refusal = refusal_for(description)
+        if refusal:
+            raise GoalRefusedError(refusal)
+
         goal = AgentGoal(
             description=description,
             context=context or {},
@@ -740,6 +758,19 @@ class AgentCore:
 
     def clear_working_memory(self) -> None:
         self._memory.clear()
+
+    def add_observation(self, entry: dict[str, Any]) -> None:
+        """Record an autonomous observation in shared working memory.
+
+        Used by self-watching services (vision watcher, guardian, …) so
+        what DASH perceives on his own lands in the same memory context
+        he reasons from — see _build_context's "System memory" section.
+        Bounded like goal memory (50 → trimmed to 30) so a chatty sensor
+        cannot drown goal work.
+        """
+        self._memory.append({"goal": "observation", **entry})
+        if len(self._memory) > 50:
+            self._memory = self._memory[-30:]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────

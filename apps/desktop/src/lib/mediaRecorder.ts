@@ -1,9 +1,17 @@
+import {
+  registerMicAmplitudeSource,
+  type MicAmplitudeHandle,
+} from "@/lib/voice/micAmplitudeProducer";
+
 /**
  * A simple wrapper around the MediaRecorder API to handle audio recording.
  */
 class AudioRecorder {
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
+  // Shared mic-amplitude producer registration (#131): orbs pulse while
+  // this recorder's stream is live; auto-detaches on track end.
+  private ampHandle: MicAmplitudeHandle | null = null;
 
   /**
    * Check if recording is currently active.
@@ -21,6 +29,7 @@ class AudioRecorder {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.ampHandle = registerMicAmplitudeSource(stream);
       this.mediaRecorder = new MediaRecorder(stream);
       this.audioChunks = [];
 
@@ -60,6 +69,8 @@ class AudioRecorder {
         reader.readAsDataURL(audioBlob);
 
         // Clean up stream
+        this.ampHandle?.stop();
+        this.ampHandle = null;
         recorder.stream.getTracks().forEach(track => track.stop());
         this.mediaRecorder = null;
       };

@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ShinyText } from "@/components/fx";
 import "./BootScreen.css";
 
 interface BootScreenProps {
@@ -133,14 +134,17 @@ export default function BootScreen({ onComplete, duration = 5000 }: BootScreenPr
               <div className="dash-boot__ring-center" />
             </motion.div>
 
-            {/* Layer C: "DASH" text — flickers in ~400ms after ring */}
+            {/* Layer C: "DASH" text — flickers in ~400ms after ring, with
+                ShinyText sheen sweeping across it (React Bits technique) */}
             <motion.div
               className="dash-boot__text"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.4, delay: 0.7 }}
             >
-              DASH
+              <ShinyText color="rgba(224, 240, 255, 0.9)" shineColor="#7dd3fc" speed={3.2}>
+                DASH
+              </ShinyText>
             </motion.div>
 
             {/* Layer D: Orbiting accent arc — 250px diameter, 9s orbit, breathing */}

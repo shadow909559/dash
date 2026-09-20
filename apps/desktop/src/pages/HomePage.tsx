@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { ShinyText, Aurora } from "@/components/fx";
 import {
   Mic,
   MicOff,
@@ -105,6 +106,9 @@ export const HomePage: React.FC = () => {
         background: "var(--dash-bg)",
       }}
     >
+      {/* ─── Ambient light field ─── */}
+      <Aurora intensity={1.15} />
+
       {/* ─── HUD Grid Background ─── */}
       <div
         className="dash-hud-grid"
@@ -206,11 +210,10 @@ export const HomePage: React.FC = () => {
             letterSpacing: "0.25em",
             color: "var(--ultron-text)",
             textTransform: "uppercase",
-            opacity: 0.6,
             fontFamily: "'JetBrains Mono', monospace",
           }}
         >
-          DASH CORE
+          <ShinyText color="rgba(179, 218, 247, 0.5)" shineColor="#7dd3fc" speed={3.5}>DASH CORE</ShinyText>
         </div>
 
         {/* Orb */}

@@ -40,9 +40,26 @@ class FakeContextEngine:
         return self._snap
 
 
-def make_engine(snap: EnvironmentContext, tmp_path) -> ProactiveEngine:
+class _NoPredictionsEngine:
+    """Stub predictive engine returning no predictions.
+
+    Isolates these tests from the GLOBAL predictive singleton: when other
+    suites run first, its shared accumulated history made evaluate()
+    order-dependently merge extra predictive_* suggestions, breaking the
+    exact-equality assertions below. The integration suite
+    (test_predictive_proactive_integration.py) injects its own engine and
+    covers the merge path deliberately.
+    """
+
+    async def analyze(self, session=None, user_id=None):
+        return {"predictions": []}
+
+
+def make_engine(snap: EnvironmentContext, tmp_path,
+                predictive=None) -> ProactiveEngine:
     state = ProactiveState(tmp_path / "state.json")
-    return ProactiveEngine(state=state, context_engine=FakeContextEngine(snap))
+    return ProactiveEngine(state=state, context_engine=FakeContextEngine(snap),
+                           predictive_engine=predictive or _NoPredictionsEngine())
 
 
 # ── Detectors ────────────────────────────────────────────────────

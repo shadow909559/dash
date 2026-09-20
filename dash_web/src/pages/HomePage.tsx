@@ -13,7 +13,6 @@ import {
   Github,
   Download,
   ExternalLink,
-  CheckCircle,
 } from "lucide-react";
 import { config } from "@/lib/config";
 import { PageLayout } from "@/components/PageLayout";
@@ -75,30 +74,44 @@ const CAPABILITIES = [
   },
 ];
 
+const STEPS = [
+  {
+    step: "01",
+    title: "Install",
+    desc: "Download and run the installer. DASH sets up everything automatically.",
+  },
+  {
+    step: "02",
+    title: "Configure",
+    desc: "Choose your AI provider (local Ollama or cloud), set preferences, and connect tools.",
+  },
+  {
+    step: "03",
+    title: "Work",
+    desc: "Start a conversation, create goals, or let DASH proactively suggest improvements.",
+  },
+];
+
 export function HomePage() {
   return (
     <PageLayout>
       {/* Hero */}
       <section
+        className="aura"
         style={{
-          padding: "80px 0 60px",
+          padding: "96px 0 64px",
           textAlign: "center",
         }}
       >
         <div className="container">
           <div
+            className="eyebrow"
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "4px 12px",
+              justifyContent: "center",
+              padding: "5px 14px",
+              border: "1px solid rgba(63, 169, 245, 0.22)",
+              borderRadius: "var(--radius-full)",
               background: "var(--accent-dim)",
-              border: "1px solid rgba(34, 197, 94, 0.2)",
-              borderRadius: "var(--radius-sm)",
-              fontSize: 12,
-              fontFamily: "var(--font-mono)",
-              color: "var(--accent)",
-              marginBottom: 24,
             }}
           >
             <span
@@ -107,6 +120,7 @@ export function HomePage() {
                 height: 6,
                 borderRadius: "50%",
                 background: "var(--accent)",
+                boxShadow: "0 0 8px var(--accent)",
               }}
             />
             v{config.version} — Open Source
@@ -114,14 +128,14 @@ export function HomePage() {
 
           <h1
             style={{
-              maxWidth: 700,
+              maxWidth: 720,
               margin: "0 auto 20px",
-              lineHeight: 1.1,
+              lineHeight: 1.08,
             }}
           >
             Your AI, working
             <br />
-            from your desktop.
+            <span className="gradient-text">from your desktop.</span>
           </h1>
 
           <p
@@ -158,7 +172,7 @@ export function HomePage() {
       </section>
 
       {/* Terminal Preview */}
-      <section style={{ padding: "0 0 80px" }}>
+      <section style={{ padding: "0 0 88px" }}>
         <div className="container">
           <div
             style={{
@@ -168,6 +182,7 @@ export function HomePage() {
               overflow: "hidden",
               maxWidth: 800,
               margin: "0 auto",
+              boxShadow: "var(--edge-highlight), var(--shadow-md)",
             }}
           >
             <div
@@ -177,6 +192,7 @@ export function HomePage() {
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
+                background: "var(--bg-tertiary)",
               }}
             >
               <div
@@ -200,7 +216,7 @@ export function HomePage() {
                   width: 8,
                   height: 8,
                   borderRadius: "50%",
-                  background: "#22c55e",
+                  background: "var(--accent)",
                 }}
               />
               <span
@@ -209,6 +225,7 @@ export function HomePage() {
                   fontSize: 12,
                   color: "var(--text-muted)",
                   fontFamily: "var(--font-mono)",
+                  letterSpacing: "0.04em",
                 }}
               >
                 DASH Terminal
@@ -260,6 +277,9 @@ export function HomePage() {
       <section className="section" style={{ background: "var(--bg-secondary)" }}>
         <div className="container">
           <div className="text-center mb-32">
+            <div className="eyebrow" style={{ justifyContent: "center" }}>
+              Capabilities
+            </div>
             <h2>Built for real work</h2>
             <p style={{ marginTop: 12, margin: "12px auto 0" }}>
               Every feature exists because it solves a real problem.
@@ -268,7 +288,7 @@ export function HomePage() {
 
           <div className="grid grid--3">
             {CAPABILITIES.map((cap) => (
-              <div key={cap.title} className="card">
+              <div key={cap.title} className="card card--tech">
                 <div
                   style={{
                     display: "flex",
@@ -284,7 +304,20 @@ export function HomePage() {
                       gap: 10,
                     }}
                   >
-                    <cap.icon size={18} style={{ color: "var(--accent)" }} />
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 30,
+                        height: 30,
+                        borderRadius: "var(--radius-sm)",
+                        background: "var(--accent-dim)",
+                        border: "1px solid rgba(63, 169, 245, 0.18)",
+                      }}
+                    >
+                      <cap.icon size={15} style={{ color: "var(--accent)" }} />
+                    </span>
                     <span className="card__title" style={{ marginBottom: 0 }}>
                       {cap.title}
                     </span>
@@ -304,6 +337,9 @@ export function HomePage() {
       <section className="section">
         <div className="container">
           <div className="text-center mb-32">
+            <div className="eyebrow" style={{ justifyContent: "center" }}>
+              Workflow
+            </div>
             <h2>How it works</h2>
             <p style={{ marginTop: 12, margin: "12px auto 0" }}>
               Three steps from download to productive.
@@ -311,35 +347,36 @@ export function HomePage() {
           </div>
 
           <div className="grid grid--3">
-            {[
-              {
-                step: "01",
-                title: "Install",
-                desc: "Download and run the installer. DASH sets up everything automatically.",
-              },
-              {
-                step: "02",
-                title: "Configure",
-                desc: "Choose your AI provider (local Ollama or cloud), set preferences, and connect tools.",
-              },
-              {
-                step: "03",
-                title: "Work",
-                desc: "Start a conversation, create goals, or let DASH proactively suggest improvements.",
-              },
-            ].map((item) => (
+            {STEPS.map((item) => (
               <div key={item.step} className="card">
                 <div
                   style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: 12,
-                    color: "var(--accent)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
                     marginBottom: 12,
                   }}
                 >
-                  {item.step}
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: 34,
+                      height: 34,
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "var(--accent)",
+                      background: "var(--accent-dim)",
+                      border: "1px solid rgba(63, 169, 245, 0.22)",
+                      borderRadius: "var(--radius-full)",
+                    }}
+                  >
+                    {item.step}
+                  </span>
+                  <h3 style={{ margin: 0 }}>{item.title}</h3>
                 </div>
-                <h3 style={{ marginBottom: 8 }}>{item.title}</h3>
                 <p className="card__desc">{item.desc}</p>
               </div>
             ))}
@@ -348,7 +385,7 @@ export function HomePage() {
       </section>
 
       {/* CTA */}
-      <section className="section" style={{ textAlign: "center" }}>
+      <section className="section aura" style={{ textAlign: "center" }}>
         <div className="container">
           <h2>Ready to start?</h2>
           <p style={{ marginTop: 12, margin: "12px auto 0", marginBottom: 32 }}>

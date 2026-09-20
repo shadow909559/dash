@@ -190,11 +190,18 @@ class DashForegroundService : Service() {
     private fun startStateObserver() {
         Thread {
             var lastState: WebSocketManager.ConnectionState? = null
+            var lastSpeaking: Boolean = false
             while (!Thread.currentThread().isInterrupted) {
                 val state = WebSocketManager.connectionState.value
-                if (state != lastState) {
+                val speaking = WebSocketManager.voiceSpeaking.value
+                if (state != lastState || speaking != lastSpeaking) {
                     lastState = state
-                    val text = when (state) {
+                    lastSpeaking = speaking
+                    // While DASH talks, the owner sees it at a glance
+                    // (voice.speaking transitions from the backend);
+                    // otherwise the connection state shows as before.
+                    val text = if (speaking) "DASH is speaking…"
+                               else when (state) {
                         WebSocketManager.ConnectionState.Authenticated -> "Connected to DASH"
                         WebSocketManager.ConnectionState.Connected -> "Authenticating..."
                         WebSocketManager.ConnectionState.AuthFailed -> "Authentication failed"
@@ -205,7 +212,7 @@ class DashForegroundService : Service() {
                     val manager = getSystemService(NotificationManager::class.java)
                     manager.notify(NOTIFICATION_ID, buildNotification(text))
                 }
-                Thread.sleep(2000)
+                Thread.sleep(500)
             }
         }.apply { isDaemon = true; start() }
     }

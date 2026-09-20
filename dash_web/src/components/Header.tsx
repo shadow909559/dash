@@ -52,9 +52,9 @@ export function Header() {
           display: "flex",
           alignItems: "center",
           background: isScrolled
-            ? "rgba(10, 10, 15, 0.9)"
-            : "rgba(10, 10, 15, 0.6)",
-          backdropFilter: "blur(12px)",
+            ? "rgba(6, 8, 12, 0.88)"
+            : "rgba(6, 8, 12, 0.55)",
+          backdropFilter: "blur(14px)",
           borderBottom: isScrolled
             ? "1px solid var(--border)"
             : "1px solid transparent",
@@ -89,7 +89,8 @@ export function Header() {
                 height: 28,
                 borderRadius: "var(--radius-sm)",
                 background: "var(--bg-tertiary)",
-                border: "1px solid var(--border)",
+                border: "1px solid rgba(63, 169, 245, 0.35)",
+                boxShadow: "0 0 12px rgba(63, 169, 245, 0.25)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -139,8 +140,12 @@ export function Header() {
                   fontWeight: location.pathname === item.path ? 500 : 400,
                   background:
                     location.pathname === item.path
-                      ? "var(--bg-tertiary)"
+                      ? "var(--accent-dim)"
                       : "transparent",
+                  boxShadow:
+                    location.pathname === item.path
+                      ? "inset 0 -2px 0 var(--accent)"
+                      : "none",
                 }}
               >
                 {item.label}

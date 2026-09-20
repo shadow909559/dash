@@ -1,7 +1,32 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useAIStore } from "@/stores/aiStore";
+import {
+  installOrbAppearanceSync,
+  resolveOrbColors,
+  resolveOrbSpeed,
+  resolveOrbWave,
+  useOrbAppearanceStore,
+} from "@/stores/orbAppearanceStore";
 import { getWsClient } from "@/lib/wsClient";
+import PlasmaRing from "@/components/PlasmaRing";
+import { registerMicAmplitudeSource } from "@/lib/voice/micAmplitudeProducer";
 import { Mic, MicOff, Send, Volume2, VolumeX, Square, RotateCcw, Sparkles } from "lucide-react";
+
+/**
+ * Shape one amplitude level (0..1) into a 32-bar voice profile (#133):
+ * a soft arch across the bars with gentle per-bar flutter and a whisper
+ * floor, so DASH's playback amplitude reads as a speaking voice rather
+ * than a flat wall. Deterministic given `t` — the caller passes a time
+ * seed so the flutter moves frame to frame.
+ */
+function shapeBars(level: number, barCount = 32, t = Date.now()): number[] {
+  return Array.from({ length: barCount }, (_, i) => {
+    const center = Math.abs(i - (barCount - 1) / 2) / ((barCount - 1) / 2); // 0 center → 1 edge
+    const arch = 1 - center * 0.55;
+    const flutter = 0.85 + 0.15 * Math.sin(t / 90 + i * 0.9);
+    return Math.max(0.05, Math.min(1, level * arch * flutter));
+  });
+}
 
 /**
  * VoicePage — full-screen immersive voice interface for DASH.
@@ -28,6 +53,10 @@ export default function VoicePage() {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [liveTranscript, setLiveTranscript] = useState("");
+  // Backend wake-loop partials (decisions.md #118): interim transcripts
+  // from the server-side loop, shown while the browser mic is not the
+  // active capture surface. final:true clears the interim line.
+  const voicePartial = useAIStore((s) => s.voicePartial);
   const [history, setHistory] = useState<
     Array<{ role: "user" | "dash"; text: string; time: number }>
   >([]);
@@ -35,6 +64,8 @@ export default function VoicePage() {
   const [waveformAmplitudes, setWaveformAmplitudes] = useState<number[]>(
     Array(32).fill(0.1)
   );
+  // Falling peak caps for the waveform (per-bar hold-and-decay peaks)
+  const peaksRef = useRef<number[]>(Array(32).fill(0));
   const [ttsActive, setTtsActive] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -43,36 +74,99 @@ export default function VoicePage() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  // Live mic amplitude 0..1 for the plasma orb — ref-driven so the WebGL
+  // component reads it per frame without React re-renders.
+  const orbAmplitudeRef = useRef(0);
+  // The mic's OWN amplitude is merged in by the shared producer's
+  // 'micamplitude' events (#131); 'dashamplitude' (#130) merges DASH's
+  // speech. This ref only needs the max-decay merge, no local overwrite.
+  const micAmpHandleRef = useRef<import("@/lib/voice/micAmplitudeProducer").MicAmplitudeHandle | null>(null);
+  // DASH's playback level for the WAVEFORM BARS (#133): fed by
+  // 'dashamplitude' events, per-frame decay, max-merged into the bars so
+  // they show DASH's speech instead of going idle while it talks.
+  const dashLevelRef = useRef(0);
+  useEffect(() => {
+    const onDashAmp = (e: Event) => {
+      const detail = (e as CustomEvent<number>).detail;
+      if (typeof detail === "number" && Number.isFinite(detail)) {
+        dashLevelRef.current = Math.max(0, Math.min(1, detail));
+      }
+    };
+    window.addEventListener("dashamplitude", onDashAmp);
+    return () => window.removeEventListener("dashamplitude", onDashAmp);
+  }, []);
 
   // ─── Waveform Animation ───
   const animateWaveform = useCallback(() => {
-    if (!analyserRef.current) {
-      // Idle breathing animation
-      setWaveformAmplitudes((prev) =>
-        prev.map((_, i) => {
-          const t = Date.now() / 1000;
-          return (
-            0.08 +
-            0.04 * Math.sin(t * 1.5 + i * 0.3) +
-            0.02 * Math.sin(t * 2.7 + i * 0.5)
-          );
-        })
-      );
+    const analyser = analyserRef.current;
+    if (!analyser) {
+      // Mic off: idle breathing bars — unless DASH is speaking, in which
+      // case the bars carry DASH's real playback amplitude (#133).
+      dashLevelRef.current *= 0.92;
+      const dash = dashLevelRef.current;
+      if (dash > 0.01) {
+        const shaped = shapeBars(dash);
+        const peaks = peaksRef.current;
+        for (let i = 0; i < peaks.length; i++) {
+          peaks[i] = Math.max(shaped[i], peaks[i] - 0.03);
+        }
+        setWaveformAmplitudes(shaped);
+        animationFrameRef.current = requestAnimationFrame(animateWaveform);
+        return;
+      }
+      const idle = (i: number) => {
+        const t = Date.now() / 1000;
+        return (
+          0.08 +
+          0.04 * Math.sin(t * 1.5 + i * 0.3) +
+          0.02 * Math.sin(t * 2.7 + i * 0.5)
+        );
+      };
+      const peaks = peaksRef.current;
+      for (let i = 0; i < peaks.length; i++) {
+        peaks[i] = Math.max(idle(i), peaks[i] - 0.03);
+      }
+      setWaveformAmplitudes((prev) => prev.map((_, i) => idle(i)));
       animationFrameRef.current = requestAnimationFrame(animateWaveform);
       return;
     }
 
-    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-    analyserRef.current.getByteFrequencyData(dataArray);
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(dataArray);
 
-    // Sample 32 bars from the frequency data
+    // Sample 32 bars from the frequency data, log-spaced so voice
+    // energy (low-mid) isn't crammed into the first few bars.
     const barCount = 32;
-    const step = Math.floor(dataArray.length / barCount);
     const newAmplitudes = Array.from({ length: barCount }, (_, i) => {
-      const value = dataArray[i * step] || 0;
-      return Math.max(0.05, value / 255);
+      // Log-spaced bin centers across the frequency range
+      const t0 = i / barCount, t1 = (i + 1) / barCount;
+      const b0 = Math.floor(Math.pow(dataArray.length, t0));
+      const b1 = Math.max(b0 + 1, Math.floor(Math.pow(dataArray.length, t1)));
+      let peak = 0;
+      for (let b = b0; b < b1 && b < dataArray.length; b++) peak = Math.max(peak, dataArray[b]);
+      return Math.max(0.05, peak / 255);
     });
 
+    // DASH's speech (#133) merges into the bars even while the mic is on
+    // (e.g. echo during a reply): louder source wins per bar.
+    dashLevelRef.current *= 0.92;
+    const dash = dashLevelRef.current;
+    if (dash > 0.01) {
+      const shaped = shapeBars(dash);
+      for (let i = 0; i < barCount; i++) {
+        newAmplitudes[i] = Math.max(newAmplitudes[i], shaped[i]);
+      }
+    }
+
+    // Falling peak caps: instant rise, ~500ms hold-free decay
+    const peaks = peaksRef.current;
+    for (let i = 0; i < barCount; i++) {
+      peaks[i] = newAmplitudes[i] > peaks[i] ? newAmplitudes[i] : Math.max(newAmplitudes[i], peaks[i] - 0.035);
+    }
+
+    // Mic frequency bars + DASH's playback amplitude (#133) drive the
+    // waveform; the ORB's amplitude comes from the event merges
+    // (micamplitude #131 / dashamplitude #130), not from these bars.
     setWaveformAmplitudes(newAmplitudes);
     animationFrameRef.current = requestAnimationFrame(animateWaveform);
   }, []);
@@ -87,6 +181,9 @@ export default function VoicePage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      // Shared producer (#131): the home/floating orbs pulse with this mic
+      // too, not just the local orb. Auto-detaches when tracks stop.
+      micAmpHandleRef.current = registerMicAmplitudeSource(stream);
 
       const audioContext = new AudioContext();
       audioContextRef.current = audioContext;
@@ -139,6 +236,8 @@ export default function VoicePage() {
     if (mediaRecorderRef.current?.state === "recording") {
       mediaRecorderRef.current.stop();
     }
+    micAmpHandleRef.current?.stop();
+    micAmpHandleRef.current = null;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -365,44 +464,76 @@ export default function VoicePage() {
           zIndex: 5,
         }}
       >
-        {/* The Orb is rendered by its Canvas at 240px. We scale it up. */}
-        <div style={{ transform: "scale(1.8)", transformOrigin: "center" }}>
-          {/* Inline Orb rendering for full control */}
-          <FullVoiceOrb state={orbState} />
-        </div>
+        {/* PlasmaRing renders at true pixel size — no CSS up-scaling, which
+            would blur the wireframe and over-saturate the additive blend. */}
+        <FullVoiceOrb state={orbState} amplitudeRef={orbAmplitudeRef} />
       </div>
 
-      {/* Waveform visualization */}
+      {/* Waveform visualization — frequency-mirrored bars with falling
+          peak caps, per-state gradient, and a soft under-glow. */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           gap: 2,
-          height: 48,
+          height: 56,
           marginTop: 32,
           zIndex: 5,
+          position: "relative",
         }}
       >
-        {waveformAmplitudes.map((amp, i) => (
-          <div
-            key={i}
-            style={{
-              width: 3,
-              height: `${Math.max(4, amp * 44)}px`,
-              borderRadius: 2,
-              background:
-                orbState === "listening"
-                  ? `rgba(6,182,212,${0.3 + amp * 0.7})`
-                  : orbState === "thinking"
-                  ? `rgba(168,85,247,${0.3 + amp * 0.7})`
-                  : orbState === "speaking"
-                  ? `rgba(59,130,246,${0.3 + amp * 0.7})`
-                  : `rgba(255,255,255,${0.08 + amp * 0.15})`,
-              transition: "height 0.08s ease, background 0.3s ease",
-            }}
-          />
-        ))}
+        {(() => {
+          const stateColor =
+            orbState === "listening" ? "6,182,212"
+            : orbState === "thinking" ? "168,85,247"
+            : orbState === "speaking" ? "59,130,246"
+            : null;
+          const peaks = peaksRef.current;
+          return waveformAmplitudes.map((amp, i) => {
+            const h = Math.max(4, amp * 44);
+            const cap = Math.max(amp + 0.04, peaks[i]);
+            const capH = Math.max(2, cap * 44);
+            const rgb = stateColor ?? "255,255,255";
+            const alpha = stateColor ? 0.35 + amp * 0.65 : 0.1 + amp * 0.15;
+            // Center-weighted energy for the glow
+            const center = 1 - Math.abs(i - 15.5) / 16;
+            return (
+              <div key={i} style={{ position: "relative", width: 3, height: 56, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {/* Upper bar (mirrored spectrum) */}
+                <div style={{
+                  position: "absolute", bottom: 28, width: 3,
+                  height: h / 2, borderRadius: "2px 2px 0 0",
+                  background: `linear-gradient(to top, rgba(${rgb},${alpha}), rgba(${rgb},${alpha * 0.35}))`,
+                  transition: "height 0.08s ease",
+                }} />
+                {/* Lower bar */}
+                <div style={{
+                  position: "absolute", top: 28, width: 3,
+                  height: h / 2, borderRadius: "0 0 2px 2px",
+                  background: `linear-gradient(to bottom, rgba(${rgb},${alpha}), rgba(${rgb},${alpha * 0.35}))`,
+                  transition: "height 0.08s ease",
+                }} />
+                {/* Falling peak cap */}
+                <div style={{
+                  position: "absolute", bottom: 28 + capH / 2 - 1, width: 3, height: 2,
+                  borderRadius: 1, background: `rgba(${rgb},${Math.min(1, alpha + 0.25)})`,
+                  transition: "bottom 0.08s ease",
+                }} />
+                {/* Soft under-glow on live audio */}
+                {stateColor && (
+                  <div style={{
+                    position: "absolute", top: "50%", left: "50%",
+                    width: 6, height: 6, transform: "translate(-50%, -50%)",
+                    borderRadius: "50%",
+                    background: `rgba(${rgb},${0.10 * center * amp})`,
+                    filter: "blur(4px)",
+                  }} />
+                )}
+              </div>
+            );
+          });
+        })()}
       </div>
 
       {/* Live transcription */}
@@ -416,7 +547,22 @@ export default function VoicePage() {
           zIndex: 5,
         }}
       >
-        {liveTranscript ? (
+        {voicePartial && !liveTranscript ? (
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 500,
+              color: voicePartial.final
+                ? "var(--dash-text-bright)"
+                : "var(--dash-text-dim, var(--dash-text))",
+              lineHeight: 1.5,
+              fontStyle: voicePartial.final ? "normal" : "italic",
+              animation: "fadeIn 0.3s ease",
+            }}
+          >
+            "{voicePartial.text}"{!voicePartial.final && <span style={{ opacity: 0.55 }}> …</span>}
+          </div>
+        ) : liveTranscript ? (
           <div
             style={{
               fontSize: 18,
@@ -690,229 +836,63 @@ function VoiceTextInput({ onSend }: { onSend: (text: string) => void }) {
   );
 }
 
-/** Full-voice Orb with Canvas2D — larger, more dramatic than the sidebar Orb */
-function FullVoiceOrb({ state }: { state: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef = useRef<number>(0);
-  const timeRef = useRef(0);
-  const particlesRef = useRef<
-    Array<{
-      x: number;
-      y: number;
-      vx: number;
-      vy: number;
-      life: number;
-      maxLife: number;
-      size: number;
-    }>
-  >([]);
+/** Full-voice Orb — WebGL PlasmaRing with the voice-state palette */
+const VOICE_ORB_PALETTES: Record<string, string[]> = {
+  listening: ["#06b6d4", "#0891b2"],
+  thinking: ["#a855f7", "#7c3aed"],
+  speaking: ["#3b82f6", "#2563eb"],
+  error: ["#ef4444", "#7f1d1d"],
+  disconnected: ["#6b7280", "#4b5563"],
+};
 
+const VOICE_ORB_SPEEDS: Record<string, number> = {
+  listening: 120,
+  thinking: 150,
+  speaking: 100,
+  error: 30,
+  disconnected: 20,
+};
+
+function FullVoiceOrb({ state, amplitudeRef }: { state: string; amplitudeRef: { current: number } }) {
+  const appearance = useOrbAppearanceStore();
+
+  useEffect(() => installOrbAppearanceSync(), []);  // Amplitude into the WebGL orb (#130 + #131): DASH's own speech
+  // ('dashamplitude') and the owner's mic ('micamplitude' from the shared
+  // producer) both feed the same ref — max-decay merge, explicit 0 snaps
+  // to idle.
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const size = 240;
-    canvas.width = size * dpr;
-    canvas.height = size * dpr;
-    canvas.style.width = `${size}px`;
-    canvas.style.height = `${size}px`;
-    ctx.scale(dpr, dpr);
-
-    const cx = size / 2;
-    const cy = size / 2;
-    const maxRadius = size * 0.36;
-
-    const getColors = () => {
-      switch (state) {
-        case "thinking":
-          return {
-            core: "#a855f7",
-            ring: "#7c3aed",
-            glow: "rgba(168,85,247,0.45)",
-            particle: "#c084fc",
-            atmosphere: "rgba(168,85,247,0.08)",
-          };
-        case "speaking":
-          return {
-            core: "#3b82f6",
-            ring: "#2563eb",
-            glow: "rgba(59,130,246,0.50)",
-            particle: "#60a5fa",
-            atmosphere: "rgba(59,130,246,0.08)",
-          };
-        case "listening":
-          return {
-            core: "#06b6d4",
-            ring: "#0891b2",
-            glow: "rgba(6,182,212,0.45)",
-            particle: "#22d3ee",
-            atmosphere: "rgba(6,182,212,0.08)",
-          };
-        case "error":
-          return {
-            core: "#3fa9f5",
-            ring: "#3fa9f5",
-            glow: "rgba(63,169,245,0.45)",
-            particle: "#f87171",
-            atmosphere: "rgba(63,169,245,0.08)",
-          };
-        case "disconnected":
-          return {
-            core: "#6b7280",
-            ring: "#4b5563",
-            glow: "rgba(107,114,128,0.20)",
-            particle: "#9ca3af",
-            atmosphere: "rgba(107,114,128,0.04)",
-          };
-        default:
-          return {
-            core: "#4d94ff",
-            ring: "#3b82f6",
-            glow: "rgba(77,148,255,0.35)",
-            particle: "#93c5fd",
-            atmosphere: "rgba(77,148,255,0.05)",
-          };
+    const onAmp = (e: Event) => {
+      const detail = (e as CustomEvent<number>).detail;
+      if (typeof detail === "number" && Number.isFinite(detail)) {
+        amplitudeRef.current =
+          detail === 0
+            ? 0
+            : Math.max(amplitudeRef.current * 0.75, Math.max(0, Math.min(1, detail)));
       }
     };
-
-    // Initialize particles
-    if (particlesRef.current.length === 0) {
-      for (let i = 0; i < 40; i++) {
-        particlesRef.current.push({
-          x: cx + (Math.random() - 0.5) * maxRadius * 2,
-          y: cy + (Math.random() - 0.5) * maxRadius * 2,
-          vx: (Math.random() - 0.5) * 0.3,
-          vy: (Math.random() - 0.5) * 0.3,
-          life: Math.random() * 200,
-          maxLife: 150 + Math.random() * 100,
-          size: 1 + Math.random() * 2.5,
-        });
-      }
-    }
-
-    const draw = () => {
-      timeRef.current += 0.016;
-      const t = timeRef.current;
-      const colors = getColors();
-
-      ctx.clearRect(0, 0, size, size);
-
-      // Atmospheric glow
-      const atmosGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxRadius * 1.6);
-      atmosGrad.addColorStop(0, colors.atmosphere);
-      atmosGrad.addColorStop(1, "transparent");
-      ctx.fillStyle = atmosGrad;
-      ctx.fillRect(0, 0, size, size);
-
-      // Outer ring
-      const breathScale = 1 + Math.sin(t * 1.2) * 0.03;
-      ctx.beginPath();
-      ctx.arc(cx, cy, maxRadius * 1.1 * breathScale, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255,255,255,0.08)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      // Rotating dashed ring
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(t * 0.3);
-      ctx.beginPath();
-      ctx.arc(0, 0, maxRadius * 1.25 * breathScale, 0, Math.PI * 2);
-      ctx.setLineDash([8, 12]);
-      ctx.strokeStyle = colors.ring + "60";
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-
-      // Second rotating ring (reverse)
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(-t * 0.2);
-      ctx.beginPath();
-      ctx.arc(0, 0, maxRadius * 1.35 * breathScale, 0, Math.PI * 2);
-      ctx.setLineDash([5, 10]);
-      ctx.strokeStyle = colors.ring + "40";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-
-      // Inner shell
-      ctx.beginPath();
-      ctx.arc(cx, cy, maxRadius * 0.88, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(10,10,10,0.9)";
-      ctx.fill();
-      ctx.strokeStyle = colors.core + "30";
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-
-      // Core gradient
-      const coreGrad = ctx.createLinearGradient(
-        cx - maxRadius * 0.5,
-        cy - maxRadius * 0.5,
-        cx + maxRadius * 0.5,
-        cy + maxRadius * 0.5
-      );
-      coreGrad.addColorStop(0, colors.core);
-      coreGrad.addColorStop(0.5, colors.core + "70");
-      coreGrad.addColorStop(1, colors.ring);
-      ctx.beginPath();
-      ctx.arc(cx, cy, maxRadius * 0.55, 0, Math.PI * 2);
-      ctx.fillStyle = coreGrad;
-      ctx.fill();
-
-      // Specular highlight
-      ctx.beginPath();
-      ctx.arc(cx, cy, maxRadius * 0.18, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255,255,255,0.25)";
-      ctx.fill();
-
-      // Glow ring for listening state
-      if (state === "listening") {
-        const pulseR = maxRadius * (0.9 + Math.sin(t * 3) * 0.15);
-        ctx.beginPath();
-        ctx.arc(cx, cy, pulseR, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(6,182,212,${0.2 + Math.sin(t * 3) * 0.15})`;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-
-      // Particles
-      particlesRef.current.forEach((p) => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life++;
-
-        if (p.life > p.maxLife) {
-          p.x = cx + (Math.random() - 0.5) * maxRadius * 1.5;
-          p.y = cy + (Math.random() - 0.5) * maxRadius * 1.5;
-          p.vx = (Math.random() - 0.5) * 0.4;
-          p.vy = (Math.random() - 0.5) * 0.4;
-          p.life = 0;
-        }
-
-        const alpha = Math.sin((p.life / p.maxLife) * Math.PI) * 0.6;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = colors.particle + Math.round(alpha * 255).toString(16).padStart(2, "0");
-        ctx.fill();
-      });
-
-      animRef.current = requestAnimationFrame(draw);
+    window.addEventListener("dashamplitude", onAmp);
+    window.addEventListener("micamplitude", onAmp);
+    return () => {
+      window.removeEventListener("dashamplitude", onAmp);
+      window.removeEventListener("micamplitude", onAmp);
     };
+  }, [amplitudeRef]);
 
-    draw();
-    return () => cancelAnimationFrame(animRef.current);
-  }, [state]);
+  const statePalette = VOICE_ORB_PALETTES[state] ?? ["#4d94ff", "#3b82f6"];
+  const stateSpeed = VOICE_ORB_SPEEDS[state] ?? 60;
+  const stateWave = state === "listening" ? 30 : state === "thinking" ? 36 : 22;
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ display: "block" }}
+    <PlasmaRing
+      background="transparent"
+      colors={resolveOrbColors(appearance, statePalette)}
+      speed={resolveOrbSpeed(appearance, stateSpeed)}
+      waveHeight={resolveOrbWave(appearance, stateWave)}
+      amplitudeRef={amplitudeRef}
+      scale={28}
+      density={64}
+      width={360}
+      height={360}
     />
   );
 }

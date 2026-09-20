@@ -15,6 +15,8 @@ from __future__ import annotations
 import os
 import re
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -68,11 +70,36 @@ class ApplicationDiscoveryService(Singleton):
         "control panel": ["control panel"],
         "explorer": ["file explorer", "explorer"],
         "recycle bin": ["recycle bin"],
+        # DASH ecosystem apps (#134): resolve to the real installed apps,
+        # never a name-collision bystander (AutoHotkey Dash, etc.).
+        "dash": ["dash"],
+        "freebuff": ["freebuff"],
     }
+
+    # Cache TTL (decisions.md #134): discovery results expire after 5 min
+    # so apps installed AFTER backend boot appear without a restart — the
+    # "app not showing even while opened" report. Rescan is throttled to at
+    # most once per TTL (a scan is ~1-2 s; launch paths poll per message).
+    CACHE_TTL_S = 300.0
 
     def __init__(self) -> None:
         self._cache: List[Dict[str, Any]] = []
         self._cache_loaded: bool = False
+        self._cache_at: float = 0.0
+        self._refreshing: bool = False
+
+    @staticmethod
+    def _clean_name(name: str) -> str:
+        """Strip installer version/edition suffixes from registry names.
+
+        Registry Uninstall keys carry display names like "Freebuff 0.0.127"
+        or "DASH 1.0.0"; the app everyone asks for by name is "freebuff"
+        and "dash". Also drops '(x64)' style decorators.
+        """
+        cleaned = re.sub(r"\s+v?\d+(?:\.\d+)+.*$", "", name or "").strip()
+        cleaned = re.sub(r"\s+\((?:x64|x86|64-bit|32-bit)\)\s*$", "", cleaned,
+                         flags=re.IGNORECASE)
+        return cleaned or name
 
     # ────────────────────────────────────────────────────────
     # Discovery (registry + shortcuts + PATH)
@@ -116,7 +143,7 @@ class ApplicationDiscoveryService(Singleton):
                                         pass
                                     if name:
                                         apps.append({
-                                            "name": name,
+                                            "name": self._clean_name(name),
                                             "path": install_location or self._extract_exe(display_icon),
                                             "source": "registry",
                                             "aliases": [],
@@ -207,8 +234,22 @@ class ApplicationDiscoveryService(Singleton):
         Returns:
             List of app dicts with name, path, source, aliases.
         """
-        if self._cache_loaded and not refresh:
-            return self._cache
+        # TTL'd cache with stale-while-revalidate (#136): a fresh cached result
+        # is returned as-is; an EXPIRED cache is returned immediately while a
+        # background thread re-scans, so no request ever blocks on the ~26 s
+        # full-machine scan (measured) — the next request sees fresh data.
+        # Only an empty/missing cache (or a forced refresh) scans inline.
+        age = time.monotonic() - self._cache_at
+        cache_ok = self._cache_loaded and self._cache
+        if cache_ok and not refresh:
+            if age < self.CACHE_TTL_S:
+                return self._cache
+            if not self._refreshing:
+                self._refreshing = True
+                threading.Thread(
+                    target=self._background_refresh, name="app-discovery-refresh", daemon=True
+                ).start()
+            return self._cache  # stale-but-useful, refresh in flight
 
         apps: List[Dict[str, Any]] = []
         apps.extend(self._scan_registry())
@@ -228,8 +269,18 @@ class ApplicationDiscoveryService(Singleton):
 
         self._cache = list(seen.values())
         self._cache_loaded = True
+        self._cache_at = time.monotonic()
         logger.info("Discovered %d installed applications", len(self._cache))
         return self._cache
+
+    def _background_refresh(self) -> None:
+        """Re-scan in a worker thread; never raises (stale cache stays)."""
+        try:
+            self.discover_all(refresh=True)
+        except Exception:
+            logger.exception("Background app-discovery refresh failed")
+        finally:
+            self._refreshing = False
 
     # ────────────────────────────────────────────────────────
     # Resolution & search
@@ -266,20 +317,34 @@ class ApplicationDiscoveryService(Singleton):
         # 1. Direct match on known aliases
         for canonical, aliases in self.KNOWN_ALIASES.items():
             if query_lower in aliases or query_lower == canonical:
-                # Find the best app whose name matches any alias
-                best = None
-                for app in apps:
-                    app_lower = app["name"].lower()
-                    if any(a in app_lower for a in aliases):
-                        if best is None or best["name"].lower() not in app_lower:
-                            best = app
-                return best
+                # Candidates whose name contains any alias — then ranked:
+                # exact name > name startswith alias > contains, and a real
+                # executable/shortcut beats a path-less registry stub
+                # (#134: "dash" must resolve to DASH.exe, never "AutoHotkey
+                # Dash" just because it sorts first alphabetically).
+                candidates = [
+                    app for app in apps
+                    if any(a in app["name"].lower() for a in aliases)
+                ]
+                if not candidates:
+                    continue
+
+                candidates.sort(key=lambda app: self._rank_key(app, canonical))
+                return candidates[0]
 
         # 2. Direct substring match
         matches = [app for app in apps if self._matches(app["name"], query)]
         if matches:
-            # Prefer apps with discoverable paths
-            matches.sort(key=lambda a: (bool(a["path"]), a["name"]))
+            # Rank: path-having first (the old sort was INVERTED and preferred
+            # path-less stubs), then exact cleaned-name equality, then the
+            # shortest name (closest to what was asked for).
+            matches.sort(
+                key=lambda a: (
+                    not bool(a.get("path")),
+                    self._clean_name(a["name"]).lower() != query_lower,
+                    len(a["name"]),
+                )
+            )
             return matches[0]
 
         return None
@@ -311,15 +376,35 @@ class ApplicationDiscoveryService(Singleton):
 
         direct = [app for app in apps if self._matches(app["name"], query)]
         seen = set()
-        results: List[Dict[str, Any]] = []
+        unique: List[Dict[str, Any]] = []
         for app in alias_matches + direct:
             key = app["name"].lower()
             if key not in seen:
                 seen.add(key)
-                results.append(app)
-            if len(results) >= limit:
-                break
-        return results
+                unique.append(app)
+        # Same relevance ranking as resolve (#134): apps with a real
+        # executable/shortcut path first, then names closest to the query
+        # (exact cleaned name > startswith > contains), then shortest.
+        unique.sort(key=lambda app: self._rank_key(app, query_lower))
+        return unique[:limit]
+
+    @staticmethod
+    def _rank_key(app: Dict[str, Any], canonical: str) -> tuple:
+        """Shared relevance ranking for resolve/search (#134).
+
+        A real executable/shortcut beats a path-less registry stub, an
+        exact cleaned-name match beats startswith beats contains, and the
+        shortest name wins ties (closest to what was asked for).
+        """
+        n = ApplicationDiscoveryService._clean_name(app["name"]).lower()
+        path_ok = bool(app.get("path"))
+        if canonical and n == canonical:
+            tier = 0
+        elif canonical and n.startswith(canonical):
+            tier = 1
+        else:
+            tier = 2
+        return (tier, not path_ok, len(n))
 
     def get_app(self, name: str) -> Optional[Dict[str, Any]]:
         """Get a resolved app; raises-friendly wrapper around resolve."""
