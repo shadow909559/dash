@@ -23,3 +23,7 @@ mss>=10.0.0
 Pillow>=10.0.0
 pyperclip>=1.8.0
 pyautogui>=0.9.54
+# Vision pipeline math (hard import in vision/recognition.py); tests also
+# use it for fixture generation. Previously transitive-only on dev machines
+# — CI collection failed without it (#137).
+numpy>=1.26

@@ -38,6 +38,10 @@ dependencies = [
     "pyperclip>=1.8.0",
     # Desktop automation: mouse, keyboard, screenshots.
     "pyautogui>=0.9.54",
+    # Vision pipeline math (hard import in vision/recognition.py); tests
+    # also use it for fixture generation. Previously arrived only as a
+    # transitive dependency on dev machines — CI collection failed (#137).
+    "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
@@ -51,6 +55,10 @@ dev = [
     "ruff>=0.8.0",
     "black>=24.10.0",
     "mypy>=1.13.0",
+    # JPEG decode/encode + warpAffine used by vision tests as fixture
+    # helpers; production code feature-detects cv2, so this stays a test
+    # dependency only (#137).
+    "opencv-python-headless>=4.8",
 ]
 vision = [
     # OCR is feature-detected at runtime; install only if OCR is wanted.
