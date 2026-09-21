@@ -3457,3 +3457,11 @@ integration-service singleton and assumed a predecessor had left slack
 configured AND enabled. Fixed by configuring slack in `setup_method`
 (self-sufficient, like its sibling `test_get_integrations_status`
 already was) — order-independent regardless of suite subset.
+
+**Addendum (same day).** Per-shard JUnit reports are uploaded from every
+backend-test job (`if: always()`, `if-no-files-found: error`), so triage
+names the exact failing tests without a re-run. A nightly scheduled
+workflow (03:00 UTC, `workflow_dispatch` for debugging) runs the whole
+suite UNSHARDED in one process — the plain alphabetical order shard
+subsetting no longer exercises — so any residual order-dependence
+surfaces within 24h instead of lurking.

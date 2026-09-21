@@ -1,0 +1,52 @@
+name: Nightly full suite
+
+# Why this exists (#139): the PR CI runs tests in 6 hash-based shards, so
+# it can only ever see cross-test interference WITHIN a shard's subset.
+# The nightly run executes the whole suite in one process, in plain
+# alphabetical file order — the exact order shard subsetting no longer
+# exercises end-to-end. Any order-dependence (like the integration-singleton
+# bug sharding exposed) surfaces here within 24h instead of lurking.
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC daily
+  workflow_dispatch: {} # manual trigger for debugging
+
+jobs:
+  backend-full:
+    name: Backend full suite (unsharded)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/backend/pyproject.toml
+
+      - name: Install backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" || pip install -e .
+          pip install pytest pytest-asyncio
+
+      - name: Run the full suite in one process (no DASH_TEST_SHARD)
+        run: python -m pytest tests -q --tb=short --junitxml=test-results/full.xml
+        env:
+          # Hermetic test environment — no real credentials, no shard env
+          # var: the absence of DASH_TEST_SHARD is the point of this job.
+          DASH_CRM_DIR: ${{ runner.temp }}/dash-crm
+          DASH_STATE_DIR: ${{ runner.temp }}/dash-state
+
+      - name: Upload full-suite report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-suite-results
+          path: apps/backend/test-results/full.xml
+          if-no-files-found: error

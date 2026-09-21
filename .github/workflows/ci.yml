@@ -66,12 +66,22 @@ jobs:
           pip install pytest pytest-asyncio
 
       - name: Run backend tests (shard ${{ matrix.shard }}/${{ matrix.total }})
-        run: python -m pytest tests -q --tb=short
+        # JUnit report per shard: triage failures (which shard, which tests)
+        # without re-running anything.
+        run: python -m pytest tests -q --tb=short --junitxml=test-results/shard-${{ matrix.shard }}.xml
         env:
           DASH_TEST_SHARD: ${{ matrix.shard }}/${{ matrix.total }}
           # Hermetic test environment — no real credentials in CI.
           DASH_CRM_DIR: ${{ runner.temp }}/dash-crm
           DASH_STATE_DIR: ${{ runner.temp }}/dash-state
+
+      - name: Upload shard test report
+        if: always()  # reports matter most when the job fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: shard-${{ matrix.shard }}-results
+          path: apps/backend/test-results/shard-${{ matrix.shard }}.xml
+          if-no-files-found: error
 
   desktop:
     name: Desktop typecheck + build
