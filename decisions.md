@@ -3424,3 +3424,36 @@ reason and prints on every run. Two pins in tests/test_undeclared_imports.py:
 tree clean today, and a planted violation fails even though the module
 cannot resolve from local metadata — the check can never pass vacuously.
 Wired into CI after "Compile check" and before the test suite.
+
+## #139 — Backend CI suite sharded 6-way via deterministic item hashing (2026-09-21)
+
+**Problem.** The backend CI job ran ~13 min for 2,871 tests; a single
+parametrized file (test_api_sweep.py, 1,538 items = 54%) makes file-level
+sharding useless.
+
+**Design.** Item-level sharding keyed on `blake2b(nodeid) % N`
+(`tests/_sharding.py`, hook in conftest via `DASH_TEST_SHARD=i/n` or
+`--shard=i/n`): stable across machines and runs, complete + disjoint
+partition — union of shards equals the full suite. Proven by pins
+(`tests/test_sharding.py`: determinism, partition, real-subpytest
+integration, fail-loud paths) and `scripts/inspect_test_shards.py` over
+real collection: 439–499 tests per shard (2.1% spread), no empty shard.
+New tests auto-assign; there is no manifest to drift.
+
+**Semantics (deliberate).** Env var malformed/out-of-range → FULL suite
+(coverage beats speed; the shard banner in the log makes degradation
+visible). CLI `--shard` malformed → hard error (explicit intent must not
+be silently ignored). A valid spec selecting 0 tests → `UsageError`,
+never a vacuous green job.
+
+**CI.** Split into `backend-lint` (compileall + undeclared-import gate —
+seconds, fail fast) and a 6×`backend-test` matrix (`fail-fast: false`).
+Projected wall clock ≈ longest shard (~2.5–4 min) instead of ~13.
+
+**Real bug the sharding exposed (fixed, not skipped):**
+`test_new_services::TestIntegrationService::test_get_messages` failed
+only under shard 3's file order — its tests share the process-wide
+integration-service singleton and assumed a predecessor had left slack
+configured AND enabled. Fixed by configuring slack in `setup_method`
+(self-sufficient, like its sibling `test_get_integrations_status`
+already was) — order-independent regardless of suite subset.

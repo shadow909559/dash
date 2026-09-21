@@ -92,6 +92,14 @@ class TestIntegrationService:
 
     def setup_method(self):
         self.svc = get_integration_service()
+        # Self-sufficiency: this class shares a process-wide singleton with
+        # every other test file. Some predecessor test leaves slack's
+        # shared config disabled (the send/receive tests here then fail
+        # with "Service not configured or disabled" depending on file
+        # order — observed under CI sharding). Configuring up front makes
+        # every test in the class order-independent, exactly like
+        # test_get_integrations_status below already is.
+        self.svc.configure("slack", api_key="xoxb-test-suite")
 
     def test_configure(self):
         result = self.svc.configure("slack", api_key="xoxb-test")

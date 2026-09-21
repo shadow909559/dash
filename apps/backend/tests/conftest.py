@@ -14,6 +14,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from tests._sharding import active_shard, describe, parse_shard_spec, should_run
+
 # ── Device identity bootstrap (must run before any request) ──────────
 # Tests authenticate exactly like the real desktop client: with the local
 # device token, but pointing at a temp identity file.
@@ -196,4 +198,52 @@ def _hermetic_ai_providers(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(memory_embeddings, "create_embedding", _no_embedding)
     monkeypatch.setattr(rag_embeddings, "create_embedding", _no_embedding)
+
+
+# ── CI test sharding (decisions.md #139) ──────────────────────────────
+# The backend job takes ~13 min; CI runs N pytest processes in parallel,
+# each selecting a deterministic hash-based subset of tests (see
+# tests/_sharding.py). Unset/malformed env → full suite, so local runs
+# and any other CI consumer are untouched.
+def pytest_addoption(parser: pytest.Parser) -> None:
+    group = parser.getgroup("dash-sharding", "DASH CI test sharding")
+    group.addoption(
+        "--shard",
+        dest="shard",
+        default=None,
+        metavar="I/N",
+        help="Run only shard I of N (0-based, e.g. --shard=2/6). "
+        "Unset or malformed runs the full suite.",
+    )
+
+
+def pytest_collection_modifyitems(
+    session: pytest.Session, config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    cli_raw = config.getoption("--shard")
+    shard = parse_shard_spec(cli_raw) if cli_raw else None
+    if cli_raw and shard is None:
+        # An explicit --shard argument is deliberate intent; refusing to
+        # guess beats silently running everything (or nothing).
+        raise pytest.UsageError(
+            f"--shard={cli_raw!r} is not a valid I/N spec (e.g. --shard=2/6 "
+            f"with 0 <= I < N)"
+        )
+    if shard is None:
+        shard = active_shard()  # env form: malformed → full suite
+    if shard is None:
+        return  # full suite
+    before = len(items)
+    items[:] = [it for it in items if should_run(it.nodeid, shard)]
+    print(
+        f"[dash-shard] {describe(cli_raw)}: "
+        f"running {len(items)} of {before} collected tests"
+    )
+    # Empty shard = misconfiguration (e.g. shard count typo'd in CI); fail
+    # loudly rather than report a vacuous green job.
+    if not items:
+        raise pytest.UsageError(
+            f"shard {describe(cli_raw)} selected 0 tests "
+            f"from {before} collected — refusing to report an empty job as green"
+        )
 
