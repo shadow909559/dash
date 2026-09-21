@@ -37,8 +37,13 @@ def resolve_path_within_sandbox(path_str: str, working_directory: str | None = N
     else:
         base = sandbox
 
-    # Resolve candidate path
-    candidate = (base / path_str).resolve()
+    # Resolve candidate path. Windows-style separators are normalized FIRST:
+    # on POSIX a backslash is a legal filename character, so "..\..\etc\passwd"
+    # would otherwise resolve to one harmless-looking name inside the sandbox
+    # instead of being rejected as traversal. Traversal attempts must be
+    # detected regardless of which separator the caller used.
+    normalized = path_str.replace("\\", "/")
+    candidate = (base / normalized).resolve()
 
     # Prevent path traversal: candidate must be inside sandbox
     if not candidate.is_relative_to(sandbox):

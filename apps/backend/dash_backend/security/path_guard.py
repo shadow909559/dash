@@ -82,8 +82,19 @@ def _configured_extra_roots() -> list[Path]:
 
 
 def allowed_roots() -> list[Path]:
-    """Effective allow-list (default special folders + configured extras)."""
-    return _configured_extra_roots() + default_roots()
+    """Effective allow-list.
+
+    When DASH_ALLOWED_FILE_ROOTS is explicitly configured it is AUTHORITATIVE:
+    it replaces the default special folders (fail-closed — an operator who
+    sets an explicit list would never expect the home directories to remain
+    silently accessible, and tests set the env var precisely to scope the
+    sandbox). With no configuration the sensible personal-assistant defaults
+    apply.
+    """
+    configured = _configured_extra_roots()
+    if configured:
+        return configured
+    return default_roots()
 
 
 def is_secret_file(path: Path) -> bool:

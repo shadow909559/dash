@@ -25,7 +25,10 @@ import pytest
 REPO = pathlib.Path(__file__).resolve().parents[3]
 DESKTOP = REPO / "apps" / "desktop"
 # vite bundles main.ts AND its imports (incl. backend_manager.ts) into the
-# single dist-electron/main.js that Electron actually loads.
+# single dist-electron/main.js that Electron actually loads. That file is a
+# BUILD ARTIFACT: a fresh checkout (e.g. the backend CI job) has none, so
+# artifact assertions are gated on its existence while source assertions
+# always run.
 DIST_MAIN = DESKTOP / "dist-electron" / "main.js"
 SRC_MAIN = DESKTOP / "electron" / "main.ts"
 SRC_BM = DESKTOP / "electron" / "backend_manager.ts"
@@ -36,7 +39,8 @@ SRC_BM = DESKTOP / "electron" / "backend_manager.ts"
 
 def test_launch_hidden_recognizes_run_key_args():
     """The Run key carries --hidden; main must treat that as launch-hidden."""
-    for src in (SRC_MAIN, DIST_MAIN):
+    sources = [SRC_MAIN] + ([DIST_MAIN] if DIST_MAIN.exists() else [])
+    for src in sources:
         text = src.read_text(encoding="utf-8")
         assert '--hidden"' in text or '"--hidden"' in text, f"{src.name}: no --hidden check"
         assert "--start-minimized" in text, f"{src.name}: no --start-minimized check"
@@ -51,7 +55,8 @@ def test_run_key_args_passed_when_start_minimized():
 
 def test_startup_prefs_persisted_to_disk():
     """startAsOrb/startMinimized live in userData (login item can't hold them)."""
-    for src in (SRC_MAIN, DIST_MAIN):
+    sources = [SRC_MAIN] + ([DIST_MAIN] if DIST_MAIN.exists() else [])
+    for src in sources:
         text = src.read_text(encoding="utf-8")
         assert "startup-prefs.json" in text, f"{src.name}: startup prefs not persisted"
 
@@ -69,7 +74,11 @@ def test_start_as_orb_honored_on_hidden_launch():
 
 def test_built_artifact_is_current():
     """The bundle Electron loads must contain this session's fixes (stale
-    build detector: these markers only exist in new source)."""
+    build detector: these markers only exist in new source). Gated on the
+    artifact existing: a fresh checkout without a desktop build cannot have a
+    stale artifact, and building Electron is the desktop job's business."""
+    if not DIST_MAIN.exists():
+        pytest.skip("dist-electron/main.js not built in this checkout (backend CI job)")
     text = DIST_MAIN.read_text(encoding="utf-8")
     assert "startup-prefs.json" in text, "dist-electron/main.js is stale — run npm run build"
     assert '["--hidden"]' in text, "dist-electron/main.js missing --hidden args (stale build)"

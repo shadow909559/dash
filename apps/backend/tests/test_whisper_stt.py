@@ -167,12 +167,23 @@ class TestRegistration:
         assert voice_mod.get_provider("speech", "whisper") is not None
         default = voice_mod.get_provider("speech", "default")
         assert isinstance(default, WhisperSpeechProvider)
-        # Cloud fallback still reachable under its own name
+        # Cloud fallback still reachable under its own name. The cloud
+        # provider needs the optional speech_recognition package (not
+        # declared in CI); skip when it is genuinely absent — the
+        # availability contract itself is pinned above.
+        try:
+            import speech_recognition  # noqa: F401
+        except ImportError:
+            pytest.skip("speech_recognition not installed (optional cloud STT)")
         assert voice_mod.get_provider("speech", "speech_recognition") is not None
 
     def test_speech_recognition_defaults_without_whisper(
         self, clean_speech_registry: None
     ) -> None:
+        try:
+            import speech_recognition  # noqa: F401
+        except ImportError:
+            pytest.skip("speech_recognition not installed (optional cloud STT)")
         voice_mod._register_stt_providers(whisper_available=False)
         from dash_backend.voice import _SpeechRecognitionProvider
 
@@ -183,11 +194,28 @@ class TestRegistration:
         assert voice_mod.get_provider("speech", "whisper") is None
 
     def test_current_registry_uses_whisper_default(self) -> None:
-        # The real module registration on this machine: a local whisper
-        # engine is installed, so the default must be the offline provider.
-        assert isinstance(
-            voice_mod.get_provider("speech", "default"), WhisperSpeechProvider
-        )
+        # The real module registration on machines WITH a local whisper
+        # engine: the default must be the offline provider. On boxes without
+        # one (e.g. CI) the honest registration result is the noop provider —
+        # pin that too, mirroring _register_stt_providers' detection.
+        default = voice_mod.get_provider("speech", "default")
+        try:
+            import faster_whisper  # noqa: F401
+            available = True
+        except ImportError:
+            available = False
+        if not available:
+            try:
+                import whisper  # noqa: F401
+                available = True
+            except ImportError:
+                available = False
+        if available:
+            assert isinstance(default, WhisperSpeechProvider)
+        else:
+            from dash_backend.voice import _NoopSpeechProvider
+
+            assert isinstance(default, _NoopSpeechProvider)
 
 
 class TestFasterWhisperEngine:

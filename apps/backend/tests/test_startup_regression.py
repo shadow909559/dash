@@ -223,6 +223,19 @@ class TestClipboardOperations:
 
     def test_clipboard_manager_write_and_read(self) -> None:
         """ClipboardManager.write_text + read_text round-trips correctly."""
+        # A clipboard needs a desktop session backend (xclip/wl-clipboard on
+        # headless Linux CI); the manager handles absence honestly (returns
+        # False), and the round-trip contract is only testable where a
+        # backend exists.
+        import pyperclip
+
+        try:
+            pyperclip.copy("probe")
+            if pyperclip.paste() != "probe":
+                raise pyperclip.PyperclipException("no working clipboard backend")
+        except pyperclip.PyperclipException:
+            pytest.skip("no clipboard backend on this machine (headless CI)")
+
         from dash_backend.desktop.clipboard_manager import ClipboardManager
 
         cm = ClipboardManager()

@@ -3366,3 +3366,31 @@ Black-hole repro: the five target files now pass 57/57 in 36.6 s under the
 60 s per-test cap; regression sweep (brain/health/outbox/presence-history/
 warmup/btm/status/auth/security/api-sweep subsets) 148 passed. Startup is
 now honest on any box: infra absence degrades features, never boot.
+
+## #139 - CI run finally completes; 9 environment-parity test bugs fixed (2026-09-21)
+
+With the startup hang fixed (#138), run 35550457982's backend suite ran to
+completion for the first time and exposed 9 tests that were passing for the
+wrong environment reasons - zero production bugs:
+
+- autostart contract tests read apps/desktop/dist-electron/main.js, a build
+  artifact the backend CI job never builds: source assertions now always run,
+  artifact assertions gate on the file existing.
+- clipboard round-trip needs a desktop session backend (xclip on headless
+  Linux): probe pyperclip first, skip when absent.
+- whisper registration tests assumed speech_recognition is installed (it is
+  optional and undeclared) and that the local machine has whisper: the
+  cloud-provider assertions skip when the package is absent; the
+  current-registry test now mirrors _register_stt_providers' real detection
+  and pins the noop default on engine-less machines.
+- path_guard: DASH_ALLOWED_FILE_ROOTS is now AUTHORITATIVE (replaces the
+  default special folders instead of being silently swallowed by them). The
+  old additive order made the tests pass on Windows only because pytest's
+  tmp dir happens to live under the user home - fail-closed on Linux.
+- filesystem_service.resolve_path_within_sandbox normalizes backslashes
+  before the containment check: on POSIX "..\..\Windows\system32" was one
+  legal filename and silently allowed; traversal must be detected regardless
+  of separator.
+
+Local: 93 (touched suites) + 56 (filesystem consumers) + 57 (black-hole
+startup repro) all green.
