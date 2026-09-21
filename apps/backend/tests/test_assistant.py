@@ -16,6 +16,7 @@ Proves the honesty/security contract:
 from __future__ import annotations
 
 import asyncio
+import datetime as _dt
 import time
 
 import pytest
@@ -619,8 +620,13 @@ def test_daily_briefing_from_real_state(store, audit):
     assert "Nothing needs your attention" in brief["text"]
     # Populated store → real counts
     client = store.create_client("Acme")
+    # Noon *today* (not `now + 1h`): a +1h meeting scheduled between 23:00
+    # and 00:00 local lands on TOMORROW's calendar date, and the briefing
+    # (correctly) excludes it from meetings_today — a nightly-window flake.
+    # Noon has ±12h of margin against any run time of day.
     store.create_meeting("Sprint", client_id=client["id"],
-                         scheduled_at=time.time() + 3600)
+                         scheduled_at=_dt.datetime.combine(
+                             _dt.date.today(), _dt.time(12, 0)).timestamp())
     eng = ApprovalEngine()
     eng.create_request(store, audit, "send_external_message", "d",
                        reason="r", risk_level=3, target="Acme",
