@@ -3305,3 +3305,64 @@ Changes, each measured:
 Tests: test_llm_warmup.py (3) + discovery/assistant/startup regression
 (140 passed). Voice path end-to-end after changes: user speech -> text ~1.2 s
 STT + ~0.5-1.1 s first token + streaming TTS per sentence.
+
+## #137 - CI: numpy/OpenCV dependency declarations + honest CI-parity gap (2026-09-21)
+
+Run 35546292208 failed: 6 vision test files could not even collect on CI —
+numpy is a hard import in dash_backend/vision/recognition.py but was never
+declared (transitive-only on dev machines). Fix (b7a018d6): numpy>=1.26 in
+core deps (pyproject + requirements); opencv-python-headless>=4.8 in the dev
+extra — test bodies use cv2 as a fixture helper while production
+feature-detects it. Verified locally with an import-blocker simulating CI's
+exact environment (numpy+cv2 present, onnxruntime/pytesseract absent): the 6
+files now pass 116/116.
+
+Run 35547162155 (post-fix): numpy failure GONE — collection clean, suite ran
+to ~73%+ (2,000+ tests) before failing. Remaining failure is a REAL
+CI-parity bug, not deps: test_presence.py::test_presence_rest_endpoint
+timed out at 60 s inside TestClient(app) startup — lifespan reaches
+"Event Bus started" then hangs on the ubuntu runner, and test_briefing_trends
+hit the same wall earlier (3x F at ~58%). Root cause: lifespan side effects
+(alembic migrations, proactively started loops, my own #136 boot warm-up
+task) were written assuming the local dev machine; CI is a slower,
+connection-less box. On Windows the same suite is green end-to-end. The
+warm-up task additionally holds a pending HTTP request for up to 120 s at
+shutdown when Ollama is absent — startup/shutdown must be made
+runner-agnostic (short timeouts, env-gating, CI skips) rather than tuned by
+version. Local simulation was insuf ficient to catch this: the gap is
+hardware/environment parity, not package parity. NOT fixed in this commit by
+design — the task bound dependency declarations only; the parity fix needs
+its own change + local reproduction harness.
+
+## #138 - CI startup hang root-caused and fixed: startup/shutdown can no longer block on infra (2026-09-21)
+
+Run 35547162155 reproduced locally by black-holing Ollama
+(DASH_OLLAMA_BASE_URL=http://10.255.255.1:11434): the same tests hung in
+TestClient.wait_startup and the faulthandler dump matched CI. Three real
+defects, all fixed:
+
+1. BackgroundTaskManager (autonomous/background_task_manager.py): its
+   asyncio.Queue was built in __init__ and stayed bound to the first event
+   loop; every later lifespan raised "bound to a different event loop" inside
+   the worker, whose generic except had NO sleep - a hot loop that starved
+   the portal loop (2.5M "Worker error" lines in CI's dump). Queue is now
+   rebound per start(); the error path sleeps 1 s; stop() is bounded and
+   never called a second lifespan; singleton BTM stop + close_shared_clients
+   wired into main.py shutdown so an in-flight warm-up POST can no longer
+   hold shutdown for 120 s. Tests: test_background_task_manager_loops.py (4).
+
+2. AIProviderHealthMonitor ran its first Ollama probe INLINE in lifespan
+   (sync httpx.get ON the event loop + 30 s wait + recovery retries): moved
+   into the background task (first check still immediate); the probe now
+   runs via asyncio.to_thread. find_ollama_executable honors
+   DASH_OLLAMA_AUTOSTART=0 and DASH_OLLAMA_EXECUTABLE.
+
+3. services/ollama_manager.start() could burn ~180 s on a black hole
+   (30 x (1 s sleep + 5 s connect)); replaced with a wall-clock budget
+   (DASH_OLLAMA_STARTUP_BUDGET, default 15 s), 2 s connect timeout, and the
+   same DASH_OLLAMA_AUTOSTART gate.
+
+Black-hole repro: the five target files now pass 57/57 in 36.6 s under the
+60 s per-test cap; regression sweep (brain/health/outbox/presence-history/
+warmup/btm/status/auth/security/api-sweep subsets) 148 passed. Startup is
+now honest on any box: infra absence degrades features, never boot.

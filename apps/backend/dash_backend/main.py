@@ -453,6 +453,27 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.debug("warm-up shutdown skipped", exc_info=True)
 
+    # Stop the singleton background task manager — it is reused across
+    # lifespans (tests boot several apps per process), so it must be stopped
+    # here, and its stop must be bounded.
+    try:
+        from dash_backend.autonomous.background_task_manager import (
+            get_background_task_manager,
+        )
+
+        await get_background_task_manager().stop()
+    except Exception:
+        logger.exception("Failed to stop background task manager")
+
+    # Close the shared httpx clients last: any in-flight request (e.g. a
+    # warm-up POST to an unreachable Ollama) must not hold shutdown open.
+    try:
+        from dash_backend.http_client import close_shared_clients
+
+        await close_shared_clients()
+    except Exception:
+        logger.exception("Failed to close shared httpx clients")
+
     try:
         if scheduler:
             await scheduler.stop()

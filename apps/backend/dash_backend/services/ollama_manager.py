@@ -71,9 +71,13 @@ class OllamaManager:
         }
 
     async def check_health(self) -> bool:
-        """Check if Ollama is reachable and the model is available."""
+        """Check if Ollama is reachable and the model is available.
+
+        Connect timeout is short: an unreachable endpoint must be detected
+        fast (this runs inside the startup budget loop).
+        """
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=2.0)) as client:
                 # Check Ollama is running
                 resp = await client.get(f"{self.base_url}/api/tags")
                 if resp.status_code != 200:
@@ -113,7 +117,10 @@ class OllamaManager:
             logger.info("Ollama already running and healthy")
             return True
 
-        if not self.auto_start:
+        import os as _os
+
+        auto = self.auto_start and _os.getenv("DASH_OLLAMA_AUTOSTART", "1") != "0"
+        if not auto:
             self._state = OllamaState.ERROR
             logger.error("Ollama not running and auto_start is disabled")
             return False
@@ -138,15 +145,25 @@ class OllamaManager:
                     stderr=subprocess.DEVNULL,
                 )
 
-            # Wait for Ollama to become healthy (max 30s)
+            # Wait for Ollama to become healthy within a WALL-CLOCK budget:
+            # each check can block for the full connect timeout on an
+            # unreachable endpoint, so 30 iterations once cost ~180 s and hung
+            # lifespan startup on connection-less machines (CI faulthandler
+            # evidence). The budget bounds the whole wait, not the iteration
+            # count.
             self._state = OllamaState.CONNECTING
-            for i in range(30):
-                await asyncio.sleep(1)
+            import os as _os
+            budget = float(_os.getenv("DASH_OLLAMA_STARTUP_BUDGET", "15"))
+            deadline = time.monotonic() + budget
+            i = 0
+            while time.monotonic() < deadline:
+                i += 1
+                await asyncio.sleep(min(1.0, max(0.0, deadline - time.monotonic())))
                 if await self.check_health():
-                    logger.info("Ollama started successfully (took %ds)", i + 1)
+                    logger.info("Ollama started successfully (took %ds)", i)
                     return True
 
-            logger.error("Ollama failed to start within 30 seconds")
+            logger.error("Ollama failed to start within %.0f seconds", budget)
             self._state = OllamaState.ERROR
             return False
 

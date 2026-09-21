@@ -77,13 +77,29 @@ class OllamaManager:
         """Discover Ollama executable on Windows.
 
         Checks:
-        1. PATH environment variable
-        2. Common Windows installation paths
-        3. User-specific installation paths
+        1. DASH_OLLAMA_EXECUTABLE override (explicit path)
+        2. PATH environment variable
+        3. Common Windows installation paths
+
+        DASH_OLLAMA_AUTOSTART=0 disables discovery entirely (tests and
+        connection-less environments must never probe for a local engine).
 
         Returns:
             Path to ollama executable or None if not found.
         """
+        import os as _os
+
+        if _os.getenv("DASH_OLLAMA_AUTOSTART", "1") == "0":
+            logger.info("Ollama auto-start/discovery disabled (DASH_OLLAMA_AUTOSTART=0)")
+            return None
+
+        override = _os.getenv("DASH_OLLAMA_EXECUTABLE")
+        if override:
+            if _os.path.exists(override):
+                logger.info("Found Ollama via DASH_OLLAMA_EXECUTABLE: %s", override)
+                return override
+            logger.warning("DASH_OLLAMA_EXECUTABLE=%s does not exist; ignoring", override)
+
         if platform.system() != "Windows":
             logger.warning("Ollama auto-start only supported on Windows")
             return None
@@ -110,14 +126,19 @@ class OllamaManager:
         logger.warning("Ollama executable not found in common locations")
         return None
 
-    def is_ollama_running(self) -> bool:
-        """Check if Ollama is already running by testing the API."""
+    async def is_ollama_running(self) -> bool:
+        """Check if Ollama is already running by testing the API.
+
+        The probe runs in a worker thread: a black-holed/unreachable endpoint
+        blocks in connect for the full timeout, and that must never be the
+        event loop (startup hung here on connection-less machines).
+        """
         settings = get_settings()
         base_url = settings.ollama_base_url.rstrip("/")
         tags_url = f"{base_url}/api/tags"
 
         try:
-            response = httpx.get(tags_url, timeout=2.0)
+            response = await asyncio.to_thread(httpx.get, tags_url, timeout=2.0)
             if response.status_code == 200:
                 logger.info("Ollama is already running at %s", base_url)
                 return True
@@ -295,7 +316,7 @@ class OllamaManager:
         try:
             if provider == "ollama":
                 # Check if Ollama is running
-                if not self.is_ollama_running():
+                if not await self.is_ollama_running():
                     logger.info("Ollama not running, attempting to start")
                     self._current_status = ProviderStatus.STARTING
                     result.status = ProviderStatus.STARTING

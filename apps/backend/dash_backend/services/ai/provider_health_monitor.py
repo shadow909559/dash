@@ -88,13 +88,13 @@ class AIProviderHealthMonitor:
         
         self._running = True
         logger.info("Starting AI Provider Health Monitor")
-        
-        # Do an initial check immediately
-        await self._check_and_publish()
-        
-        # Start the background monitoring loop
+
+        # The initial check runs inside the background task, NOT inline: the
+        # full probe includes Ollama auto-start + a 30 s API wait + recovery
+        # retries, which must never block lifespan startup (connection-less
+        # machines hung TestClient.wait_startup here).
         self._task = asyncio.create_task(self._monitoring_loop())
-    
+
     async def stop(self):
         """Stop the health monitor."""
         if not self._running:
@@ -113,10 +113,17 @@ class AIProviderHealthMonitor:
         logger.info("AI Provider Health Monitor stopped")
     
     async def _monitoring_loop(self):
-        """Background loop that periodically checks provider health."""
+        """Background loop that periodically checks provider health.
+
+        The first check fires immediately (no initial sleep) — but always
+        inside this task, so startup never waits on the provider.
+        """
+        first = True
         while self._running:
             try:
-                await asyncio.sleep(self._check_interval)
+                if not first:
+                    await asyncio.sleep(self._check_interval)
+                first = False
                 await self._check_and_publish()
             except asyncio.CancelledError:
                 break
