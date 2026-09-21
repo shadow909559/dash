@@ -275,7 +275,9 @@ class OfflineTaskManager:
     async def get_volume(self) -> int:
         """Get current volume (0-100)."""
         try:
-            ps = """
+            # Raw string: the embedded PowerShell contains `root\wmi`, and
+            # `\w` is an invalid (future-error) Python escape sequence.
+            ps = r"""
             $wmi = Get-WmiObject -Class Win32_SoundDevice
             $volume = (Get-WmiObject -Namespace "root\wmi" -Class MPS_NamespaceWMI).CurrentVolume
             Write-Output $volume

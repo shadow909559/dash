@@ -1381,8 +1381,9 @@ async def test_scheduled_briefing_and_eod_day_deduped(store, monkeypatch):
     tick at the owner's working hours, day-deduped like every alert."""
     aprobic._seen.clear()
     client = store.create_client("Acme")
+    # Noon today (see _dt_fix): date-stable regardless of run hour.
     store.create_meeting("Sprint", client_id=client["id"],
-                         scheduled_at=time.time() + 3600)
+                         scheduled_at=_dt_fix(12).timestamp())
     # 10:00 local — inside working hours: morning briefing fires
     monkeypatch.setattr(aprobic, "_local_hour", lambda: 10)
     d1 = await aprobic.proactive_tick(store)
