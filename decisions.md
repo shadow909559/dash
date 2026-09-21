@@ -3465,3 +3465,36 @@ workflow (03:00 UTC, `workflow_dispatch` for debugging) runs the whole
 suite UNSHARDED in one process — the plain alphabetical order shard
 subsetting no longer exercises — so any residual order-dependence
 surfaces within 24h instead of lurking.
+
+## #140 — Purged secret-bearing env files from ALL local git history (2026-09-21)
+
+**Scope discovered (bigger than the original three branches).** Recon
+found the key-bearing `apps/desktop/.env` (VITE_GEMINI_KEY /
+VITE_GROQ_KEY / VITE_GROK_KEY, added b6187a02 2026-09-05) reachable from
+`backend-clean`, `backup/pre-reconcile`, and local `main` — but ALSO a
+second file, `.env.production` (DASH_OPENAI_API_KEY, DASH_JWT_SECRET_KEY,
+added e1985fa6 2026-07-28), reachable from five more branches, the tag
+`dash-pre-reconstruction`, the user's stash, agent-session checkpoint
+refs, and four stale tags. Critically, `.env.production` is **LIVE on
+the public repo** at `release-v1` (contents API 200) — rotation there is
+urgent and user-side; see docs/SECURITY_KEY_ROTATION.md.
+
+**Method.** Two `git filter-branch --index-filter "git rm --cached
+--ignore-unmatch .env.production apps/desktop/.env" --prune-empty`
+passes covering every affected branch, the tag (+ --tag-name-filter, which
+remapped the other four tags onto cleaned history), the 8 checkpoint refs
+of one agent session, and the stash. Tips verified byte-identical to
+pre-rewrite (the files were already deleted at every tip), 102/121
+commit counts preserved, `.env.example` templates intact.
+
+**Stash surgery.** filter-branch mangled the stash (lost index parent).
+Rebuilt it by hand: read-tree of the original index commit minus the env
+file, `commit-tree` for a new index commit, two-parent stash commit
+reusing the WIP tree — diff vs original stash is EXACTLY
+`.env.production` (35 lines), `stash list/show` work again.
+
+**Physical destruction.** refs/original deleted, reflogs expired
+(including six worktree log dirs), `git gc --prune=now` — all 7
+secret-related objects verified gone per-OID (`cat-file -e`), including
+both secret blobs. Two stale remote-tracking refs pinning old objects
+were deleted; `website-v1` history untouched throughout.
