@@ -87,10 +87,27 @@ class SecurityAgent(BaseAgent):
         return {"status": "ok", "agent": "security"}
 
     async def _validate_permission(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Check whether the agent/user has the required permission."""
-        required = payload.get("permission", "")
-        granted = payload.get("granted_permissions", [])
-        allowed = required in granted
+        """Check a permission against the REAL permission store.
+
+        The old implementation trusted caller-supplied ``granted_permissions``
+        — authority-by-claim, the exact pattern the red-team suite exists to
+        kill. Permission state comes from ``PermissionService``; explicit
+        deny always overrides allow.
+        """
+        from dash_backend.services.permissions import get_permission_service
+
+        required = str(payload.get("permission") or "")
+        user_id = str(payload.get("user_id") or "")
+        if not required or not user_id:
+            raise ValueError("validate_permission requires permission and user_id")
+
+        category, _, action = required.rpartition(":")
+        category = category or "general"
+        action = action or required
+        svc = get_permission_service()
+        if svc.is_denied(user_id, category, action):
+            return {"permission": required, "allowed": False, "reason": "denied"}
+        allowed = svc.is_always_allowed(user_id, category, action)
         return {
             "permission": required,
             "allowed": allowed,

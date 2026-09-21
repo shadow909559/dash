@@ -3514,3 +3514,15 @@ were deleted; `website-v1` history untouched throughout.
 **Collateral fix.** `BaseAgent.execute` crashed on dict-valued `payload["task"]` (`payload.get("task", payload)[:120]` slices a dict) — any scheduler-shaped payload killed the agent before `_run`. Labels are now `str()`-coerced safely.
 
 **Pins:** `tests/test_intelligence_task_queue.py` (15) — normalization matrix, honest enqueue failures, sync-handler execution, run-once-when-due (not early), handlerless fail-honest, timeout enforcement, loop-rebind carryover for both engines, agent schedule/list/cancel end-to-end, and the no-fabricated-success guarantee.
+
+## #142 - Ecosystem agent honesty audit: voice/knowledge/security no longer fabricate (#141 follow-up) (2026-09-22)
+
+**Voice Agent.** `wake_word` returned `{"active": True}` unconditionally without consulting the always-listening loop; `stream` claimed `streaming: True` while creating no session; `_transcribe` echoed the caller-supplied `text` back as a "transcription" (fabricated STT output) and `_synthesize` returned `{"audio": None, "provider": "fallback"}` on any error. All four paths called `transcribe_audio`/`synthesize_speech` — functions that never existed in `voice_system.service`, so the "real" path ALWAYS failed into fallback. Now: `wake_word` reads `get_wake_loop().get_status()` (running/state/last_wake_at are real); `stream` starts/stops a real `VoiceManager` session; `transcribe` decodes base64/bytes and runs `voice_system.providers.get_speech_provider` (raises when no provider configured); `synthesize` runs the real TTS provider and raises on empty audio.
+
+**Knowledge Agent.** `_local_search` returned a hardcoded `[]` while `local_search` was a declared capability — now queries the real `KnowledgeBase` semantic index (`get_knowledge_base()`), returning doc_path/content/score plus honest index stats (0 documents indexed reports exactly that). `_embed` imported the nonexistent `embed_texts` (real: `create_embedding`) and swallowed failures into `vector: []`; now raises on service failure. `_rag_retrieve` distinguishes a real no-match (`source: "rag-empty"`) from infrastructure failure (raises); `client_id` scoping (§31) now passes through.
+
+**Security Agent.** `validate_permission` trusted caller-supplied `granted_permissions` — authority-by-claim, the exact escalation vector the red-team suite (#56–#60) exists to kill. Now checks `PermissionService` (`is_always_allowed`/`is_denied`, deny overrides allow, `category:action` parsing, `user_id` required). Finding noted: SecurityAgent is registered but not wired into any enforcement path; the real gates remain the authority engine and tool-risk policy.
+
+**Android/SmartHome** remain honest declared stubs (`enabled: False`, category `future`) — untouched by design.
+
+**Pins:** `tests/test_ecosystem_agents_honesty.py` (18) — real wake-loop state, no fabricated STT echo, provider-absent raises, real session lifecycle, real KB search with honest empty-index reporting, embed failure raises, permission claims ignored, real-store allow/deny with deny-override, dangerous-command detection unchanged.

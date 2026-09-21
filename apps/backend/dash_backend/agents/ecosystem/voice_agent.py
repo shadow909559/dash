@@ -71,46 +71,87 @@ class VoiceAgent(BaseAgent):
         logger.info("Voice Agent action=%s", action)
 
         if action == "transcribe":
-            # STT — wraps existing speech recognition service
             return await self._transcribe(payload)
         if action == "synthesize":
-            # TTS — wraps existing synthesis service
             return await self._synthesize(payload)
         if action == "wake_word":
-            # Wake word detection lifecycle
-            return {"wake_word": payload.get("wake_word", "hey dash"), "active": True}
+            # REAL state from the always-listening loop — never fabricated.
+            from dash_backend.voice_system.always_listening import get_wake_loop
+
+            status = get_wake_loop().get_status()
+            return {
+                "wake_word": status.get("wake_word") or payload.get("wake_word", "hey dash"),
+                "active": bool(status.get("running")),
+                "state": status.get("state"),
+                "detail": status.get("detail"),
+                "last_wake_at": status.get("last_wake_at"),
+            }
         if action == "vad":
-            # Voice activity detection
+            # Honest threshold computation on the caller-supplied amplitude.
             amplitude = float(payload.get("amplitude", 0.0))
             return {"speaking": amplitude > 0.15, "amplitude": amplitude}
         if action == "stream":
-            # Streaming session
-            return {"streaming": True, "session_id": payload.get("session_id")}
+            return await self._stream(payload)
         return {"status": "ok", "agent": "voice"}
 
-    async def _transcribe(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Wrap the existing STT pipeline."""
-        try:
-            from dash_backend.voice_system.service import transcribe_audio  # type: ignore[import-not-found]
+    async def _stream(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Start/stop a REAL voice session via the VoiceManager."""
+        from dash_backend.voice_system.service import get_voice_manager
 
-            audio = payload.get("audio")
-            result = await transcribe_audio(audio)
-            return {"text": result, "provider": "local"}
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("Voice transcribe fallback: %s", exc)
-            return {"text": payload.get("text", ""), "provider": "fallback"}
+        session_id = str(payload.get("session_id") or "")
+        if not session_id:
+            raise ValueError("stream requires a session_id")
+        manager = get_voice_manager()
+        if str(payload.get("mode") or "start") == "stop":
+            manager.stop_session(session_id)
+            return {"streaming": False, "session_id": session_id, "stopped": True}
+        manager.start_session(session_id, user_id=payload.get("user_id"))
+        return {
+            "streaming": True,
+            "session_id": session_id,
+            "active": manager.get_session(session_id) is not None,
+        }
+
+    async def _transcribe(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Transcribe real audio bytes through the real speech provider.
+
+        The old fallback echoed the caller-supplied ``text`` back as a
+        "transcription" — fabricated output. Now: no audio or no configured
+        provider raises instead of lying.
+        """
+        import base64
+
+        from dash_backend.voice_system.providers import get_speech_provider
+
+        audio = payload.get("audio")
+        if not audio:
+            raise ValueError("transcribe requires audio bytes (base64 or raw)")
+        data = base64.b64decode(audio) if isinstance(audio, str) else bytes(audio)
+        provider = get_speech_provider(payload.get("provider"))
+        if getattr(provider, "provider", None) is None:
+            raise ValueError("no speech provider configured")
+        text = await provider.transcribe(data)
+        return {"text": text, "provider": "speech"}
 
     async def _synthesize(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Wrap the existing TTS pipeline."""
-        text = payload.get("text", "")
-        try:
-            from dash_backend.voice_system.service import synthesize_speech  # type: ignore[import-not-found]
+        """Synthesize real speech through the real TTS provider.
 
-            audio = await synthesize_speech(text)
-            return {"audio": audio, "provider": "local"}
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("Voice synthesize fallback: %s", exc)
-            return {"audio": None, "text": text, "provider": "fallback"}
+        No provider configured raises — the old fallback returned
+        ``{"audio": None, "provider": "fallback"}`` which callers could
+        mistake for a real synthesis.
+        """
+        from dash_backend.voice_system.providers import get_tts_provider
+
+        text = str(payload.get("text") or "")
+        if not text:
+            raise ValueError("synthesize requires text")
+        provider = get_tts_provider(payload.get("provider"))
+        if getattr(provider, "provider", None) is None:
+            raise ValueError("no TTS provider configured")
+        audio = await provider.synthesize(text)
+        if not audio:
+            raise ValueError("TTS provider returned no audio")
+        return {"audio": audio, "audio_bytes": len(audio), "provider": "tts"}
 
 
 _voice_agent: VoiceAgent | None = None
