@@ -3405,3 +3405,22 @@ the documented DASH_ALLOWED_FILE_ROOTS was silently ignored on EVERY machine
 user home). Renamed the field to allowed_file_roots; the env var is now
 authoritative and verified end-to-end (configured root replaces defaults,
 outside roots denied). Consumers: path_guard._configured_extra_roots only.
+
+## #138 - Undeclared-import CI gate (2026-09-21)
+
+The numpy failure (#137) was invisible locally because transitive
+dependencies mask undeclared imports. scripts/check_undeclared_imports.py
+now makes that class of bug a fast, deterministic lint-time failure:
+it parses every import in dash_backend/, tests/ and scripts/ via AST and
+fails on UNGUARDED TOP-LEVEL third-party imports only — lazy imports and
+try/except ImportError guards are the codebase's feature-detection idiom
+and are reported as notes. First honest run of the checker found exactly
+two real instances: bs4 (browser/web_scraper.py) and cryptography
+(secrets_manager.py, security_hardening.py) — both now declared in
+pyproject + requirements. scripts/diag_mic_devices.py got an honest
+sounddevice guard (hardware tool degrades with a message, not a crash).
+A 1,000-line allowlist would rot; the single pkg_resources entry needs a
+reason and prints on every run. Two pins in tests/test_undeclared_imports.py:
+tree clean today, and a planted violation fails even though the module
+cannot resolve from local metadata — the check can never pass vacuously.
+Wired into CI after "Compile check" and before the test suite.

@@ -31,6 +31,9 @@ jobs:
       - name: Compile check
         run: python -m compileall -q dash_backend
 
+      - name: Check for undeclared third-party imports
+        run: python scripts/check_undeclared_imports.py
+
       - name: Run backend tests
         run: python -m pytest tests -q --tb=short
         env:

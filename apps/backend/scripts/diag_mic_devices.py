@@ -10,7 +10,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
-import sounddevice as sd
+
+try:  # hardware-diagnostic tool: run without PortAudio instead of crashing
+    import sounddevice as sd
+except ImportError:  # pragma: no cover - depends on host audio stack
+    sd = None
 
 
 def rms_dbfs(samples: np.ndarray) -> float:
@@ -58,6 +62,9 @@ def measure(device_index: int, name: str) -> float:
 
 
 def main() -> None:
+    if sd is None:
+        print("sounddevice/PortAudio not available; cannot sweep input devices.")
+        return
     devices = sd.query_devices()
     inputs = [(i, d) for i, d in enumerate(devices) if d.get("max_input_channels", 0) > 0]
     sweep_seconds = 2.0 * max(1, len(inputs)) + 2.0  # measure window + settle, per device

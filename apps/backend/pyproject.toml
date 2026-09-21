@@ -42,6 +42,11 @@ dependencies = [
     # also use it for fixture generation. Previously arrived only as a
     # transitive dependency on dev machines — CI collection failed (#137).
     "numpy>=1.26",
+    # HTML parsing for the scraper (top-level import in browser/web_scraper.py).
+    "beautifulsoup4>=4.12",
+    # Fernet/AES-GCM secrets at rest: secrets_manager.py and
+    # security_hardening.py import it at module scope.
+    "cryptography>=42.0",
 ]
 
 [project.optional-dependencies]
