@@ -3394,3 +3394,14 @@ wrong environment reasons - zero production bugs:
 
 Local: 93 (touched suites) + 56 (filesystem consumers) + 57 (black-hole
 startup repro) all green.
+
+## #140 - The env var that never worked: DASH_ALLOWED_FILE_ROOTS (2026-09-21)
+
+CI run 35551932147 still failed the two path tests after #139. Root cause
+was deeper than root ordering: the Settings field was named
+allowed_file_roots_raw, which pydantic maps to DASH_ALLOWED_FILE_ROOTS_RAW -
+the documented DASH_ALLOWED_FILE_ROOTS was silently ignored on EVERY machine
+(the tests only passed on Windows because pytest's tmp dir sits under the
+user home). Renamed the field to allowed_file_roots; the env var is now
+authoritative and verified end-to-end (configured root replaces defaults,
+outside roots denied). Consumers: path_guard._configured_extra_roots only.

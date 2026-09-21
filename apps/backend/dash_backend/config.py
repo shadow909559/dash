@@ -32,9 +32,13 @@ class Settings(BaseSettings):
     port: int = 8000
     api_prefix: str = "/api/v1"
 
-    # Extra directories the /files API may touch (comma-separated). The user's
-    # special folders are always allowed; this extends the allow-list.
-    allowed_file_roots_raw: str = ""
+    # Directories the /files API may touch (comma-separated). When set this
+    # list is AUTHORITATIVE (it replaces the default special folders —
+    # fail-closed); when empty the user's special folders apply.
+    # NOTE: env DASH_ALLOWED_FILE_ROOTS. The field was previously named
+    # allowed_file_roots_raw, which pydantic maps to
+    # DASH_ALLOWED_FILE_ROOTS_RAW — the documented env var never worked.
+    allowed_file_roots: str = ""
 
     # Stored as comma-separated string from env, parsed via property below
     cors_origins_raw: str = "http://localhost:5173,http://10.0.2.2:8000,ws://10.0.2.2:8000,https://dash-backend.fly.dev,*"

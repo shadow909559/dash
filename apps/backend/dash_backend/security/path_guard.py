@@ -68,7 +68,7 @@ def default_roots() -> list[Path]:
 
 
 def _configured_extra_roots() -> list[Path]:
-    raw = get_settings().allowed_file_roots_raw
+    raw = get_settings().allowed_file_roots
     roots: list[Path] = []
     for part in (raw or "").split(","):
         part = part.strip()
