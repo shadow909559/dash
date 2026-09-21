@@ -3498,3 +3498,19 @@ reusing the WIP tree — diff vs original stash is EXACTLY
 secret-related objects verified gone per-OID (`cat-file -e`), including
 both secret blobs. Two stale remote-tracking refs pinning old objects
 were deleted; `website-v1` history untouched throughout.
+
+## #141 - Scheduler agent was fabricating success; queue/workflow engines never persisted state (2026-09-22)
+
+**The fake-success bug.** `SchedulerAgent._schedule` called `queue.enqueue(...)` — a method that never existed on `TaskQueue` (only `add_task`), and used `TaskPriority.MEDIUM`, which also never existed (members are LOW/NORMAL/HIGH/CRITICAL). Every call raised `AttributeError`, was swallowed by a broad except, and returned `{"scheduled": True, "task_id": "manual"}`. `_list_scheduled` returned a hardcoded `[]`, `cancel` echoed the id back, and `_run_workflow` called the nonexistent `run_workflow` (real name: `execute_workflow`). Even the raw queue could not have helped: both engines were constructed per call, so state died with the call.
+
+**Real implementation.** `TaskQueue.enqueue(task_spec, scheduled_at=..., handler=..., parameters=...)` creates + queues in one call. `normalize_to_utc` coerces aware datetimes, naive datetimes (assumed LOCAL), ISO strings (Z-suffix aware), epoch seconds/milliseconds, and numeric strings to aware-UTC; invalid input raises `ValueError` at the enqueue boundary instead of crashing the queue loop at pop time (naive/aware `TypeError` previously dropped popped tasks silently). Shared singletons `get_shared_task_queue()` / `get_shared_workflow_engine()` rebind when the running event loop changes (new queue inherits handlers/tasks, mid-flight tasks reset to PENDING for at-least-once delivery; running workflows marked CANCELLED with an honest error). `TaskQueue.ensure_started()` is idempotent and detects/restarts a dead runner.
+
+**Sync-handler support.** `Task.handler` is declared plain `Callable`, but `execute_task` unconditionally `wait_for`-ed the result — sync handlers raised `TypeError`, burned retries, and FAILED. New `_invoke` (queue + workflow engine) awaits only awaitable outcomes; the timeout applies to async handlers.
+
+**Honest stop/list.** `stop()` joins the runner and no longer overwrites already-completed tasks with CANCELLED (done wrappers are skipped). `_list_scheduled` reports real queue contents with status/priority/schedule; `cancel` returns real found/not-found; `run_workflow`/`cancel` raise on missing required ids. Schedule-without-handler still queues but returns an explicit warning that it will fail at fire time.
+
+**Timezone hygiene (#136 follow-up).** All remaining deprecated `datetime.utcnow()` in `intelligence/` (task_queue, workflow_engine ×6, caching_layer ×7) and `services/ai_providers/provider_manager.py` replaced with aware-UTC `datetime.now(timezone.utc)`. The cache layer is in-memory only, so the migration is safe; the LRU fallback `datetime.min` is now tz-aware to avoid a future naive/aware `TypeError` in eviction.
+
+**Collateral fix.** `BaseAgent.execute` crashed on dict-valued `payload["task"]` (`payload.get("task", payload)[:120]` slices a dict) — any scheduler-shaped payload killed the agent before `_run`. Labels are now `str()`-coerced safely.
+
+**Pins:** `tests/test_intelligence_task_queue.py` (15) — normalization matrix, honest enqueue failures, sync-handler execution, run-once-when-due (not early), handlerless fail-honest, timeout enforcement, loop-rebind carryover for both engines, agent schedule/list/cancel end-to-end, and the no-fabricated-success guarantee.

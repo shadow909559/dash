@@ -27,8 +27,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]" || pip install -e .
 
-      - name: Compile check
-        run: python -m compileall -q dash_backend
+      - name: Compile check (warnings as errors)
+        # -W error::SyntaxWarning: invalid escape sequences and similar
+        # future-SyntaxErrors fail here instead of surfacing as warnings
+        # on dev machines. -f forces recompilation (CI checkouts are
+        # fresh, so nothing is skipped by stale bytecode caches).
+        run: python -W error::SyntaxWarning -m compileall -q -f dash_backend scripts tests
 
       - name: Check for undeclared third-party imports
         run: python scripts/check_undeclared_imports.py

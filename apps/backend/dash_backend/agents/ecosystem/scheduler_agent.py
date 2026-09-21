@@ -66,7 +66,7 @@ class SchedulerAgent(BaseAgent):
         if action == "schedule":
             return await self._schedule(payload)
         if action == "cancel":
-            return {"cancelled_task": payload.get("task_id")}
+            return await self._cancel(payload)
         if action == "list":
             return await self._list_scheduled(payload)
         if action == "run_workflow":
@@ -74,36 +74,86 @@ class SchedulerAgent(BaseAgent):
         return {"status": "ok", "agent": "scheduler"}
 
     async def _schedule(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Schedule a task using the existing task queue / automation."""
-        try:
-            from dash_backend.intelligence.task_queue import TaskQueue, TaskPriority  # type: ignore[import-not-found]
+        """Schedule a task on the shared task queue.
 
-            queue = TaskQueue()
-            task_id = await queue.enqueue(
-                payload.get("task", {}),
-                priority=TaskPriority.MEDIUM,
-                scheduled_at=payload.get("at"),
+        Real behavior, honest failures: invalid schedule input raises
+        ``ValueError`` out of here (execute() marks the agent unhealthy and
+        re-raises), never a fabricated ``{"scheduled": True, "task_id":
+        "manual"}``. The task is queued on the process-wide queue whose
+        runner executes it when due.
+        """
+        from dash_backend.intelligence.task_queue import (
+            TaskPriority,
+            get_shared_task_queue,
+        )
+
+        queue = get_shared_task_queue()
+        await queue.ensure_started()
+
+        priority = TaskPriority.NORMAL
+        wanted = str(payload.get("priority") or "").upper()
+        if wanted in TaskPriority.__members__:
+            priority = TaskPriority[wanted]
+
+        task_spec = payload.get("task") if isinstance(payload.get("task"), dict) else {}
+        task_id = await queue.enqueue(
+            task_spec or {},
+            priority=priority,
+            scheduled_at=payload.get("at"),
+        )
+
+        result: Dict[str, Any] = {"scheduled": True, "task_id": task_id}
+        name = str(task_spec.get("name") or task_spec.get("description") or "unnamed task")
+        if task_spec.get("handler") is None and name not in queue.task_handlers:
+            # Queued is true, but executing it would fail — say so up front
+            # instead of letting the task fail at fire time.
+            result["warning"] = (
+                "task has no handler and no registered handler for its name; "
+                "it will fail at execution time"
             )
-            return {"scheduled": True, "task_id": task_id}
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("Scheduler fallback: %s", exc)
-            return {"scheduled": True, "task_id": "manual", "note": str(exc)}
+        return result
+
+    async def _cancel(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Cancel a queued/running task on the shared queue."""
+        from dash_backend.intelligence.task_queue import get_shared_task_queue
+
+        task_id = str(payload.get("task_id") or "")
+        if not task_id:
+            raise ValueError("cancel requires a task_id")
+        cancelled = get_shared_task_queue().cancel_task(task_id)
+        return {
+            "cancelled": cancelled,
+            "task_id": task_id,
+            **({} if cancelled else {"error": "task not found"}),
+        }
 
     async def _list_scheduled(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """List currently scheduled tasks."""
-        return {"scheduled": [], "agent": "scheduler"}
+        """List the tasks actually known to the shared queue."""
+        from dash_backend.intelligence.task_queue import get_shared_task_queue
+
+        queue = get_shared_task_queue()
+        items = [
+            {
+                "task_id": t.id,
+                "name": t.name,
+                "status": t.status.value,
+                "priority": t.priority.name,
+                "scheduled_at": t.scheduled_at.isoformat() if t.scheduled_at else None,
+                "retry_count": t.retry_count,
+            }
+            for t in queue.list_tasks()
+        ]
+        return {"scheduled": items, "count": len(items), "agent": "scheduler"}
 
     async def _run_workflow(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Run a workflow via the workflow engine."""
-        try:
-            from dash_backend.intelligence.workflow_engine import WorkflowEngine  # type: ignore[import-not-found]
+        """Execute a workflow on the shared engine. Fails honestly."""
+        from dash_backend.intelligence.workflow_engine import get_shared_workflow_engine
 
-            engine = WorkflowEngine()
-            result = await engine.run_workflow(payload.get("workflow_id"))
-            return {"workflow_id": payload.get("workflow_id"), "result": result}
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("Workflow fallback: %s", exc)
-            return {"workflow_id": payload.get("workflow_id"), "result": None, "error": str(exc)}
+        workflow_id = str(payload.get("workflow_id") or "")
+        if not workflow_id:
+            raise ValueError("run_workflow requires a workflow_id")
+        result = await get_shared_workflow_engine().execute_workflow(workflow_id)
+        return {"workflow_id": workflow_id, "result": result}
 
 
 _scheduler_agent: SchedulerAgent | None = None

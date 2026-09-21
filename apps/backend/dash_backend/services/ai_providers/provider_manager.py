@@ -140,11 +140,11 @@ class ProviderManager:
         self, name: str, healthy: bool, latency_ms: float, error: str | None = None
     ) -> None:
         async with self._lock:
-            from datetime import datetime
+            from datetime import datetime, timezone
             self._health_cache[name] = ProviderHealth(
-                healthy=healthy,
+                healthy=healthy, 
                 latency_ms=latency_ms,
-                last_check=datetime.utcnow(),
+                last_check=datetime.now(timezone.utc),
                 error=error,
                 model_loaded=healthy,
             )

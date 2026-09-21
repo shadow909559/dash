@@ -7,12 +7,16 @@ import json
 from typing import Dict, List, Optional, Any, Callable, Awaitable
 from dataclasses import dataclass, field
 from enum import Enum
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 
 from dash_backend.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _utcnow() -> datetime:
+    """Aware-UTC now — replaces the deprecated ``datetime.utcnow()``."""
 
 
 class CachePolicy(Enum):
@@ -26,7 +30,7 @@ class CachePolicy(Enum):
 class CacheEntry:
     key: str
     value: Any
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=_utcnow)
     expires_at: Optional[datetime] = None
     access_count: int = 0
     last_accessed: Optional[datetime] = None
@@ -60,14 +64,14 @@ class CachingLayer:
             entry = self.cache[key]
             
             # Check if expired
-            if entry.expires_at and entry.expires_at < datetime.utcnow():
+            if entry.expires_at and entry.expires_at < _utcnow():
                 del self.cache[key]
                 self.miss_count += 1
                 return None
             
             # Update access statistics
             entry.access_count += 1
-            entry.last_accessed = datetime.utcnow()
+            entry.last_accessed = _utcnow()
             self.hit_count += 1
             
             logger.debug(f"Cache hit: {key}")
@@ -83,9 +87,9 @@ class CachingLayer:
             # Calculate expiration
             expires_at = None
             if ttl is not None:
-                expires_at = datetime.utcnow() + timedelta(seconds=ttl)
+                expires_at = _utcnow() + timedelta(seconds=ttl)
             elif self.default_ttl > 0:
-                expires_at = datetime.utcnow() + timedelta(seconds=self.default_ttl)
+                expires_at = _utcnow() + timedelta(seconds=self.default_ttl)
             
             # Calculate size (rough estimate)
             size = len(json.dumps(value, default=str))
@@ -126,7 +130,8 @@ class CachingLayer:
             # Evict least recently used
             lru_key = min(
                 self.cache.keys(),
-                key=lambda k: self.cache[k].last_accessed or datetime.min
+                key=lambda k: self.cache[k].last_accessed
+                or datetime.min.replace(tzinfo=timezone.utc)
             )
             del self.cache[lru_key]
         
@@ -150,7 +155,7 @@ class CachingLayer:
             # Evict expired first, then oldest
             expired_keys = [
                 k for k, v in self.cache.items()
-                if v.expires_at and v.expires_at < datetime.utcnow()
+                if v.expires_at and v.expires_at < _utcnow()
             ]
             if expired_keys:
                 del self.cache[expired_keys[0]]
@@ -195,9 +200,9 @@ class CachingLayer:
         async with self._lock:
             expired_keys = [
                 k for k, v in self.cache.items()
-                if v.expires_at and v.expires_at < datetime.utcnow()
+                if v.expires_at and v.expires_at < _utcnow()
             ]
-            
+
             for key in expired_keys:
                 del self.cache[key]
             

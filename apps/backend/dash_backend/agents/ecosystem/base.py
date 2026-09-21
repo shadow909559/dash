@@ -147,7 +147,8 @@ class BaseAgent:
         identically from the orchestrator's perspective.
         """
         self._status = AgentStatus.BUSY
-        self._current_task = str(payload.get("task", payload)[:120])
+        task_label = payload.get("task", payload) if isinstance(payload, dict) else payload
+        self._current_task = str(task_label)[:120]
         self._last_activity = time.time()
         start = time.time()
         self._stats["executions"] += 1
