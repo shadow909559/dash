@@ -56,10 +56,10 @@ class PluginAPI:
         """Save a memory entry."""
         self._perm_registry.require(self.plugin_id, "memory.write")
         try:
-            from dash_backend.memory.service import add_memory
+            from dash_backend.memory.service import save_memory  # was phantom add_memory (#143)
             from dash_backend.db.session import AsyncSessionLocal
             async with AsyncSessionLocal() as session:
-                memory = await add_memory(session, user_id=self.plugin_id, content=content, category=category)
+                memory = await save_memory(session, user_id=self.plugin_id, content=content, category=category)
                 return str(memory.id) if memory else None
         except Exception as exc:
             logger.warning("Plugin memory_save failed: %s", exc)

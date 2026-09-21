@@ -45,6 +45,11 @@ _active_connections: dict[str, dict[str, Any]] = {}
 _broadcast_task: asyncio.Task[None] | None = None
 _device_registry: dict[str, dict[str, Any]] = {}
 
+
+def active_connections_count() -> int:
+    """Public accessor for diagnostics (#143): count of live WS connections."""
+    return len(_active_connections)
+
 # Compression threshold: payloads larger than this (in bytes) get zlib-compressed
 _COMPRESSION_THRESHOLD = 512
 

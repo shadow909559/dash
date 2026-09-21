@@ -188,15 +188,12 @@ class DiagnosticsService:
             return {"status": "unknown", "details": {"error": str(exc)}}
 
     async def _websocket_health(self) -> Dict[str, Any]:
-        # Best-effort: WS connection tracking is in the WS route; report counts if available.
+        # Real connection count from the system WS route's tracker (#143).
         try:
-            from dash_backend.api.routes.websocket import connection_manager  # type: ignore
-            active = connection_manager.active_connections_count() if hasattr(
-                connection_manager, "active_connections_count"
-            ) else None
-            return {"status": "ok", "active_connections": active}
-        except Exception:
-            return {"status": "unknown", "details": {"note": "ws manager not exposed"}}
+            from dash_backend.api.routes import system_ws
+            return {"status": "ok", "active_connections": system_ws.active_connections_count()}
+        except Exception as exc:
+            return {"status": "unknown", "details": {"error": str(exc)}}
 
     # ── Public API ──────────────────────────────────────────────
 

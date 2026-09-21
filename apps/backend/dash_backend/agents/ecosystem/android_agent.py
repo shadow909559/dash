@@ -60,11 +60,24 @@ class AndroidAgent(BaseAgent):
         super().__init__(android_agent_spec())
 
     async def _run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        # Best-effort: try the existing phone service; otherwise return stub.
+        # Best-effort: real device status via PhoneSkill; stub note otherwise.
         try:
-            from dash_backend.phone.service import get_phone_status  # type: ignore[import-not-found]
-            status = await get_phone_status()
-            return {"enabled": False, "status": status, "note": "available soon"}
+            from dash_backend.phone.service import PhoneSkill
+
+            skill = PhoneSkill()
+            devices = await skill.handle("devices", {}, context=None)
+            battery = await skill.handle(
+                "battery", {"serial": payload.get("serial")}, context=None
+            )
+            return {
+                "enabled": False,
+                "status": {
+                    "devices": devices.get("devices", []),
+                    "device_count": devices.get("count", 0),
+                    "battery": battery.get("battery", {}),
+                },
+                "note": "available soon",
+            }
         except Exception as exc:  # noqa: BLE001
             logger.debug("Android agent stub: %s", exc)
             return {"enabled": False, "note": "available soon"}

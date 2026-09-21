@@ -37,6 +37,12 @@ jobs:
       - name: Check for undeclared third-party imports
         run: python scripts/check_undeclared_imports.py
 
+      - name: Check for cross-module phantom calls
+        # Calls to functions that don't exist on their target module
+        # (#141/#142 defect class — invisible when broad excepts convert
+        # the AttributeError into fabricated success).
+        run: python scripts/check_phantom_calls.py
+
   backend-test:
     name: Backend tests (shard ${{ matrix.shard }}/${{ matrix.total }})
     runs-on: ubuntu-latest
