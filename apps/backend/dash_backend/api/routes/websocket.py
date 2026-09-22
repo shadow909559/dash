@@ -364,7 +364,27 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             logger.exception("assistant command check failed: %s", exc)
         try:
             from dash_backend.services.command_interceptor import try_intercept
-            cmd_result = await try_intercept(chat_msg.content)
+
+            async def _composite_notify(text: str) -> None:
+                """Push a composite-task mid-flight event (e.g. a fired reminder)
+                into the owner's live session."""
+                await send_json({
+                    "type": "chat.status",
+                    "message_id": request_id,
+                    "status": "composite_step",
+                    "detail": text[:300],
+                })
+                await send_json({
+                    "type": "notification.push",
+                    "notification": {
+                        "title": "DASH",
+                        "message": text[:300],
+                        "type": "reminder",
+                        "source": "composite_task",
+                    },
+                })
+
+            cmd_result = await try_intercept(chat_msg.content, notify=_composite_notify)
             if cmd_result is not None:
                 # Command was executed — send result directly, skip LLM
                 summary = cmd_result.get("summary", "Command executed")
