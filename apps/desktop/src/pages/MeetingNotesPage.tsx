@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface MeetingNote { id: string; title: string; date: string; attendees: string[]; agenda: string; notes: string; action_items: string[]; tags: string[]; created_at: string; }
 
@@ -12,20 +13,20 @@ export default function MeetingNotesPage() {
   useEffect(() => { loadMeetings(); }, []);
 
   async function loadMeetings() {
-    try { const r = await fetch('/api/v1/features/meetings'); if (r.ok) setMeetings(await r.json()); } catch { /* */ }
+    try { const r = await authFetch('/features/meetings'); if (r.ok) setMeetings(await r.json()); } catch { /* */ }
   }
 
   async function addMeeting() {
     if (!newMeeting.title) return;
     const payload = { ...newMeeting, attendees: newMeeting.attendees.split(',').map(a => a.trim()).filter(Boolean), action_items: newMeeting.action_items.split('\n').filter(Boolean), tags: newMeeting.tags.split(',').map(t => t.trim()).filter(Boolean) };
     try {
-      await fetch('/api/v1/features/meetings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      await authFetch('/features/meetings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       setNewMeeting({ title: '', date: new Date().toISOString().split('T')[0], attendees: '', agenda: '', notes: '', action_items: '', tags: '' }); setShowAdd(false); loadMeetings();
     } catch { /* */ }
   }
 
   async function deleteMeeting(id: string) {
-    try { await fetch(`/api/v1/features/meetings/${id}`, { method: 'DELETE' }); loadMeetings(); } catch { /* */ }
+    try { await authFetch(`/features/meetings/${id}`, { method: 'DELETE' }); loadMeetings(); } catch { /* */ }
   }
 
   const filtered = meetings.filter(m => !search || m.title.toLowerCase().includes(search.toLowerCase()) || m.notes.toLowerCase().includes(search.toLowerCase()));

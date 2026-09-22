@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface ClipEntry { id: string; content: string; content_type: string; source_app: string; pinned: boolean; created_at: string; }
 
@@ -12,20 +13,22 @@ export default function ClipboardHistoryPage() {
 
   async function loadClips() {
     try {
-      const r = await fetch('/api/v1/features/clipboard/history');
-      if (r.ok) setClips(await r.json());
+      // #144: the features/clipboard routes never existed; the real history
+      // lives at /phase4/clipboard/history (wrapped in { history: [...] }).
+      const r = await authFetch('/phase4/clipboard/history');
+      if (r.ok) setClips((await r.json()).history ?? []);
     } catch { /* ignore */ }
   }
 
   async function togglePin(id: string, pinned: boolean) {
     try {
-      await fetch(`/api/v1/features/clipboard/${id}/pin`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pinned: !pinned }) });
+      await authFetch(`/phase4/clipboard/${id}/pin`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pinned: !pinned }) });
       loadClips();
     } catch { /* ignore */ }
   }
 
   async function deleteClip(id: string) {
-    try { await fetch(`/api/v1/features/clipboard/${id}`, { method: 'DELETE' }); loadClips(); } catch { /* ignore */ }
+    try { await authFetch(`/phase4/clipboard/${id}`, { method: 'DELETE' }); loadClips(); } catch { /* ignore */ }
   }
 
   function copyClip(content: string) {

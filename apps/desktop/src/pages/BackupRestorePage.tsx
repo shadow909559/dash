@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface Backup { id: string; name: string; file_path: string; size_bytes: number; tables_included: string[]; created_at: string; notes: string; }
 
@@ -12,13 +13,13 @@ export default function BackupRestorePage() {
   useEffect(() => { loadBackups(); }, []);
 
   async function loadBackups() {
-    try { const r = await fetch('/api/v1/phase3/archives'); if (r.ok) setBackups(await r.json()); } catch { /* */ }
+    try { const r = await authFetch('/phase3/archives'); if (r.ok) setBackups((await r.json()).archives ?? []); } catch { /* */ }
   }
 
   async function createBackup() {
     setCreating(true);
     try {
-      const r = await fetch('/api/v1/phase3/archives', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: backupName || `backup-${Date.now()}`, tables: Array.from(selectedTables) }) });
+      const r = await authFetch('/phase3/archives', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: backupName || `backup-${Date.now()}`, tables: Array.from(selectedTables) }) });
       if (r.ok) { setBackupName(''); loadBackups(); setToast('Backup created!'); setTimeout(() => setToast(''), 3000); }
     } catch { /* */ }
     setCreating(false);
@@ -27,13 +28,13 @@ export default function BackupRestorePage() {
   async function restoreBackup(id: string) {
     if (!confirm('Restore this backup? This will overwrite current data.')) return;
     try {
-      const r = await fetch(`/api/v1/phase3/archives/${id}/restore`, { method: 'POST' });
+      const r = await authFetch(`/phase3/archives/${id}/restore`, { method: 'POST' });
       if (r.ok) { setToast('Backup restored!'); setTimeout(() => setToast(''), 3000); }
     } catch { /* */ }
   }
 
   async function deleteBackup(id: string) {
-    try { await fetch(`/api/v1/phase3/archives/${id}`, { method: 'DELETE' }); loadBackups(); } catch { /* */ }
+    try { await authFetch(`/phase3/archives/${id}`, { method: 'DELETE' }); loadBackups(); } catch { /* */ }
   }
 
   function formatSize(bytes: number) { if (bytes < 1024) return `${bytes} B`; if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`; return `${(bytes / (1024 * 1024)).toFixed(1)} MB`; }

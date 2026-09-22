@@ -3,7 +3,9 @@ import { authFetch } from "@/lib/api";
 import { PageShell, PageHeader, GlassCard, EmptyState, SectionTitle } from "@/components/ultron";
 import { FileText, RefreshCw, Loader2, Search, Trash2, Upload } from "lucide-react";
 
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api/v1";
+// The RAG router is mounted at /rag, not at the API root (#144).
+const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const RAG = `${API}/api/v1/rag`;
 
 interface Document {
   id: string;
@@ -32,7 +34,7 @@ export default function RagDocumentsPage() {
   const fetchDocs = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await authFetch(`${API}/documents`);
+      const res = await authFetch(`${RAG}/documents`);
       if (res?.ok) setDocs(await res.json());
     } catch {
       setDocs([]);
@@ -46,7 +48,7 @@ export default function RagDocumentsPage() {
     const filename = window.prompt("Document name (optional)");
     const content = window.prompt("Document content");
     if (!content) return;
-    const res = await authFetch(`${API}/documents`, {
+    const res = await authFetch(`${RAG}/documents`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filename: filename || undefined, content }),
@@ -57,7 +59,7 @@ export default function RagDocumentsPage() {
   const deleteDoc = async (id: string) => {
     setBusyId(id);
     try {
-      const res = await authFetch(`${API}/documents/${id}`, { method: "DELETE" });
+      const res = await authFetch(`${RAG}/documents/${id}`, { method: "DELETE" });
       if (res?.ok || res?.status === 204) setDocs((d) => d.filter((x) => x.id !== id));
     } finally {
       setBusyId(null);
@@ -68,7 +70,7 @@ export default function RagDocumentsPage() {
     if (!query.trim()) { setHits(null); return; }
     setSearching(true);
     try {
-      const res = await authFetch(`${API}/search`, {
+      const res = await authFetch(`${RAG}/search`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: query.trim(), top_k: 8 }),

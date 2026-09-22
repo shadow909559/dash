@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface SprintItem { id: string; sprint_id: string; title: string; description: string; status: string; story_points: number; assignee: string; tags: string[]; }
 interface Sprint { id: string; name: string; goal: string; start_date: string; end_date: string; status: string; }
@@ -11,28 +12,32 @@ export default function SprintBoardPage() {
   const [newItem, setNewItem] = useState({ title: '', description: '', story_points: 1, assignee: '' });
   const statuses = ['backlog', 'todo', 'in-progress', 'review', 'done'];
 
-  useEffect(() => { loadSprints(); loadItems(); }, []);
+  useEffect(() => { loadSprints(); loadItems(); }, []);  async function loadSprints() {
+    try { const r = await authFetch('/phase4/sprints'); if (r.ok) { const data = (await r.json()).sprints ?? []; setSprints(data); if (data.length > 0 && !activeSprint) setActiveSprint(data[0].id); } } catch { /* */ }
+  }
 
-  async function loadSprints() {
-    try { const r = await fetch('/api/v1/phase4/sprints'); if (r.ok) { const data = await r.json(); setSprints(data); if (data.length > 0 && !activeSprint) setActiveSprint(data[0].id); } } catch { /* */ }
-  }
   async function loadItems() {
-    try { const r = await fetch('/api/v1/phase4/sprint-items'); if (r.ok) setItems(await r.json()); } catch { /* */ }
+    try { const r = await authFetch('/phase4/sprint-items'); if (r.ok) setItems((await r.json()).items ?? []); } catch { /* */ }
   }
+
   async function createSprint() {
     const name = `Sprint ${sprints.length + 1}`;
-    const now = new Date(); const end = new Date(now.getTime() + 14 * 86400000);
-    try { await fetch('/api/v1/phase4/sprints', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, start_date: now.toISOString(), end_date: end.toISOString() }) }); loadSprints(); } catch { /* */ }
+    const now = new Date();
+    const end = new Date(now.getTime() + 14 * 86400000);
+    try { await authFetch('/phase4/sprints', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, start_date: now.toISOString(), end_date: end.toISOString() }) }); loadSprints(); } catch { /* */ }
   }
+
   async function addItem() {
-    if (!newItem.title) return;
-    try { await fetch('/api/v1/phase4/sprint-items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newItem, sprint_id: activeSprint }) }); setNewItem({ title: '', description: '', story_points: 1, assignee: '' }); setShowAdd(false); loadItems(); } catch { /* */ }
+    if (!newItem.title || !activeSprint) return;
+    try { await authFetch('/phase4/sprint-items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newItem, sprint_id: activeSprint }) }); setNewItem({ title: '', description: '', story_points: 1, assignee: '' }); setShowAdd(false); loadItems(); } catch { /* */ }
   }
+
   async function moveItem(id: string, status: string) {
-    try { await fetch(`/api/v1/phase4/sprint-items/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }); loadItems(); } catch { /* */ }
+    try { await authFetch(`/phase4/sprint-items/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }); loadItems(); } catch { /* */ }
   }
+
   async function deleteItem(id: string) {
-    try { await fetch(`/api/v1/phase4/sprint-items/${id}`, { method: 'DELETE' }); loadItems(); } catch { /* */ }
+    try { await authFetch(`/phase4/sprint-items/${id}`, { method: 'DELETE' }); loadItems(); } catch { /* */ }
   }
 
   const sprintItems = items.filter(i => i.sprint_id === activeSprint);

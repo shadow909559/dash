@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface ReplaySession { id: string; title: string; duration_seconds: number; events_count: number; created_at: string; url: string; }
 
@@ -11,7 +12,26 @@ export default function SessionReplayPage() {
   useEffect(() => { loadSessions(); }, []);
 
   async function loadSessions() {
-    try { const r = await fetch('/api/v1/features/session-replay'); if (r.ok) setSessions(await r.json()); } catch { /* */ }
+    try {
+      const r = await authFetch('/phase4/sessions/recordings');
+      if (r.ok) {
+        const data = (await r.json()).recordings ?? [];
+        setSessions(
+          data.map((rec: Record<string, unknown>) => {
+            const startedMs = Date.parse(String(rec.started_at ?? '')) || 0;
+            const stoppedMs = Date.parse(String(rec.stopped_at ?? '')) || Date.now();
+            return {
+              id: String(rec.id ?? ''),
+              title: String(rec.name ?? 'Session'),
+              duration_seconds: Math.max(0, Math.round((stoppedMs - startedMs) / 1000)),
+              events_count: Array.isArray(rec.events) ? rec.events.length : 0,
+              created_at: String(rec.started_at ?? ''),
+              url: '',
+            };
+          })
+        );
+      }
+    } catch { /* */ }
   }
 
   function formatDuration(seconds: number) { const m = Math.floor(seconds / 60); const s = seconds % 60; return `${m}m ${s}s`; }

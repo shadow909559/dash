@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface UpdateInfo { version: string; release_date: string; release_notes: string; download_url: string; size: string; }
 
@@ -16,7 +17,7 @@ export default function UpdateCheckerPage() {
   async function checkForUpdates() {
     setChecking(true);
     try {
-      const r = await fetch('/api/v1/features/updates/check');
+      const r = await authFetch('/phase4/updates/check');
       if (r.ok) { const data = await r.json(); setLatestVersion(data); }
     } catch { /* */ }
     setChecking(false);
@@ -25,14 +26,14 @@ export default function UpdateCheckerPage() {
   async function performUpdate() {
     setUpdating(true);
     try {
-      const r = await fetch('/api/v1/features/updates/install', { method: 'POST' });
+      const r = await authFetch('/phase4/updates/install', { method: 'POST' });
       if (r.ok) { setToast('Update installed!'); setTimeout(() => setToast(''), 3000); }
     } catch { /* */ }
     setUpdating(false);
   }
 
   async function loadChangelog() {
-    try { const r = await fetch('/api/v1/features/updates/changelog'); if (r.ok) setChangelog(await r.json()); } catch { /* */ }
+    try { const r = await authFetch('/phase4/updates/changelog'); if (r.ok) setChangelog(await r.json()); } catch { /* */ }
   }
 
   const hasUpdate = latestVersion && latestVersion.version !== currentVersion;

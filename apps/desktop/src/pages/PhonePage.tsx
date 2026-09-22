@@ -18,8 +18,9 @@ export const PhonePage: React.FC = () => {
       setDevices(d.devices || d || []);
     } catch {}
     try {
-      const r = await authFetch(`${API}/phone/status`);
-      setCompanionStatus(await r.json());
+      // /phone/status does not exist; the device snapshot lives at /phone/state (#144).
+      const r = await authFetch(`${API}/phone/state`);
+      if (r?.ok) setCompanionStatus(await r.json());
     } catch {}
     setLoading(false);
   }, []);

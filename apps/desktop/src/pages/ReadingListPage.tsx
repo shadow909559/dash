@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface ReadingItem { id: string; url: string; title: string; description: string; status: string; priority: number; tags: string[]; estimated_read_time: number; created_at: string; completed_at: string; }
 
@@ -13,23 +14,24 @@ export default function ReadingListPage() {
   useEffect(() => { loadItems(); }, []);
 
   async function loadItems() {
-    try { const r = await fetch('/api/v1/features/reading-list'); if (r.ok) setItems(await r.json()); } catch { /* */ }
+    try { const r = await authFetch('/browser/reading-list'); if (r.ok) setItems(await r.json()); } catch { /* */ }
   }
 
   async function addItem() {
     if (!newItem.url) return;
+    const prio = newItem.priority === 2 ? 'high' : newItem.priority === 1 ? 'medium' : 'low';
     try {
-      await fetch('/api/v1/features/reading-list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newItem) });
+      await authFetch('/browser/reading-list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: newItem.url, title: newItem.title || newItem.url, priority: prio }) });
       setNewItem({ url: '', title: '', description: '', priority: 0 }); setShowAdd(false); loadItems();
     } catch { /* */ }
   }
 
   async function markComplete(id: string) {
-    try { await fetch(`/api/v1/features/reading-list/${id}/complete`, { method: 'POST' }); loadItems(); } catch { /* */ }
+    try { await authFetch(`/browser/reading-list/${id}?status=completed`, { method: 'PATCH' }); loadItems(); } catch { /* */ }
   }
 
   async function deleteItem(id: string) {
-    try { await fetch(`/api/v1/features/reading-list/${id}`, { method: 'DELETE' }); loadItems(); } catch { /* */ }
+    try { await authFetch(`/browser/reading-list/${id}`, { method: 'DELETE' }); loadItems(); } catch { /* */ }
   }
 
   const filtered = items.filter(i => {

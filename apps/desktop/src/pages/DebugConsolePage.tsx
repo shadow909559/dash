@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface LogEntry { id: string; level: string; module: string; message: string; metadata: string; recorded_at: string; }
 
@@ -13,16 +14,16 @@ export default function DebugConsolePage() {
   useEffect(() => { loadLogs(); const interval = setInterval(loadLogs, 5000); return () => clearInterval(interval); }, []);
 
   async function loadLogs() {
-    try { const r = await fetch('/api/v1/features/debug/logs'); if (r.ok) { const data = await r.json(); setLogs(data.logs || data || []); } } catch { /* */ }
+    try { const r = await authFetch('/phase4/debug/logs'); if (r.ok) { const data = await r.json(); setLogs(data.logs || data || []); } } catch { /* */ }
   }
 
   async function exportLogs() {
-    try { const r = await fetch('/api/v1/features/debug/logs/export?format=json'); if (r.ok) { const blob = await r.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `dash-logs-${Date.now()}.json`; a.click(); } } catch { /* */ }
+    try { const r = await authFetch('/phase4/debug/logs'); if (r.ok) { const data = await r.json(); const blob = new Blob([JSON.stringify(data.logs ?? data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `dash-logs-${Date.now()}.json`; a.click(); URL.revokeObjectURL(url); } } catch { /* */ }
   }
 
   async function clearLogs() {
     if (!confirm('Clear all logs?')) return;
-    try { await fetch('/api/v1/features/debug/logs', { method: 'DELETE' }); loadLogs(); } catch { /* */ }
+    try { await authFetch('/phase4/debug/logs', { method: 'DELETE' }); loadLogs(); } catch { /* */ }
   }
 
   const levelColors: Record<string, string> = { debug: '#888', info: '#6366f1', warning: '#f59e0b', error: '#ef4444', critical: '#ef4444' };

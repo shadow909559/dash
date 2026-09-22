@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { authFetch } from '../lib/api';
 
 interface FileNode { name: string; type: 'file' | 'directory'; path: string; children?: FileNode[]; }
 
@@ -30,10 +31,10 @@ export default function CodeEditorPage() {
 
   async function loadWorkspace() {
     try {
-      const r = await fetch('/api/v1/features/code/workspace');
+      const r = await authFetch('/files/browse?path=home');
       if (r.ok) {
         const data = await r.json();
-        setFiles(data.files || data.tree || []);
+        setFiles(data.entries || []);
       }
     } catch { /* ignore */ }
   }
@@ -66,7 +67,7 @@ export default function CodeEditorPage() {
   async function saveFile() {
     if (!openFile) return;
     try {
-      await fetch('/api/v1/features/code/save', {
+      await authFetch('/files/write', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: openFile, content }),

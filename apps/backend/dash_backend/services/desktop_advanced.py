@@ -38,6 +38,14 @@ class ClipboardHistoryService:
                 return {"ok": True}
         return {"ok": False}
 
+    def set_pin(self, clip_id: str, pinned: bool) -> dict:
+        """Explicit pin state (the UI toggles, so False must unpin)."""
+        for h in self._history:
+            if h["id"] == clip_id:
+                h["pinned"] = pinned
+                return {"ok": True}
+        return {"ok": False}
+
     def delete(self, clip_id: str) -> dict:
         self._history = [h for h in self._history if h["id"] != clip_id]
         return {"ok": True}

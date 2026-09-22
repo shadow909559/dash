@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { authFetch } from '../lib/api';
 
 interface TerminalLine { id: string; type: 'input' | 'output' | 'error'; content: string; timestamp: string; }
 
@@ -30,7 +31,7 @@ export default function TerminalPage() {
     setIsRunning(true);
 
     try {
-      const r = await fetch('/api/v1/features/terminal/exec', {
+      const r = await authFetch('/phase4/terminal/exec', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: input, shell }),
       });

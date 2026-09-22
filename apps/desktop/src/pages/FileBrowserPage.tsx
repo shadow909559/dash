@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface FileItem { name: string; path: string; type: 'file' | 'directory'; size: number; modified: string; }
 
 export default function FileBrowserPage() {
-  const [currentPath, setCurrentPath] = useState('/');
+  // The backend resolves special-folder aliases; 'home' is the browsable root.
+  const [currentPath, setCurrentPath] = useState('home');
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
@@ -15,8 +17,8 @@ export default function FileBrowserPage() {
 
   async function loadDir(path: string) {
     try {
-      const r = await fetch(`/api/v1/features/files/browse?path=${encodeURIComponent(path)}`);
-      if (r.ok) { const data = await r.json(); setFiles(data.files || data.items || []); }
+      const r = await authFetch(`/files/browse?path=${encodeURIComponent(path)}`);
+      if (r.ok) { const data = await r.json(); setFiles(data.entries || []); } else { setFiles([]); }
     } catch { setFiles([]); }
   }
 
@@ -26,9 +28,10 @@ export default function FileBrowserPage() {
   }
 
   function goUp() {
+    if (currentPath === 'home') return;
     const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
-    setCurrentPath('/' + parts.join('/'));
+    setCurrentPath(parts.length ? parts.join('/') : 'home');
   }
 
   function formatSize(bytes: number): string {
@@ -61,7 +64,7 @@ export default function FileBrowserPage() {
 
       {/* Breadcrumbs */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 16, fontSize: 14, flexWrap: 'wrap' }}>
-        <button onClick={() => setCurrentPath('/')} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer' }}>🏠 root</button>
+        <button onClick={() => setCurrentPath('home')} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer' }}>🏠 home</button>
         {breadcrumbs.map((crumb, i) => (
           <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ color: '#555' }}>/</span>
@@ -72,7 +75,7 @@ export default function FileBrowserPage() {
 
       {/* Toolbar */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
-        <button onClick={goUp} disabled={currentPath === '/'} style={{ padding: '6px 12px', background: currentPath === '/' ? '#222' : '#333', border: 'none', borderRadius: 6, color: '#e0e0e0', cursor: currentPath === '/' ? 'default' : 'pointer' }}>⬆ Up</button>
+        <button onClick={goUp} disabled={currentPath === 'home'} style={{ padding: '6px 12px', background: currentPath === 'home' ? '#222' : '#333', border: 'none', borderRadius: 6, color: '#e0e0e0', cursor: currentPath === 'home' ? 'default' : 'pointer' }}>⬆ Up</button>
         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search files..." style={{ flex: 1, padding: '6px 12px', background: '#1e1e2e', border: '1px solid #333', borderRadius: 6, color: '#e0e0e0' }} />
         <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)} style={{ padding: '6px 8px', background: '#1e1e2e', border: '1px solid #333', borderRadius: 6, color: '#e0e0e0' }}>
           <option value="name">Name</option>

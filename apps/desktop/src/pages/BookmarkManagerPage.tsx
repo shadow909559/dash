@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface Bookmark { id: string; url: string; title: string; description: string; favicon: string; tags: string[]; folder: string; ai_summary: string; created_at: string; }
 
@@ -13,19 +14,24 @@ export default function BookmarkManagerPage() {
   useEffect(() => { loadBookmarks(); }, []);
 
   async function loadBookmarks() {
-    try { const r = await fetch('/api/v1/features/browser/bookmarks'); if (r.ok) setBookmarks(await r.json()); } catch { /* */ }
+    try { 
+      // #144: the features/* phantom routes never existed; the real
+      // bookmarks API is /browser/bookmarks (returns a bare array).
+      const r = await authFetch('/browser/bookmarks'); 
+      if (r.ok) setBookmarks(await r.json()); 
+    } catch { /* */ }
   }
 
   async function addBookmark() {
     if (!newBm.url || !newBm.title) return;
     try {
-      await fetch('/api/v1/features/browser/bookmarks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newBm, tags: newBm.tags.split(',').map(t => t.trim()).filter(Boolean) }) });
+      await authFetch('/browser/bookmarks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newBm, tags: newBm.tags.split(',').map(t => t.trim()).filter(Boolean) }) });
       setNewBm({ url: '', title: '', description: '', tags: '', folder: '/' }); setShowAdd(false); loadBookmarks();
     } catch { /* */ }
   }
 
   async function deleteBookmark(id: string) {
-    try { await fetch(`/api/v1/features/browser/bookmarks/${id}`, { method: 'DELETE' }); loadBookmarks(); } catch { /* */ }
+    try { await authFetch(`/browser/bookmarks/${id}`, { method: 'DELETE' }); loadBookmarks(); } catch { /* */ }
   }
 
   function openUrl(url: string) { window.open(url, '_blank'); }

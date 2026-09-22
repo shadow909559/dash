@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface ActionItem { id: string; title: string; description: string; assignee: string; status: string; priority: number; due_date: string; source: string; tags: string[]; created_at: string; completed_at: string; }
 
@@ -12,20 +13,26 @@ export default function ActionItemsPage() {
   useEffect(() => { loadItems(); }, []);
 
   async function loadItems() {
-    try { const r = await fetch('/api/v1/phase4/action-items'); if (r.ok) setItems(await r.json()); } catch { /* */ }
+    try { const r = await authFetch('/phase4/action-items'); if (r.ok) setItems(decorate(await r.json())); } catch { /* */ }
   }
 
   async function addItem() {
     if (!newItem.title) return;
-    try { await fetch('/api/v1/phase4/action-items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newItem, tags: newItem.tags.split(',').map(t => t.trim()).filter(Boolean) }) }); setNewItem({ title: '', description: '', assignee: '', priority: 0, due_date: '', source: 'manual', tags: '' }); setShowAdd(false); loadItems(); } catch { /* */ }
+    try { await authFetch('/phase4/action-items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newItem, tags: newItem.tags.split(',').map(t => t.trim()).filter(Boolean) }) }); setNewItem({ title: '', description: '', assignee: '', priority: 0, due_date: '', source: 'manual', tags: '' }); setShowAdd(false); loadItems(); } catch { /* */ }
   }
 
   async function completeItem(id: string) {
-    try { await fetch(`/api/v1/phase4/action-items/${id}/complete`, { method: 'POST' }); loadItems(); } catch { /* */ }
+    try { await authFetch(`/phase4/action-items/${id}/complete`, { method: 'POST' }); loadItems(); } catch { /* */ }
   }
 
   async function deleteItem(id: string) {
-    try { await fetch(`/api/v1/phase4/action-items/${id}`, { method: 'DELETE' }); loadItems(); } catch { /* */ }
+    try { await authFetch(`/phase4/action-items/${id}`, { method: 'DELETE' }); loadItems(); } catch { /* */ }
+  }
+
+  /** The store keeps a string priority; the UI colors by number. */
+  function decorate(items: ActionItem[]): ActionItem[] {
+    const rank: Record<string, number> = { low: 0, medium: 1, high: 2 };
+    return items.map(it => ({ ...it, priority: rank[it.priority as unknown as string] ?? 0 }));
   }
 
   const filtered = items.filter(i => {

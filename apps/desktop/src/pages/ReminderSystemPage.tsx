@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface Reminder { id: string; title: string; description: string; due_date: string; priority: number; completed: boolean; recurrence: string; tags: string[]; created_at: string; }
 
@@ -13,20 +14,31 @@ export default function ReminderSystemPage() {
   useEffect(() => { loadReminders(); }, []);
 
   async function loadReminders() {
-    try { const r = await fetch('/api/v1/phase4/reminders'); if (r.ok) setReminders(await r.json()); } catch { /* */ }
+    try { const r = await authFetch('/phase4/reminders'); if (r.ok) setReminders(decorate(await r.json())); } catch { /* */ }
   }
 
   async function addReminder() {
     if (!newReminder.title) return;
-    try { await fetch('/api/v1/phase4/reminders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newReminder, tags: newReminder.tags.split(',').map(t => t.trim()).filter(Boolean) }) }); setNewReminder({ title: '', description: '', due_date: '', priority: 0, recurrence: '', tags: '' }); setShowAdd(false); loadReminders(); } catch { /* */ }
+    try { await authFetch('/phase4/reminders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: newReminder.title, remind_at: newReminder.due_date, context: newReminder.description, recurring: newReminder.recurrence }) }); setNewReminder({ title: '', description: '', due_date: '', priority: 0, recurrence: '', tags: '' }); setShowAdd(false); loadReminders(); } catch { /* */ }
   }
 
   async function completeReminder(id: string) {
-    try { await fetch(`/api/v1/phase4/reminders/${id}/complete`, { method: 'POST' }); loadReminders(); } catch { /* */ }
+    try { await authFetch(`/phase4/reminders/${id}/complete`, { method: 'POST' }); loadReminders(); } catch { /* */ }
   }
 
   async function deleteReminder(id: string) {
-    try { await fetch(`/api/v1/phase4/reminders/${id}`, { method: 'DELETE' }); loadReminders(); } catch { /* */ }
+    try { await authFetch(`/phase4/reminders/${id}`, { method: 'DELETE' }); loadReminders(); } catch { /* */ }
+  }
+
+  /** The store has no completed/priority fields; completed = already fired.
+   *  Priority is derived from context so the sort/color UI keeps working. */
+  function decorate(rs: Reminder[]): Reminder[] {
+    return rs.map(r => {
+      const raw = r as unknown as { priority?: number; fired?: boolean; context?: string };
+      const completed = raw.fired === true;
+      const priority = typeof raw.priority === 'number' ? raw.priority : (raw.context || '').includes('urgent') ? 2 : 0;
+      return { ...r, completed, priority };
+    });
   }
 
   function isOverdue(d: string) { return d && new Date(d) < new Date(); }

@@ -641,3 +641,61 @@ async def create_deadline(body: DeadlineReq, _user=Depends(get_current_user)):
 async def delete_deadline(deadline_id: str, _user=Depends(get_current_user)):
     from dash_backend.services.email_calendar_sync import deadline_service
     return deadline_service.delete_deadline(deadline_id)
+
+
+# ── Contact deletion (#144): ContactManagerPage has a Delete button with
+#    no backing route.
+
+
+@router.delete("/contacts/{contact_id}")
+async def delete_contact(contact_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.email_calendar import contact_service
+
+    # Honest 404: delete_contact is idempotent, so existence is checked here.
+    if not any(c["id"] == contact_id for c in contact_service.get_all()):
+        raise HTTPException(status_code=404, detail="contact not found")
+    return contact_service.delete_contact(contact_id)
+
+
+# ── Meeting notes CRUD (#144): MeetingNotesPage lists, creates and deletes
+#    meeting notes; the router previously exposed GET-only note search.
+
+
+class MeetingCreate(BaseModel):
+    title: str
+    date: str = ""
+    attendees: list[str] = []
+    agenda: str = ""
+    notes: str = ""
+    action_items: list[str] = []
+    tags: list[str] = []
+
+
+@router.get("/meetings")
+async def list_meetings(_user=Depends(get_current_user)):
+    from dash_backend.services.project_management import meeting_notes
+
+    return meeting_notes.get_all(limit=100)
+
+
+@router.post("/meetings", status_code=201)
+async def create_meeting(payload: MeetingCreate, _user=Depends(get_current_user)):
+    from dash_backend.services.project_management import meeting_notes
+
+    result = meeting_notes.create(
+        payload.title,
+        payload.attendees,
+        action_items=payload.action_items,
+        agenda=payload.agenda,
+        notes=payload.notes,
+        date=payload.date,
+        tags=payload.tags,
+    )
+    return result.get("note", {})
+
+
+@router.delete("/meetings/{note_id}", status_code=204)
+async def delete_meeting(note_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.project_management import meeting_notes
+
+    meeting_notes.delete(note_id)

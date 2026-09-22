@@ -1,7 +1,7 @@
 """API routes for Phase 3 features: data management, communication, performance, mobile, security."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
@@ -271,3 +271,46 @@ async def get_sync_log(_user=Depends(get_current_user)):
 async def get_zk_status(_user=Depends(get_current_user)):
     from dash_backend.services.advanced_security import zero_knowledge
     return {"status": "active", "architecture": "zero-knowledge", "server_sees_plaintext": False}
+
+
+# ── Archive mutations (#144): BackupRestorePage creates, restores and
+#    deletes backups; the router previously exposed GET only.
+
+
+class ArchiveCreate(BaseModel):
+    name: str = ""
+    data_type: str = "backup"
+    reason: str = "manual backup"
+    tables: list[str] = []
+
+
+@router.post("/archives", status_code=201)
+async def create_archive(payload: ArchiveCreate, _user=Depends(get_current_user)):
+    from dash_backend.services.data_management import archive_service
+
+    items = [{"table": t} for t in payload.tables] if payload.tables else [{"snapshot": payload.name}]
+    result = archive_service.archive(payload.data_type, items, reason=payload.reason or payload.name)
+    archive = dict(result.get("archive", {}))
+    archive["name"] = payload.name or f"backup-{archive.get('id', '')}"
+    archive["tables_included"] = payload.tables
+    if payload.name:
+        archive["data_type"] = payload.name
+    return archive
+
+
+@router.post("/archives/{archive_id}/restore")
+async def restore_archive(archive_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.data_management import archive_service
+
+    result = archive_service.restore(archive_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail="archive not found")
+    return result
+
+
+@router.delete("/archives/{archive_id}", status_code=204)
+async def delete_archive(archive_id: str, _user=Depends(get_current_user)):
+    from dash_backend.services.data_management import archive_service
+
+    if not archive_service.delete(archive_id).get("ok"):
+        raise HTTPException(status_code=404, detail="archive not found")

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface Contact { id: string; name: string; email: string; phone: string; company: string; role: string; notes: string; tags: string[]; avatar_url: string; created_at: string; }
 
@@ -12,16 +13,16 @@ export default function ContactManagerPage() {
   useEffect(() => { loadContacts(); }, []);
 
   async function loadContacts() {
-    try { const r = await fetch('/api/v1/features/contacts'); if (r.ok) setContacts(await r.json()); } catch { /* */ }
+    try { const r = await authFetch('/features/contacts'); if (r.ok) { const d = await r.json(); setContacts(d.contacts ?? d ?? []); } } catch { /* */ }
   }
 
   async function addContact() {
     if (!newContact.name) return;
-    try { await fetch('/api/v1/features/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...newContact, tags: newContact.tags.split(',').map(t => t.trim()).filter(Boolean) }) }); setNewContact({ name: '', email: '', phone: '', company: '', role: '', notes: '', tags: '' }); setShowAdd(false); loadContacts(); } catch { /* */ }
+    try { await authFetch('/features/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newContact.name, email: newContact.email, phone: newContact.phone, company: newContact.company, notes: newContact.notes, tags: newContact.tags.split(',').map(t => t.trim()).filter(Boolean) }) }); setNewContact({ name: '', email: '', phone: '', company: '', role: '', notes: '', tags: '' }); setShowAdd(false); loadContacts(); } catch { /* */ }
   }
 
   async function deleteContact(id: string) {
-    try { await fetch(`/api/v1/features/contacts/${id}`, { method: 'DELETE' }); setSelectedContact(null); loadContacts(); } catch { /* */ }
+    try { await authFetch(`/features/contacts/${id}`, { method: 'DELETE' }); setSelectedContact(null); loadContacts(); } catch { /* */ }
   }
 
   const filtered = contacts.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase()) || c.company.toLowerCase().includes(search.toLowerCase()));

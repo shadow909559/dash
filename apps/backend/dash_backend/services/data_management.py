@@ -106,6 +106,11 @@ class ArchiveService:
                 return {"ok": True, "restored": a["count"], "data_type": a["data_type"]}
         return {"ok": False, "reason": "Archive not found"}
 
+    def delete(self, archive_id: str) -> dict:
+        before = len(self._archives)
+        self._archives = [a for a in self._archives if a["id"] != archive_id]
+        return {"ok": len(self._archives) < before}
+
     def get_stats(self) -> dict:
         types: dict[str, int] = {}
         for a in self._archives:

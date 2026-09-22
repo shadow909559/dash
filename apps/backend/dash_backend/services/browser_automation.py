@@ -294,8 +294,16 @@ class BrowserAutomationService:
         for item in self._reading_list:
             if item["id"] == item_id:
                 item["status"] = status
+                if status == "completed":
+                    item["completed_at"] = datetime.now(timezone.utc).isoformat()
                 return item
         return {"status": "not_found"}
+
+    def remove_from_reading_list(self, item_id: str) -> bool:
+        """Delete a reading-list item. True if it existed."""
+        before = len(self._reading_list)
+        self._reading_list = [i for i in self._reading_list if i["id"] != item_id]
+        return len(self._reading_list) < before
 
     def get_stats(self) -> dict:
         """Get browser automation statistics."""

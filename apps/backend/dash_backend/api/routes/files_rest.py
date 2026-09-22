@@ -25,7 +25,12 @@ from pydantic import BaseModel, Field
 
 from dash_backend.auth.dependencies import get_current_user
 from dash_backend.logging_config import get_logger
-from dash_backend.security.path_guard import PathDenied, is_secret_file, resolve_allowed
+from dash_backend.security.path_guard import (
+    PathDenied,
+    ensure_writable,
+    is_secret_file,
+    resolve_allowed,
+)
 
 logger = get_logger(__name__)
 
@@ -559,3 +564,30 @@ async def list_drives() -> FileSearchResponse:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
+
+
+# ── Text file write (#144): the desktop code editor saves file content.
+#    Uses the same allow-list + protected-file guard as every other
+#    mutating operation here.
+
+
+class FileWriteRequest(BaseModel):
+    path: str
+    content: str
+
+
+@router.post("/write", response_model=FileOperationResponse)
+async def write_file_text(payload: FileWriteRequest) -> FileOperationResponse:
+    try:
+        target = ensure_writable(payload.path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(payload.content, encoding="utf-8")
+        return FileOperationResponse(
+            status="ok",
+            summary=f"Wrote {len(payload.content)} chars to {target.name}",
+            details={"path": str(target), "bytes": len(payload.content)},
+        )
+    except PathDenied as exc:
+        raise _denied(exc)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Write failed: {exc}") from exc

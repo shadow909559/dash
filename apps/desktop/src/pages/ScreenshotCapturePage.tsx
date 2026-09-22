@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authFetch } from '../lib/api';
 
 interface Screenshot { id: string; url: string; title: string; width: number; height: number; created_at: string; }
 
@@ -12,21 +13,21 @@ export default function ScreenshotCapturePage() {
   useEffect(() => { loadScreenshots(); }, []);
 
   async function loadScreenshots() {
-    try { const r = await fetch('/api/v1/features/screenshots'); if (r.ok) setScreenshots(await r.json()); } catch { /* */ }
+    try { const r = await authFetch('/phase4/screenshots'); if (r.ok) setScreenshots((await r.json()).captures ?? []); } catch { /* */ }
   }
 
   async function capture() {
     if (!url) return;
     setCapturing(true);
     try {
-      const r = await fetch('/api/v1/features/screenshots/capture', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, full_page: fullPage }) });
+      const r = await authFetch('/phase4/screenshots/capture', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, full_page: fullPage }) });
       if (r.ok) { setUrl(''); loadScreenshots(); }
     } catch { /* */ }
     setCapturing(false);
   }
 
   async function deleteScreenshot(id: string) {
-    try { await fetch(`/api/v1/features/screenshots/${id}`, { method: 'DELETE' }); setSelected(null); loadScreenshots(); } catch { /* */ }
+    try { await authFetch(`/phase4/screenshots/${id}`, { method: 'DELETE' }); setSelected(null); loadScreenshots(); } catch { /* */ }
   }
 
   return (

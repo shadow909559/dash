@@ -12,6 +12,7 @@ poll off instead of being hammered.
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any, Optional
 
 import pytest
@@ -402,7 +403,12 @@ async def test_loop_survives_cycle_exceptions_and_stops_cleanly(
     w.run_cycle = flaky  # type: ignore[method-assign]
     w._interval = 0.05  # run the real loop fast; production default is 30s
     await w.start()
-    await asyncio.sleep(0.2)
+    # Poll to a deadline instead of a fixed sleep: after the first cycle
+    # raises, the loop applies failure backoff (2× the interval), so a
+    # fixed sleep can miss the second cycle under load.
+    deadline = time.monotonic() + 5.0
+    while calls["n"] < 2 and time.monotonic() < deadline:
+        await asyncio.sleep(0.02)
     assert w.running
     await w.stop()
     assert not w.running

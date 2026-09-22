@@ -3,10 +3,17 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone, timedelta
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _id(prefix: str) -> str:
+    """Collision-proof id (#144): the old ``f'{prefix}_{len(items)}'`` reused
+    ids after a delete + re-add, so DELETE could remove the wrong record."""
+    return f"{prefix}_{uuid.uuid4().hex[:12]}"
 
 
 class MeetingNotesService:
@@ -15,8 +22,12 @@ class MeetingNotesService:
     def __init__(self) -> None:
         self._notes: list[dict] = []
 
-    def create(self, title: str, attendees: list[str], content: str = "", action_items: list[str] | None = None) -> dict:
-        note = {"id": f"note_{len(self._notes)}", "title": title, "attendees": attendees, "content": content, "action_items": action_items or [], "created_at": datetime.now(timezone.utc).isoformat()}
+    def create(self, title: str, attendees: list[str], content: str = "", action_items: list[str] | None = None, *, agenda: str = "", notes: str = "", date: str = "", tags: list[str] | None = None) -> dict:
+        # content keeps the legacy combined form; agenda/notes carry the UI's
+        # split fields when provided.
+        if not content and (agenda or notes):
+            content = "\n\n".join(part for part in (f"Agenda: {agenda}" if agenda else "", notes) if part)
+        note = {"id": _id("note"), "title": title, "attendees": attendees, "content": content, "action_items": action_items or [], "date": date, "agenda": agenda, "notes": notes, "tags": tags or [], "created_at": datetime.now(timezone.utc).isoformat()}
         self._notes.append(note)
         return {"ok": True, "note": note}
 
@@ -47,8 +58,8 @@ class ActionItemService:
     def __init__(self) -> None:
         self._items: list[dict] = []
 
-    def create(self, title: str, assignee: str = "", due_date: str = "", source: str = "manual", priority: str = "medium") -> dict:
-        item = {"id": f"action_{len(self._items)}", "title": title, "assignee": assignee, "due_date": due_date, "source": source, "priority": priority, "status": "pending", "created_at": datetime.now(timezone.utc).isoformat()}
+    def create(self, title: str, assignee: str = "", due_date: str = "", source: str = "manual", priority: str = "medium", description: str = "", tags: Optional[list[str]] = None) -> dict:
+        item = {"id": _id("action"), "title": title, "description": description, "tags": list(tags or []), "assignee": assignee, "due_date": due_date, "source": source, "priority": priority, "status": "pending", "created_at": datetime.now(timezone.utc).isoformat()}
         self._items.append(item)
         return {"ok": True, "item": item}
 
@@ -76,7 +87,7 @@ class ActionItemService:
         for i in self._items:
             if i["id"] == item_id:
                 for k, v in kwargs.items():
-                    if k in ("title", "assignee", "due_date", "priority", "status"):
+                    if k in ("title", "description", "tags", "assignee", "due_date", "priority", "status"):
                         i[k] = v
                 return {"ok": True}
         return {"ok": False}
@@ -96,7 +107,7 @@ class TimeTrackingService:
     def start(self, task_name: str, project: str = "") -> dict:
         if self._active:
             self.stop()
-        entry = {"id": f"time_{len(self._entries)}", "task": task_name, "project": project, "start": datetime.now(timezone.utc).isoformat(), "end": None, "duration_seconds": 0}
+        entry = {"id": _id("time"), "task": task_name, "project": project, "start": datetime.now(timezone.utc).isoformat(), "end": None, "duration_seconds": 0}
         self._active = entry
         return {"ok": True, "entry": entry}
 
@@ -111,6 +122,26 @@ class TimeTrackingService:
         result = dict(self._active)
         self._active = None
         return {"ok": True, "entry": result}
+
+    def add_manual(self, task: str, project: str = "", duration_seconds: int = 0, start_time: str = "") -> dict:
+        """Record a manual entry with explicit duration (honest fields)."""
+        start = start_time or datetime.now(timezone.utc).isoformat()
+        try:
+            start_dt = datetime.fromisoformat(start)
+        except ValueError:
+            start_dt = datetime.now(timezone.utc)
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
+        entry = {
+            "id": _id("time"),
+            "task": task,
+            "project": project,
+            "start": start_dt.isoformat(),
+            "end": (start_dt + timedelta(seconds=max(0, duration_seconds))).isoformat(),
+            "duration_seconds": max(0, int(duration_seconds)),
+        }
+        self._entries.append(entry)
+        return {"ok": True, "entry": entry}
 
     def get_entries(self, limit: int = 50) -> list[dict]:
         return list(reversed(self._entries[-limit:]))
@@ -140,10 +171,17 @@ class SprintService:
         self._tasks[sprint["id"]] = []
         return {"ok": True, "sprint": sprint}
 
-    def add_task(self, sprint_id: str, title: str, points: int = 1) -> dict:
-        task = {"id": f"task_{len(self._tasks.get(sprint_id, []))}", "title": title, "points": points, "status": "todo", "created_at": datetime.now(timezone.utc).isoformat()}
+    def add_task(self, sprint_id: str, title: str, points: int = 1, description: str = "", assignee: str = "") -> dict:
+        task = {"id": f"task_{len(self._tasks.get(sprint_id, []))}", "sprint_id": sprint_id, "title": title, "description": description, "assignee": assignee, "story_points": points, "status": "todo", "created_at": datetime.now(timezone.utc).isoformat()}
         self._tasks.setdefault(sprint_id, []).append(task)
         return {"ok": True, "task": task}
+
+    def delete_task(self, sprint_id: str, task_id: str) -> dict:
+        tasks = self._tasks.get(sprint_id, [])
+        if not any(t["id"] == task_id for t in tasks):
+            return {"ok": False, "reason": "task not found"}
+        self._tasks[sprint_id] = [t for t in tasks if t["id"] != task_id]
+        return {"ok": True}
 
     def update_task(self, sprint_id: str, task_id: str, status: str) -> dict:
         for t in self._tasks.get(sprint_id, []):
@@ -160,12 +198,15 @@ class SprintService:
     def get_tasks(self, sprint_id: str) -> list[dict]:
         return self._tasks.get(sprint_id, [])
 
+    def get_all_tasks(self) -> list[dict]:
+        return [t for tasks in self._tasks.values() for t in tasks]
+
     def get_velocity(self) -> list[dict]:
         result = []
         for s in self._sprints:
             tasks = self._tasks.get(s["id"], [])
-            total_points = sum(t.get("points", 0) for t in tasks)
-            completed_points = sum(t.get("points", 0) for t in tasks if t.get("status") == "done")
+            total_points = sum(t.get("story_points", 0) for t in tasks)
+            completed_points = sum(t.get("story_points", 0) for t in tasks if t.get("status") == "done")
             result.append({"sprint": s["name"], "total_points": total_points, "completed_points": completed_points, "velocity": completed_points})
         return result
 
@@ -192,7 +233,7 @@ class ReminderService:
         self._reminders: list[dict] = []
 
     def create(self, title: str, remind_at: str, context: str = "", recurring: str = "") -> dict:
-        reminder = {"id": f"rem_{len(self._reminders)}", "title": title, "remind_at": remind_at, "context": context, "recurring": recurring, "fired": False, "created_at": datetime.now(timezone.utc).isoformat()}
+        reminder = {"id": _id("rem"), "title": title, "remind_at": remind_at, "context": context, "recurring": recurring, "fired": False, "created_at": datetime.now(timezone.utc).isoformat()}
         self._reminders.append(reminder)
         return {"ok": True, "reminder": reminder}
 

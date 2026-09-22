@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { authFetch } from '../lib/api';
 
 interface TimeEntry { id: string; task: string; project: string; start_time: string; end_time: string; duration_seconds: number; tags: string[]; billable: boolean; notes: string; }
 
@@ -15,7 +16,7 @@ export default function TimeTrackingPage() {
   useEffect(() => { loadEntries(); return () => { if (timerRef.current) clearInterval(timerRef.current); }; }, []);
 
   async function loadEntries() {
-    try { const r = await fetch('/api/v1/phase4/time-entries'); if (r.ok) setEntries(await r.json()); } catch { /* */ }
+    try { const r = await authFetch('/phase4/time/entries'); if (r.ok) setEntries((await r.json()).entries ?? []); } catch { /* */ }
   }
 
   function startTracking() {
@@ -29,7 +30,7 @@ export default function TimeTrackingPage() {
     if (timerRef.current) clearInterval(timerRef.current);
     setIsTracking(false);
     try {
-      await fetch('/api/v1/phase4/time-entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task: activeTask, project: activeProject, duration_seconds: elapsed }) });
+      await authFetch('/phase4/time/manual', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task: activeTask, project: activeProject, duration_seconds: elapsed }) });
       setActiveTask(''); setActiveProject(''); setElapsed(0); loadEntries();
     } catch { /* */ }
   }
@@ -38,7 +39,7 @@ export default function TimeTrackingPage() {
     if (!manualEntry.task) return;
     const parts = manualEntry.duration.split(':').map(Number);
     const duration = (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
-    try { await fetch('/api/v1/phase4/time-entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task: manualEntry.task, project: manualEntry.project, duration_seconds: duration, start_time: manualEntry.date }) }); setShowManual(false); loadEntries(); } catch { /* */ }
+    try { await authFetch('/phase4/time/manual', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task: manualEntry.task, project: manualEntry.project, duration_seconds: duration }) }); setShowManual(false); loadEntries(); } catch { /* */ }
   }
 
   function formatDuration(seconds: number) { const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); const s = seconds % 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`; }
