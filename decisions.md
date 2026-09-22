@@ -3550,3 +3550,71 @@ were deleted; `website-v1` history untouched throughout.
 **Pins + CI.** `tests/test_fe_route_parity.py` derives routes from `app.openapi()` (no server needed) and fails on any frontend call target with no matching backend route — drift in either direction now fails CI before it fails a user clicking a button.
 
 **Test hygiene.** `test_vision_watcher.py::test_loop_survives_cycle_exceptions_and_stops_cleanly` flaked under 6-way shard load (fixed 0.2 s sleep vs the loop's 0.1 s failure-backoff delay): now polls to a 5 s deadline. Full suite: 2,932 passed, 9 skipped across 6 shards.
+
+## #146 - Composite-task misroute to clipboard: root causes + fixes (2026-09-23)
+
+**Symptom (live-probed over the real WS):** the user's task "set up a meeting
+reminder for 5 mins and after the time is up remind me and open brave then
+zoom and then start a meeting and then join the meeting" replied "Copied to
+clipboard: up a meeting reminder for 5 mins ... and the" — truncated at both
+ends, executed as a clipboard write.
+
+**Root causes, all found by live probes, not by reading docs:**
+1. The interceptor's greedy clipboard-write pattern ate any sentence starting
+   with "set"/"copy". Fixed: the pattern now requires the message to actually
+   be about the clipboard (explicit clipboard tail, clipboard head, or quoted
+   payload); bare "set up ..." falls through to the new composite decomposer
+   (services/composite_commands.py): ordered steps, verbs carried ("open
+   brave then zoom" -> "open brave" + "open zoom"), "remind me" folded into
+   the reminder step, per-step honest results streamed via chat.status/token.
+2. find_running_process substring-matched BraveCrashHandler.exe for "brave"
+   and PowerToys.ZoomIt.exe for "zoom" -> "already running" without ever
+   launching. Fixed on both matchers (launcher + composite verifier): exe
+   basename must equal the needle or be a dotted child.
+3. Brave's registry entry resolves to the Application DIRECTORY; startfile on
+   a folder opens Explorer, not the browser. Fixed: _promote_to_executable
+   prefers name-matching exes in the folder or its version subfolders.
+4. The reminder toast's PowerShell process is held alive by WinRT while the
+   toast displays; the old 15 s communicate() raised TimeoutExpired on a
+   SUCCESSFUL dispatch. Fixed: brief acceptance wait, lingering = displayed,
+   process reaped after 60 s (no zombies, no false failures).
+
+**Proof, on the live surface:** reminder fired for real at 00:43:07 (toast
+displayed, store marked fired, WS notify ran); "open brave" via the real WS
+launches brave.exe (main + renderers stable 90 s+); the full composite task
+returns per-step truth: reminder OK, brave OK, the three Zoom steps fail
+honestly (Zoom is not installed — DASH must not simulate the rest).
+
+**Pins:** tests/test_composite_commands.py (9), the clipboard + toast suites
+updated to the new seams (12), route parity unaffected. 33/33 green.
+
+## #147 - Meeting steps made real: Zoom installed + deep-link joins (2026-09-23)
+
+Zoom Workplace was installed (winget, per-machine), so the meeting steps of
+composite tasks no longer dead-end at "not installed". `_exec_meeting` now
+parses concrete meeting targets and drives the real join path:
+
+- Zoom join link (zoom.us/j/<id>?pwd=...) or spoken 9-12 digit ID ->
+  ``zoommtg://zoom.us/join?action=join&confno=...&pwd=...`` dispatched
+  through the OS handler; Zoom opens its join window prefilled. Verified
+  live: the executor returned ok=true and Zoom's join screen appeared.
+- Google Meet links -> the join page in the default browser.
+- Teams links -> the browser (desktop deep links are account-dependent).
+- No target -> launch Zoom and disclose exactly which human steps remain
+  (sign in, New Meeting / enter ID) instead of pretending.
+
+Honesty rules preserved: DASH never passes a waiting room, never clicks
+Join, never grants camera/mic consent - those stay with the user, and the
+step detail says so. Two probe-found fixes en route: the zoom URL regex had
+a stray ``\.`` that disabled the URL branch (pwd was being dropped), and the
+step router now routes any meeting-URL step to the meeting executor even
+without the word "meeting". Process-verification windows were raised
+(open 15 s, zoom 20 s) after live probes showed Zoom needs ~10 s to appear;
+success detail distinguishes "is running" (already) from "launched".
+
+**Live proof:** the original 5-step task ("set up a meeting reminder ... open
+brave then zoom and then start a meeting and then join the meeting") now
+returns 5/5 OK - reminder scheduled (fired at 01:34), brave.exe launched and
+running, Zoom running, both meeting steps completed with their human-side
+disclosures. Pins: 14 composite (5 new meeting-target/join pins), full
+targeted sweep 38/38 green.
