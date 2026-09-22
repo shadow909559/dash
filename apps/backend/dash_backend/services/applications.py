@@ -17,6 +17,40 @@ logger = get_logger(__name__)
 IS_WINDOWS = sys.platform == "win32"
 
 
+def _promote_to_executable(path: str, app_name: str) -> str:
+    """Promote a resolved install directory to its launchable exe.
+
+    Registry discovery entries sometimes declare a directory (Brave's
+    resolves to ``...\\Brave-Browser\\Application``). ``os.startfile`` on a
+    directory opens Explorer instead of the app — found live when
+    "open brave" claimed success while only Explorer windows appeared.
+    Chrome-family layout puts the exe either directly in that folder
+    (``Application\\brave.exe``) or in a version subfolder
+    (``Application\\<ver>\\chrome.exe``); prefer name-matching exes.
+    """
+    from pathlib import Path
+
+    p = Path(path)
+    if p.is_file():
+        return str(p)
+    if not p.is_dir():
+        return str(p)
+
+    direct = list(p.glob("*.exe"))
+    nested = list(p.glob("*/*.exe"))
+    needle = (app_name or "").lower()
+
+    def _prefer(cands):
+        named = [c for c in cands if needle and needle in c.stem.lower()]
+        return named or cands
+
+    for pool in (_prefer(direct), _prefer(nested)):
+        if pool:
+            best = sorted(pool, key=lambda c: len(c.name))[0]
+            return str(best)
+    return str(p)
+
+
 class ApplicationService(Singleton):
     """Manage application lifecycle."""
 
@@ -50,7 +84,7 @@ class ApplicationService(Singleton):
         if not app or not app.get("path"):
             raise RuntimeError(f"Application '{name}' not found or path is missing")
 
-        path = app["path"]
+        path = _promote_to_executable(app["path"], app.get("name") or name)
 
         try:
             if IS_WINDOWS:
@@ -74,24 +108,38 @@ class ApplicationService(Singleton):
             raise RuntimeError(f"Failed to launch {name}: {exc}") from exc
 
     async def find_running_process(self, name: str) -> dict[str, Any] | None:
-        """Find a running process by name."""
+        """Find a running process by name.
+
+        Matching is precise: the exe basename must equal ``name`` (or be a
+        dotted child like ``Zoom.features.exe`` for needle ``zoom``). The
+        old substring check matched ``BraveCrashHandler.exe`` for "brave"
+        and ``PowerToys.ZoomIt.exe`` for "zoom" — so "open brave" reported
+        "already running" and never launched the real app (found live).
+        """
         import psutil
-        
-        name_lower = name.lower()
+
+        needle = (name or "").lower().strip()
+        if not needle:
+            return None
+
+        def _matches(img_name: str) -> bool:
+            base = (img_name or "").lower()
+            if base.endswith(".exe"):
+                base = base[:-4]
+            return base == needle or base.endswith("." + needle)
+
         for proc in psutil.process_iter(["pid", "name", "exe"]):
             try:
-                proc_name = proc.info["name"]
-                proc_exe = proc.info.get("exe", "")
-                
-                if name_lower in proc_name.lower() or (proc_exe and name_lower in proc_exe.lower()):
+                proc_name = proc.info["name"] or ""
+                if _matches(proc_name):
                     return {
                         "pid": proc.info["pid"],
                         "name": proc_name,
-                        "exe": proc_exe
+                        "exe": proc.info.get("exe", "") or "",
                     }
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
-        
+
         return None
 
     async def bring_to_foreground(self, pid: int) -> dict[str, Any]:
