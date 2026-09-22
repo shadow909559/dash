@@ -219,7 +219,7 @@ async def _exec_open(step: str) -> dict[str, Any]:
         ok, exe = False, ""
         for n in needles:
             ok, exe = await asyncio.get_running_loop().run_in_executor(
-                None, lambda n=n: _verify_process_running(n, 4.0))
+                None, lambda n=n: _verify_process_running(n, 15.0))
             if ok:
                 break
         if ok:
@@ -246,25 +246,123 @@ _ZOOM_UNAVAILABLE = (
     "login and a click on Join, which DASH must not simulate."
 )
 
+# ── Meeting-target parsing (real joins, not just launches) ─────────
+
+_MEETING_URL_RE = re.compile(r"https?://[^\s,;\"']+", re.I)
+_ZOOM_JOIN_URL_RE = re.compile(
+    r"zoom\.(?:us|com)(?:\.[a-z]{2})?/(?:j|wc/join|wc/launch)/(?P<id>\d{9,12})", re.I)
+_PWD_PARAM_RE = re.compile(r"[?&]pwd=(?P<pwd>[A-Za-z0-9._~%-]+)", re.I)
+_GMEET_CODE_RE = re.compile(r"meet\.google\.com/([a-z]{3}-[a-z]{4}-[a-z]{3})", re.I)
+_TEAMS_URL_RE = re.compile(r"teams\.(?:microsoft|live)\.com", re.I)
+_ZOOM_SPOKEN_ID_RE = re.compile(r"\b(\d{9,12})\b")
+
+
+def _parse_meeting_target(step: str) -> dict[str, Any]:
+    """Extract a concrete meeting target from a step sentence.
+
+    Supports: zoom.us join links (with pwd), a spoken 9-12 digit Zoom ID,
+    Google Meet codes, and Teams URLs. Returns {'platform': None} when no
+    concrete target exists — the executor then just launches the app and
+    says what remains for the user.
+    """
+    from urllib.parse import unquote
+
+    for url in _MEETING_URL_RE.findall(step):
+        m = _ZOOM_JOIN_URL_RE.search(url)
+        if m:
+            pwd_m = _PWD_PARAM_RE.search(url)
+            return {"platform": "zoom", "confno": m.group("id"),
+                    "pwd": unquote(pwd_m.group("pwd")) if pwd_m else None,
+                    "url": url}
+        gm = _GMEET_CODE_RE.search(url)
+        if gm:
+            return {"platform": "meet", "code": gm.group(1), "url": url}
+        if _TEAMS_URL_RE.search(url):
+            return {"platform": "teams", "url": url}
+    if "zoom" in step.lower():
+        m = _ZOOM_SPOKEN_ID_RE.search(step)
+        if m:
+            return {"platform": "zoom", "confno": m.group(1), "pwd": None}
+    return {"platform": None}
+
+
+def _launch_url(url: str) -> None:
+    """Open a zoommtg:// or https:// URL via the OS shell handler."""
+    import os
+    os.startfile(url)  # noqa: S606 — ShellExecute; the OS picks Zoom/browser
+
 
 async def _exec_meeting(step: str) -> dict[str, Any]:
-    """start/join a meeting: honest about what DASH can and cannot do.
+    """start/join a meeting: parse the target and drive the real join path.
 
-    The only meeting platform DASH can launch today is Zoom; anything
-    beyond launching (login, clicking Join) belongs to the user.
+    - Zoom link or spoken ID  -> zoommtg:// join URL through the OS handler
+      (Zoom opens its join window prefilled — the human click/lobby stays
+      with the user, DASH cannot pass a waiting room for them).
+    - Google Meet code        -> the join page in the default browser.
+    - Teams URL               -> the browser (Teams' desktop deep links are
+      account-dependent; the web join page always works).
+    - No concrete target      -> launch Zoom and say honestly what remains
+      (sign in, New Meeting / enter ID).
     """
+    target = _parse_meeting_target(step)
+    platform = target["platform"]
+
+    if platform == "zoom" and target.get("confno"):
+        url = f"zoommtg://zoom.us/join?action=join&confno={target['confno']}"
+        if target.get("pwd"):
+            url += f"&pwd={target['pwd']}"
+        try:
+            _launch_url(url)
+        except Exception as exc:
+            return {"step": step, "action": "meeting", "ok": False,
+                    "detail": f"zoommtg launch failed: {exc}"}
+        ok, exe = await asyncio.get_running_loop().run_in_executor(
+            None, lambda: _verify_process_running("zoom", 20.0))
+        if ok:
+            return {"step": step, "action": "meeting", "ok": True,
+                    "detail": (f"Zoom ({exe}) is joining meeting ID "
+                               f"{target['confno']} — complete the join/lobby "
+                               "screen; DASH cannot pass a waiting room for you.")}
+        return {"step": step, "action": "meeting", "ok": False,
+                "detail": "zoommtg URL dispatched but no Zoom process appeared"}
+
+    if platform == "meet":
+        try:
+            _launch_url(target["url"])
+            return {"step": step, "action": "meeting", "ok": True,
+                    "detail": (f"Google Meet {target['code']} opened in your "
+                               "browser — click Join; DASH cannot grant "
+                               "camera/mic consent for you.")}
+        except Exception as exc:
+            return {"step": step, "action": "meeting", "ok": False,
+                    "detail": f"failed to open the Meet link: {exc}"}
+
+    if platform == "teams":
+        try:
+            _launch_url(target["url"])
+            return {"step": step, "action": "meeting", "ok": True,
+                    "detail": ("Teams meeting opened in your browser — "
+                               "sign in / click Join there.")}
+        except Exception as exc:
+            return {"step": step, "action": "meeting", "ok": False,
+                    "detail": f"failed to open the Teams link: {exc}"}
+
+    # No concrete target: launch Zoom and disclose the remaining human steps.
     try:
         from dash_backend.services.command_interceptor import _execute_open
         result = await _execute_open("zoom")
         ok = "error" not in result
         if ok:
             ok, exe = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: _verify_process_running("zoom", 10.0))
+                None, lambda: _verify_process_running("zoom", 20.0))
         if ok:
+            already = result.get("status") == "already_running"
+            verb = "is running" if already else "launched it"
             return {"step": step, "action": "meeting", "ok": True,
-                    "detail": (f"Zoom is running ({exe}). DASH launched it — "
-                               "sign in / join from Zoom's window, DASH "
-                               "cannot click through Zoom's login UI.")}
+                    "detail": (f"Zoom {verb} ({exe}). No meeting link/ID was "
+                               "given — sign in and start the meeting or "
+                               "enter the ID; DASH cannot click through "
+                               "Zoom's login UI.")}
         return {"step": step, "action": "meeting", "ok": False,
                 "detail": _ZOOM_UNAVAILABLE}
     except Exception as exc:
@@ -337,11 +435,10 @@ async def run_composite_task(
         sl = s.lower()
         if "reminder" in sl or sl.startswith("remind"):
             results.append(await _exec_reminder(s, _notify))
+        elif "meeting" in sl or _parse_meeting_target(s)["platform"] is not None:
+            results.append(await _exec_meeting(s))
         elif re.match(r"^(?:open|launch|start|run|join)\b", sl):
-            if "meeting" in sl:
-                results.append(await _exec_meeting(s))
-            else:
-                results.append(await _exec_open(s))
+            results.append(await _exec_open(s))
         else:
             results.append(await _exec_open(s))
 

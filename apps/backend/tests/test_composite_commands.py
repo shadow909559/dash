@@ -189,3 +189,95 @@ def test_single_clipboard_command_still_not_composite() -> None:
     assert not is_composite_task("copy notes to clipboard")
     assert not is_composite_task("open notepad")
     assert not is_composite_task("take a screenshot")
+
+
+# ── Meeting-target parsing and real join executors ─────────────────
+
+def test_parse_meeting_targets() -> None:
+    from dash_backend.services.composite_commands import _parse_meeting_target
+
+    z = _parse_meeting_target(
+        "join https://zoom.us/j/98765432109?pwd=abc123 at 3pm")
+    assert z["platform"] == "zoom" and z["confno"] == "98765432109"
+    assert z["pwd"] == "abc123"
+
+    spoken = _parse_meeting_target("start the zoom meeting 12345678901 please")
+    assert spoken["platform"] == "zoom" and spoken["confno"] == "12345678901"
+
+    gm = _parse_meeting_target(
+        "join the meeting https://meet.google.com/abc-defg-hij now")
+    assert gm["platform"] == "meet" and gm["code"] == "abc-defg-hij"
+
+    tm = _parse_meeting_target(
+        "join https://teams.microsoft.com/l/meetup-join/xyz")
+    assert tm["platform"] == "teams"
+
+    none = _parse_meeting_target("start a meeting")
+    assert none["platform"] is None
+
+
+def test_zoom_join_uses_deep_link(monkeypatch) -> None:
+    """A Zoom link/ID must drive the real zoommtg:// join, not just launch."""
+    from dash_backend.services import composite_commands as cc
+
+    launched = []
+    monkeypatch.setattr(cc, "_launch_url",
+                        lambda url: launched.append(url))
+    monkeypatch.setattr(cc, "_verify_process_running",
+                        lambda name, timeout_s=6.0: (True, "Zoom.exe"))
+
+    result = asyncio.run(run_composite_task(
+        "join the meeting https://zoom.us/j/98765432109?pwd=abc123"))
+    step = result["steps"][0]
+    assert step["ok"] and "98765432109" in step["detail"]
+    assert launched and launched[0].startswith("zoommtg://zoom.us/join")
+    assert "confno=98765432109" in launched[0]
+    assert "pwd=abc123" in launched[0]
+
+
+def test_meet_join_opens_browser(monkeypatch) -> None:
+    from dash_backend.services import composite_commands as cc
+
+    launched = []
+    monkeypatch.setattr(cc, "_launch_url",
+                        lambda url: launched.append(url))
+
+    result = asyncio.run(run_composite_task(
+        "join https://meet.google.com/abc-defg-hij"))
+    step = result["steps"][0]
+    assert step["ok"] and "abc-defg-hij" in step["detail"]
+    assert launched == ["https://meet.google.com/abc-defg-hij"]
+
+
+def test_zoom_launch_zoom_unavailable_message(monkeypatch) -> None:
+    """No target + Zoom launch fails -> the honest not-installed report."""
+    from dash_backend.services import composite_commands as cc
+
+    async def fail_open(app):
+        return {"action": "open", "error": "not found", "summary": "not found"}
+
+    monkeypatch.setattr("dash_backend.services.command_interceptor._execute_open",
+                        fail_open)
+    result = asyncio.run(run_composite_task("start a meeting"))
+    step = result["steps"][0]
+    assert step["ok"] is False
+    assert "not installed" in step["detail"].lower()
+
+
+def test_zoom_no_target_reports_remaining_human_steps(monkeypatch) -> None:
+    """No target + Zoom launches -> success, with the human steps disclosed."""
+    from dash_backend.services import composite_commands as cc
+
+    async def ok_open(app):
+        return {"action": "open", "summary": f"Launched {app}",
+                "status": "launched"}
+
+    monkeypatch.setattr("dash_backend.services.command_interceptor._execute_open",
+                        ok_open)
+    monkeypatch.setattr(cc, "_verify_process_running",
+                        lambda name, timeout_s=6.0: (True, "Zoom.exe"))
+
+    result = asyncio.run(run_composite_task("start a meeting"))
+    step = result["steps"][0]
+    assert step["ok"]
+    assert "No meeting link/ID was given" in step["detail"]
