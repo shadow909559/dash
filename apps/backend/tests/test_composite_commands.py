@@ -146,7 +146,14 @@ def test_verify_process_rejects_name_collisions() -> None:
 
 
 def test_reminder_actually_fires(monkeypatch) -> None:
-    """A short-interval variant proves the firing path end to end."""
+    """A short-interval variant proves the firing path end to end.
+
+    Everything happens inside ONE event loop: the fire task gets a real
+    await slot before the loop closes (CI-found bug: with no awaited work
+    after the reminder step, asyncio.run cancelled the pending fire task
+    before it ran). The open seam is faked so tests never launch real
+    apps.
+    """
     from dash_backend.services import composite_commands as cc
     from dash_backend.services.project_management import reminder_service
 
@@ -166,18 +173,26 @@ def test_reminder_actually_fires(monkeypatch) -> None:
     monkeypatch.setattr(cc, "_sleep",
                         lambda seconds: asyncio.sleep(min(seconds, 0.05)))
 
+    async def fake_open(app_name: str):
+        return {"action": "open", "summary": f"Opened {app_name}",
+                "status": "launched"}
+
+    monkeypatch.setattr("dash_backend.services.command_interceptor._execute_open",
+                        fake_open)
+
     short = ("set up a test reminder for 1 sec and after the time is up remind me "
              "and open brave")
-    result = asyncio.run(run_composite_task(short, notify=notify))
+
+    async def scenario():
+        result = await run_composite_task(short, notify=notify)
+        # give the scheduled fire task a real slot on this same loop
+        await asyncio.sleep(0.3)
+        return result
+
+    result = asyncio.run(scenario())
     assert result["steps"][0]["ok"]
 
     rid = result["steps"][0]["reminder_id"]
-    # let the fire task run on the loop
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(asyncio.sleep(0.3))
-    finally:
-        loop.close()
     rem = next(r for r in reminder_service.get_all() if r["id"] == rid)
     assert rem["fired"] is True
     assert fired_messages and "reminder" in fired_messages[0].lower()
