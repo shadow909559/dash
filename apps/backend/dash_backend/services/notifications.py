@@ -24,6 +24,7 @@ import asyncio
 import os
 import subprocess
 import sys
+import threading
 from typing import Any
 
 from dash_backend.logging_config import get_logger
@@ -34,6 +35,11 @@ logger = get_logger(__name__)
 IS_WINDOWS = sys.platform == "win32"
 
 _TOAST_TIMEOUT_S = 15.0
+# Brief wait for the acceptance marker; a process still alive after this
+# is (with overwhelming likelihood) displaying the toast. Reaped later so
+# no zombie PowerShell accumulates.
+_TOAST_ACCEPT_S = 6.0
+_TOAST_REAP_S = 60.0
 
 # WinRT toast script. Values come from DASH_TOAST_* environment variables
 # (never interpolated into the command line) and are HTML-escaped before
@@ -61,35 +67,51 @@ def _toast_timing(duration: int) -> str:
 
 
 def _show_toast_ps_sync(title: str, message: str, duration: int) -> dict[str, Any]:
-    """Dispatch one Windows toast (blocking worker; runs off the loop)."""
+    """Dispatch one Windows toast (blocking worker; runs off the loop).
+
+    Fire-and-forget semantics, honestly implemented: PowerShell exits as
+    soon as the OS accepts the toast, EXCEPT that WinRT keeps the process
+    alive for as long as the toast is on screen — a healthy dispatch can
+    therefore outlive any reasonable wait (found live: the reminder toast
+    displayed while the process hung past 15 s and the old wait raised
+    TimeoutExpired on a *successful* notification). So: wait briefly for
+    the acceptance marker; if the process merely lingers, the toast is
+    showing — report success and reap the process when it's done.
+    """
     env = dict(os.environ)
     env["DASH_TOAST_TITLE"] = str(title)
     env["DASH_TOAST_MESSAGE"] = str(message)
     env["DASH_TOAST_DURATION"] = _toast_timing(duration)
+    argv = [
+        "powershell",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        _TOAST_PS_SCRIPT,
+    ]
     try:
-        proc = subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                _TOAST_PS_SCRIPT,
-            ],
+        proc = subprocess.Popen(
+            argv,
             env=env,
-            capture_output=True,
-            timeout=_TOAST_TIMEOUT_S,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
     except FileNotFoundError as exc:
         raise RuntimeError("Windows toast failed: powershell.exe not found") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            f"Windows toast failed: powershell timed out after {_TOAST_TIMEOUT_S:.0f}s"
-        ) from exc
 
-    if proc.returncode != 0 or b"DASH_TOAST_OK" not in (proc.stdout or b""):
-        stderr_tail = (proc.stderr or b"").decode("utf-8", errors="replace").strip()[-300:]
+    try:
+        out, err = proc.communicate(timeout=_TOAST_ACCEPT_S)
+    except subprocess.TimeoutExpired:
+        # Still running: WinRT holds the process while the toast displays.
+        # Reap it once the toast is gone; report the dispatch as done.
+        threading.Timer(_TOAST_REAP_S, proc.kill).start()
+        return {"mechanism": "windows-toast", "lingering": True}
+
+    if proc.returncode != 0 or "DASH_TOAST_OK" not in (out or ""):
+        stderr_tail = (err or "").strip()[-300:]
         raise RuntimeError(
             f"Windows toast failed (rc={proc.returncode}): {stderr_tail or 'no error output'}"
         )
