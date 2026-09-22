@@ -8,7 +8,7 @@ doesn't need to handle it.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from dash_backend.logging_config import get_logger
 
@@ -61,19 +61,48 @@ _CLIPBOARD_READ_PATTERNS = [
 ]
 
 _CLIPBOARD_WRITE_PATTERNS = [
-    re.compile(r"^(?:copy|set)\s+(?:the\s+)?(?:clipboard\s+(?:to|with)\s+)?[\"']?(?P<text>.+?)[\"']?\s*(?:to\s+(?:the\s+)?clipboard)?$", re.I),
+    # Deliberately strict (composite-task fix): the old greedy pattern
+    # "^(copy|set)\s+(optional stuff)?(?P<text>.+?)(to clipboard)?$" matched
+    # ANY sentence beginning with "set"/"copy" — e.g. "set up a meeting
+    # reminder for 5 mins and after the time is up remind me and open
+    # brave then zoom…" — silently truncating it and copying the mangled
+    # text to the clipboard. Now the message must actually be ABOUT the
+    # clipboard: an explicit "to/with clipboard" tail, a "clipboard" head,
+    # or a quoted payload. Bare "set up …" sentences fall through to the
+    # composite-task decomposer instead.
+    re.compile(r"^(?:copy|set|put)\s+(?:the\s+)?(?:clipboard\s+(?:to|with)\s+)?(?P<text>.+?)\s*(?:to\s+(?:the\s+)?clipboard)\s*[.!]?$", re.I),
+    re.compile(r"^(?:clipboard|copy)\s*[:\-]\s*(?P<text>.+)$", re.I),
+    re.compile(r"^(?:copy|set|put)\s+(?P<qtext>\"[^\"]+\"|'[^']+')\s*(?:to\s+(?:the\s+)?clipboard)?$", re.I),
+    re.compile(r"^clipboard\s+(?:the\s+)?(?P<text>.+)$", re.I),
 ]
 
 
 # ── Interceptor ────────────────────────────────────────────────
 
-async def try_intercept(message: str) -> dict[str, Any] | None:
+async def try_intercept(message: str, notify: Callable[[str], Awaitable[None]] | None = None) -> dict[str, Any] | None:
     """Try to intercept a desktop control command from a chat message.
 
     Returns None if the message doesn't match any command pattern.
     Returns a dict with 'summary', 'action', and 'details' if a command was executed.
+
+    Composite multi-step tasks ("set a reminder for 5 mins and after the
+    time is up remind me and open brave then zoom and then start a meeting
+    and then join the meeting") are decomposed and executed step by step
+    against real executors — never collapsed into one wrong action.
     """
     text = message.strip()
+
+    # ── Composite multi-step tasks ──
+    # Must run BEFORE the single-action patterns: a composite sentence can
+    # contain "open brave" inside it, and matching the inner action alone
+    # would drop the rest of the task. requires the imports at call time to
+    # keep this module import-light.
+    try:
+        from dash_backend.services.composite_commands import is_composite_task, run_composite_task
+        if is_composite_task(text):
+            return await run_composite_task(text, notify=notify)
+    except Exception:
+        logger.exception("composite task check failed (falling through)")
 
     # ── Open / Launch application ──
     for pat in _OPEN_PATTERNS:
@@ -382,7 +411,7 @@ async def _execute_clipboard_write(text: str) -> dict[str, Any]:
     try:
         from dash_backend.services.clipboard import ClipboardService
         svc = ClipboardService()
-        result = await svc.write(text)
+        result = await svc.copy(text)
         return {"action": "clipboard_write", "text": text,
                 "summary": f"Copied to clipboard: {text[:100]}"}
     except Exception as exc:
